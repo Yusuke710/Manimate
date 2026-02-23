@@ -1,0 +1,2280 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback, useMemo, memo, useReducer } from "react";
+import { getProjectPath } from "@/lib/sandbox-utils";
+import { parseVoiceoverFailure } from "@/lib/voiceover-error";
+import { useIsMobile } from "@/lib/useIsMobile";
+import type { HqRenderProgress } from "@/lib/types";
+
+type Tab = "plan" | "code" | "preview";
+type VoiceoverStatus = 'pending' | 'generating' | 'completed' | 'failed' | null;
+
+interface PreviewPanelProps {
+  videoUrl: string | null;
+  videoUpdateNonce?: number;
+  sandboxId: string | null;
+  /** Whether the sandbox has been activated by user interaction (sending a message).
+   *  When false, subtitle/chapter fetches use DB-only paths to avoid waking paused local runtimes. */
+  sandboxActive?: boolean;
+  /** Callback to activate the sandbox (e.g. when user clicks Retry voiceover). */
+  onActivateSandbox?: () => void;
+  sessionId?: string | null;
+  planContent?: string | null;
+  scriptContent?: string | null;
+  voiceoverStatus?: string | null;
+  voiceoverError?: string | null;
+  hqRenderStatus?: string | null;
+  hqRenderProgress?: HqRenderProgress | null;
+  sessionModel?: string | null;
+}
+
+export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sandboxActive = true, onActivateSandbox, sessionId, planContent = null, scriptContent = null, voiceoverStatus: voiceoverStatusProp = null, voiceoverError: voiceoverErrorProp = null, hqRenderStatus: hqRenderStatusProp = null, hqRenderProgress: hqRenderProgressProp = null, sessionModel = null }: PreviewPanelProps) {
+  const [activeTab, setActiveTab] = useState<Tab>("plan");
+  const voiceoverStatus = voiceoverStatusProp as VoiceoverStatus;
+  const voiceoverError = voiceoverErrorProp;
+  const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
+  const [isVideoPlayable, setIsVideoPlayable] = useState(false);
+  const voiceoverFailure = useMemo(() => parseVoiceoverFailure(voiceoverError), [voiceoverError]);
+  // Track whether user has manually selected a tab (suppresses auto-switch)
+  const userSelectedTabRef = useRef(false);
+  // Token that increments when voiceover completes - triggers seamless video swap
+  // Using useReducer for cleaner increment semantics
+  const [voicedSwapToken, bumpVoicedSwapToken] = useReducer((n: number) => n + 1, 0);
+
+  // Track previous videoUrl to detect changes
+  const prevVideoUrlRef = useRef(videoUrl);
+  // Nonce marks intentional same-key silent re-renders (multi-turn updates).
+  const prevVideoUpdateNonceRef = useRef(videoUpdateNonce);
+  // True after voiced swap has been triggered for the current turn - prevents redundant swaps
+  // from Realtime cascades. Reset when a new turn starts (sync effect) or on retry.
+  const voicedSwapFiredRef = useRef(false);
+
+  // Sync effectiveVideoUrl when videoUrl prop changes.
+  // For same-base URLs, only apply when nonce changed (fresh silent render), otherwise
+  // ignore to avoid hard-reloading while waiting for seamless voiced swap.
+  useEffect(() => {
+    if (videoUrl !== prevVideoUrlRef.current) {
+      const getBase = (url: string | null) => url?.split('?')[0] || null;
+      const prevBase = getBase(prevVideoUrlRef.current);
+      const currBase = getBase(videoUrl);
+      const nonceChanged = videoUpdateNonce !== prevVideoUpdateNonceRef.current;
+      const shouldApplySync = currBase !== prevBase || nonceChanged;
+
+      if (shouldApplySync) {
+        // videoUrl prop changed - sync it and reset playable state
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing controlled preview state from parent props
+        setIsVideoPlayable(false);
+        setEffectiveVideoUrl(videoUrl);
+        userSelectedTabRef.current = false;
+        voicedSwapFiredRef.current = false;
+      } else {
+        console.log("[VoiceoverFlow] Ignoring same-base URL change without nonce bump");
+      }
+      prevVideoUrlRef.current = videoUrl;
+    }
+    prevVideoUpdateNonceRef.current = videoUpdateNonce;
+  }, [videoUrl, videoUpdateNonce]);
+
+  // Detect voiceover completion and trigger voiced video swap.
+  // Voiceover can overwrite the same file path, so base URL may not change.
+  // Compare full URLs to detect a refreshed video asset.
+  // The `voicedSwapFiredRef` guard prevents redundant swaps within the same turn.
+  useEffect(() => {
+    if (voiceoverStatus !== 'completed' || voicedSwapFiredRef.current) return;
+    if (!videoUrl || videoUrl === effectiveVideoUrl) return;
+
+    voicedSwapFiredRef.current = true;
+    console.log('[VoiceoverFlow] Voiceover completed, triggering swap', {
+      sessionId,
+      voicedUrl: videoUrl,
+    });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: syncing prop-driven voiceover completion into local swap state
+    setEffectiveVideoUrl(videoUrl);
+    bumpVoicedSwapToken();
+  }, [voiceoverStatus, videoUrl, effectiveVideoUrl, sessionId]);
+
+  // Retry voiceover generation
+  const retryVoiceover = useCallback(async () => {
+    if (!sessionId || !sandboxId) return;
+
+    // Activate sandbox if not already active (user explicitly requested retry)
+    onActivateSandbox?.();
+    voicedSwapFiredRef.current = false;
+
+    try {
+      await fetch('/api/voiceover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, sandbox_id: sandboxId }),
+      });
+      // Status updates come through Realtime subscription → parent reducer
+    } catch {
+      // Error will surface through Realtime subscription → parent reducer
+    }
+  }, [sessionId, sandboxId, onActivateSandbox]);
+
+  const handleTabClick = useCallback((tab: Tab) => {
+    userSelectedTabRef.current = true;
+    setActiveTab(tab);
+  }, []);
+
+  const tabs: { id: Tab; label: string; ready: boolean }[] = [
+    { id: "plan", label: "Plan", ready: !!planContent },
+    { id: "code", label: "Code", ready: !!scriptContent },
+    { id: "preview", label: "Preview", ready: isVideoPlayable },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-main)" }}>
+      {/* Video wrapper with tabs */}
+      <div style={{ display: "flex", flex: 1, flexDirection: "column", overflow: "hidden", borderRadius: 12, background: "var(--bg-card)", border: "1px solid var(--border-main)", margin: 12 }}>
+        {/* Tab bar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderBottom: "1px solid var(--border-main)" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                data-testid={`tab-${tab.id}`}
+                onClick={() => handleTabClick(tab.id)}
+                style={{
+                  position: "relative",
+                  padding: "5px 14px",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "var(--font)",
+                  transition: "all 0.12s",
+                  background: activeTab === tab.id ? "var(--bg-white)" : "transparent",
+                  color: activeTab === tab.id ? "var(--text-primary)" : "var(--text-tertiary)",
+                  boxShadow: activeTab === tab.id ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
+                }}
+                onMouseEnter={(e) => { if (activeTab !== tab.id) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                onMouseLeave={(e) => { if (activeTab !== tab.id) e.currentTarget.style.background = "transparent"; }}
+              >
+                {tab.label}
+                {tab.ready && (
+                  <span style={{
+                    position: "absolute", top: -1, right: -1,
+                    width: 5, height: 5,
+                    background: "var(--accent)",
+                    borderRadius: "50%",
+                  }} />
+                )}
+              </button>
+            ))}
+
+            {/* Voiceover status - next to Preview tab */}
+            {(voiceoverStatus === 'pending' || voiceoverStatus === 'generating') && (
+              <span role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--accent)", marginLeft: 4 }}>
+                <svg aria-hidden="true" style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} viewBox="0 0 24 24" fill="none">
+                  <circle opacity={0.25} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path opacity={0.75} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Generating audio...
+              </span>
+            )}
+            {voiceoverStatus === 'completed' && (
+              <span role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--accent)", marginLeft: 4 }}>
+                <svg aria-hidden="true" style={{ width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Audio generated
+              </span>
+            )}
+            {voiceoverStatus === 'failed' && (
+              <span role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--red)", marginLeft: 4 }}>
+                <span title={voiceoverFailure.message}>
+                  {voiceoverFailure.kind === "quota_exceeded"
+                    ? "Audio unavailable: ElevenLabs quota exceeded"
+                    : "Audio failed"}
+                </span>
+                <button
+                  type="button"
+                  onClick={retryVoiceover}
+                  disabled={!voiceoverFailure.retryable}
+                  style={{
+                    padding: "2px 6px",
+                    background: "rgba(220,38,38,0.15)",
+                    borderRadius: 4,
+                    border: "none",
+                    fontSize: 10,
+                    color: "var(--red)",
+                    cursor: voiceoverFailure.retryable ? "pointer" : "not-allowed",
+                    opacity: voiceoverFailure.retryable ? 1 : 0.7,
+                  }}
+                >
+                  {voiceoverFailure.retryable ? "Retry" : "Billing required"}
+                </button>
+              </span>
+            )}
+          </div>
+
+          {/* Spacer */}
+          <div style={{ flex: 1 }} />
+        </div>
+
+        {/* Tab content - all tabs rendered but hidden for preloading */}
+        <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
+          <div data-testid="panel-plan" style={{ position: "absolute", inset: 0, overflow: "auto", visibility: activeTab === "plan" ? "visible" : "hidden" }}>
+            <PlanTab content={planContent} />
+          </div>
+          <div data-testid="panel-code" style={{ position: "absolute", inset: 0, overflow: "auto", visibility: activeTab === "code" ? "visible" : "hidden" }}>
+            <CodeTab content={scriptContent} />
+          </div>
+          <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
+            <PreviewTab videoUrl={effectiveVideoUrl} sandboxId={sandboxId} sandboxActive={sandboxActive} sessionId={sessionId} voicedSwapToken={voicedSwapToken} hqRenderStatus={hqRenderStatusProp} hqRenderProgress={hqRenderProgressProp} sessionModel={sessionModel} onCanPlay={() => {
+              setIsVideoPlayable(true);
+              if (!userSelectedTabRef.current) setActiveTab("preview");
+            }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Shared placeholder component
+function Placeholder({ message, testId, icon }: { message: string; testId?: string; icon?: "document" | "code" | "video" }) {
+  const icons = {
+    document: (
+      <svg viewBox="0 0 24 24" style={{ width: 48, height: 48, fill: "var(--text-tertiary)", marginBottom: 16 }}>
+        <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+      </svg>
+    ),
+    code: (
+      <svg viewBox="0 0 24 24" style={{ width: 48, height: 48, fill: "var(--text-tertiary)", marginBottom: 16 }}>
+        <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
+      </svg>
+    ),
+    video: (
+      <svg viewBox="0 0 24 24" style={{ width: 48, height: 48, fill: "var(--text-tertiary)", marginBottom: 16 }}>
+        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+      </svg>
+    ),
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, textAlign: "center", padding: 40 }} data-testid={testId}>
+      {icon && icons[icon]}
+      <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{message}</p>
+    </div>
+  );
+}
+
+const PlanTab = memo(function PlanTab({
+  content,
+}: {
+  content: string | null;
+}) {
+  const renderedHtml = useMemo(() => (content ? markdownToHtml(content) : ""), [content]);
+  const html = useMemo(() => ({ __html: renderedHtml }), [renderedHtml]);
+
+  if (!content) {
+    return <Placeholder message="No plan.md found" icon="document" testId="plan-placeholder" />;
+  }
+
+  return (
+    <div style={{ width: "100%", height: "100%", overflow: "auto", background: "var(--bg-white)" }} data-testid="plan-viewer">
+      <div
+        className="plan-content"
+        style={{ padding: 24 }}
+        dangerouslySetInnerHTML={html}
+      />
+      <style jsx>{`
+        .plan-content {
+          color: var(--text-primary);
+          line-height: 1.7;
+          font-size: 15px;
+        }
+        .plan-content :global(h1) {
+          font-size: 24px;
+          font-weight: 600;
+          margin: 0 0 16px;
+          color: var(--text-primary);
+          border-bottom: 1px solid var(--border-main);
+          padding-bottom: 8px;
+        }
+        .plan-content :global(h2) {
+          font-size: 20px;
+          font-weight: 600;
+          margin: 24px 0 12px;
+          color: var(--text-primary);
+        }
+        .plan-content :global(h3) {
+          font-size: 16px;
+          font-weight: 600;
+          margin: 20px 0 8px;
+          color: var(--text-primary);
+        }
+        .plan-content :global(p) {
+          margin: 0 0 12px;
+        }
+        .plan-content :global(ul), .plan-content :global(ol) {
+          margin: 0 0 12px;
+          padding-left: 24px;
+        }
+        .plan-content :global(li) {
+          margin: 4px 0;
+        }
+        .plan-content :global(code) {
+          background: var(--bg-hover);
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-family: 'Monaco', 'Menlo', monospace;
+          font-size: 13px;
+        }
+        .plan-content :global(pre) {
+          background: #1f2937;
+          padding: 16px;
+          border-radius: 8px;
+          overflow-x: auto;
+          margin: 0 0 16px;
+        }
+        .plan-content :global(pre code) {
+          background: transparent;
+          padding: 0;
+          color: #e5e7eb;
+        }
+        .plan-content :global(blockquote) {
+          border-left: 3px solid var(--text-tertiary);
+          padding-left: 16px;
+          margin: 0 0 12px;
+          color: var(--text-secondary);
+        }
+        .plan-content :global(strong) {
+          color: var(--text-primary);
+        }
+        .plan-content :global(a) {
+          color: var(--accent);
+          text-decoration: none;
+        }
+        .plan-content :global(a:hover) {
+          text-decoration: underline;
+        }
+        .plan-content :global(hr) {
+          border: none;
+          border-top: 1px solid var(--border-main);
+          margin: 24px 0;
+        }
+      `}</style>
+    </div>
+  );
+});
+
+function markdownToHtml(markdown: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  let html = esc(markdown);
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code>${code.trim()}</code></pre>`);
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  html = html.replace(/^---$/gm, '<hr>');
+  html = html.replace(/^(\s*)[-*] (.+)$/gm, '$1<li>$2</li>');
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, m => '<ul>' + m + '</ul>');
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+  html = html.split('\n\n').map(p => {
+    p = p.trim();
+    if (!p || p.startsWith('<h') || p.startsWith('<ul') || p.startsWith('<ol') || p.startsWith('<pre') || p.startsWith('<blockquote') || p.startsWith('<hr')) return p;
+    return `<p>${p.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n');
+  return html;
+}
+
+const CodeTab = memo(function CodeTab({
+  content,
+}: {
+  content: string | null;
+}) {
+  const { highlighted, lineCount } = useMemo(() => {
+    if (!content) return { highlighted: "", lineCount: 0 };
+    return { highlighted: highlightPython(content), lineCount: content.split('\n').length };
+  }, [content]);
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (copyTimerRef.current) clearTimeout(copyTimerRef.current); }, []);
+
+  const handleCopy = () => {
+    if (!content || !navigator.clipboard) return;
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    navigator.clipboard.writeText(content).then(() => {
+      setCopied(true);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
+
+  if (!content) {
+    return <Placeholder message="No script.py found" icon="code" testId="code-placeholder" />;
+  }
+
+  return (
+    <div className="code-viewer-root" data-testid="code-viewer">
+      {/* Toolbar header */}
+      <div className="code-toolbar">
+        <div className="code-toolbar-left">
+          <span className="code-toolbar-lang">Python</span>
+          <span className="code-toolbar-filename">script.py</span>
+          <span className="code-toolbar-meta">{lineCount} lines</span>
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label={copied ? "Copied" : "Copy code"}
+          className="code-copy-btn"
+          data-copied={copied || undefined}
+        >
+          {copied ? (
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+              <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
+            </svg>
+          ) : (
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+              <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
+              <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
+            </svg>
+          )}
+          <span className="code-copy-label">{copied ? "Copied!" : "Copy"}</span>
+        </button>
+      </div>
+      <pre>
+        <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+      </pre>
+      <style jsx>{`
+        .code-viewer-root {
+          width: 100%;
+          height: 100%;
+          overflow: auto;
+          background: #111113;
+          display: flex;
+          flex-direction: column;
+        }
+        .code-toolbar {
+          position: sticky;
+          top: 0;
+          z-index: 5;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 12px;
+          height: 36px;
+          min-height: 36px;
+          background: #1c1c1f;
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .code-toolbar-left {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+        }
+        .code-toolbar-lang {
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.02em;
+          color: #3b82f6;
+          background: rgba(59,130,246,0.1);
+          padding: 2px 7px;
+          border-radius: 4px;
+          font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+        }
+        .code-toolbar-filename {
+          font-size: 12px;
+          color: #a1a1aa;
+          font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+        }
+        .code-toolbar-meta {
+          font-size: 11px;
+          color: #52525b;
+        }
+        .code-copy-btn {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 4px 8px;
+          background: transparent;
+          border: 1px solid transparent;
+          border-radius: 6px;
+          cursor: pointer;
+          color: #71717a;
+          font-size: 12px;
+          font-family: inherit;
+          transition: all 0.15s ease;
+        }
+        .code-copy-btn:hover {
+          background: rgba(255,255,255,0.06);
+          border-color: rgba(255,255,255,0.08);
+          color: #d4d4d8;
+        }
+        .code-copy-btn[data-copied] {
+          color: var(--accent);
+        }
+        .code-copy-label {
+          font-size: 12px;
+          line-height: 1;
+        }
+        pre {
+          margin: 0;
+          padding: 16px;
+          background: #111113;
+          font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+          font-size: 13px;
+          line-height: 1.6;
+          flex: 1;
+        }
+        pre :global(.code-line) {
+          display: flex;
+        }
+        pre :global(.code-line:hover) {
+          background: rgba(255,255,255,0.03);
+        }
+        pre :global(.line-number) {
+          color: #3f3f46;
+          text-align: right;
+          padding-right: 16px;
+          min-width: 50px;
+          user-select: none;
+        }
+        pre :global(.line-content) {
+          flex: 1;
+          white-space: pre;
+          color: #d4d4d4;
+        }
+        pre :global(.hl-keyword) { color: #c586c0; }
+        pre :global(.hl-string) { color: #ce9178; }
+        pre :global(.hl-comment) { color: #6a9955; }
+        pre :global(.hl-function) { color: #dcdcaa; }
+        pre :global(.hl-class) { color: #4ec9b0; }
+        pre :global(.hl-number) { color: #b5cea8; }
+        pre :global(.hl-decorator) { color: #d7ba7d; }
+        pre :global(.hl-builtin) { color: #4fc1ff; }
+      `}</style>
+    </div>
+  );
+});
+
+function highlightPython(code: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const keywords = new Set(['def', 'class', 'if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with', 'as', 'import', 'from', 'return', 'yield', 'raise', 'pass', 'break', 'continue', 'and', 'or', 'not', 'in', 'is', 'lambda', 'True', 'False', 'None', 'self', 'async', 'await']);
+  const builtins = new Set(['print', 'range', 'len', 'str', 'int', 'float', 'list', 'dict', 'set', 'tuple', 'super', 'isinstance', 'type', 'open', 'enumerate', 'zip', 'map', 'filter', 'sorted', 'reversed', 'min', 'max', 'sum', 'abs', 'any', 'all']);
+
+  return code.split('\n').map((line, lineNum) => {
+    let result = '', i = 0;
+    while (i < line.length) {
+      if (line.slice(i, i + 3) === '"""' || line.slice(i, i + 3) === "'''") {
+        const quote = line.slice(i, i + 3);
+        let end = line.indexOf(quote, i + 3);
+        if (end === -1) end = line.length - 3;
+        result += `<span class="hl-string">${esc(line.slice(i, end + 3))}</span>`;
+        i = end + 3;
+      } else if (line[i] === '"' || line[i] === "'") {
+        const quote = line[i];
+        let j = i + 1;
+        while (j < line.length && (line[j] !== quote || line[j - 1] === '\\')) j++;
+        result += `<span class="hl-string">${esc(line.slice(i, j + 1))}</span>`;
+        i = j + 1;
+      } else if (line[i] === '#') {
+        result += `<span class="hl-comment">${esc(line.slice(i))}</span>`;
+        break;
+      } else if (line[i] === '@' && /\w/.test(line[i + 1] || '')) {
+        let j = i + 1;
+        while (j < line.length && /\w/.test(line[j])) j++;
+        result += `<span class="hl-decorator">${esc(line.slice(i, j))}</span>`;
+        i = j;
+      } else if (/\d/.test(line[i]) && (i === 0 || !/\w/.test(line[i - 1]))) {
+        let j = i;
+        while (j < line.length && /[\d.]/.test(line[j])) j++;
+        result += `<span class="hl-number">${esc(line.slice(i, j))}</span>`;
+        i = j;
+      } else if (/[a-zA-Z_]/.test(line[i])) {
+        let j = i;
+        while (j < line.length && /\w/.test(line[j])) j++;
+        const word = line.slice(i, j), nextChar = line[j] || '';
+        if (keywords.has(word)) result += `<span class="hl-keyword">${esc(word)}</span>`;
+        else if (builtins.has(word) && nextChar === '(') result += `<span class="hl-builtin">${esc(word)}</span>`;
+        else if (i >= 4 && line.slice(i - 4, i) === 'def ') result += `<span class="hl-function">${esc(word)}</span>`;
+        else if (i >= 6 && line.slice(i - 6, i) === 'class ') result += `<span class="hl-class">${esc(word)}</span>`;
+        else result += esc(word);
+        i = j;
+      } else {
+        result += esc(line[i]);
+        i++;
+      }
+    }
+    return `<div class="code-line"><span class="line-number">${lineNum + 1}</span><span class="line-content">${result || ' '}</span></div>`;
+  }).join('');
+}
+
+// Format time helper
+const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+// Subtitle type
+interface Subtitle {
+  start: number;
+  end: number;
+  text: string;
+}
+
+// Chapter type
+interface Chapter {
+  name: string;
+  start: number;
+  duration: number;
+}
+
+// Parse SRT file content
+function parseSRT(srtText: string): Subtitle[] {
+  // Normalize line endings to \n and split on double newlines
+  const normalized = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const blocks = normalized.trim().split(/\n\n+/);
+
+  console.log('[Subtitles] Parsing', blocks.length, 'blocks');
+
+  return blocks.map((block, idx) => {
+    const lines = block.split('\n');
+    // Time code is on line 1 (after the index number)
+    const timeMatch = lines[1]?.match(/(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3})/);
+    if (!timeMatch) {
+      console.log('[Subtitles] Block', idx, 'failed to parse:', lines[1]);
+      return null;
+    }
+    const start = +timeMatch[1] * 3600 + +timeMatch[2] * 60 + +timeMatch[3] + +timeMatch[4] / 1000;
+    const end = +timeMatch[5] * 3600 + +timeMatch[6] * 60 + +timeMatch[7] + +timeMatch[8] / 1000;
+    const subtitleText = lines.slice(2).join('\n');
+    return { start, end, text: subtitleText };
+  }).filter((s): s is Subtitle => s !== null);
+}
+
+// Throttle interval for scrubbing (ms) - balances responsiveness vs network requests
+const SCRUB_THROTTLE_MS = 100;
+
+/** Build download filename: manimate-{model}-{shortId}.mp4 (Runway-style) */
+function toFilename(sessionId: string | null, model: string | null, suffix: string): string {
+  const shortId = sessionId?.slice(0, 8) ?? "unknown";
+  // Replace dots in model names (e.g. "claude-opus-4.6" → "claude-opus-4-6")
+  const safeModel = (model ?? "video").replace(/\./g, "-");
+  return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
+}
+
+function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voicedSwapToken = 0, hqRenderStatus = null, hqRenderProgress = null, sessionModel = null, onCanPlay }: { videoUrl: string | null; sandboxId: string | null; sandboxActive?: boolean; sessionId?: string | null; voicedSwapToken?: number; hqRenderStatus?: string | null; hqRenderProgress?: HqRenderProgress | null; sessionModel?: string | null; onCanPlay?: () => void }) {
+  // Compute full video URL first (before any hooks that use it)
+  const fullVideoUrl = videoUrl?.startsWith("http") || videoUrl?.startsWith("/") ? videoUrl : null;
+
+  // Double-buffer: two video elements for seamless swap
+  const videoARef = useRef<HTMLVideoElement>(null);
+  const videoBRef = useRef<HTMLVideoElement>(null);
+  const [activeVideo, setActiveVideo] = useState<'A' | 'B'>('A');
+  // Per-slot sources
+  const [srcA, setSrcA] = useState<string | null>(() => fullVideoUrl);
+  const [srcB, setSrcB] = useState<string | null>(null);
+  // Track swap request ID to ignore stale callbacks
+  const swapRequestIdRef = useRef(0);
+  // Track if a voiced swap is in progress
+  const swapInProgressRef = useRef(false);
+
+  // Get active and inactive video refs
+  const videoRef = activeVideo === 'A' ? videoARef : videoBRef;
+  const inactiveVideoRef = activeVideo === 'A' ? videoBRef : videoARef;
+
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  // Refs for throttled scrubbing - reduces Range requests during drag
+  const pendingSeekTimeRef = useRef<number | null>(null);
+  const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref to track dragging state for event handlers (avoids stale closure issues)
+  const isDraggingRef = useRef(false);
+  // Ref to track if actual mouse movement happened (distinguishes click from drag)
+  const didMoveRef = useRef(false);
+  // Ref to suppress click after drag (prevents extra seek on mouseup)
+  const justDraggedRef = useRef(false);
+  // Refs for live playback state mirroring.
+  const desiredTimeRef = useRef(0);
+  const desiredRateRef = useRef(1);
+  const desiredPausedRef = useRef(true);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isEnded, setIsEnded] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [subtitleSize, setSubtitleSize] = useState<'small' | 'medium' | 'large'>('medium');
+  const [subtitlesOn, setSubtitlesOn] = useState(false);
+  const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
+  const [currentSubtitle, setCurrentSubtitle] = useState<string>('');
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  // Menu state — finite state instead of independent booleans
+  type OpenMenu = 'none' | 'settings' | 'more';
+  type OpenSubmenu = 'none' | 'speed' | 'size';
+  const [openMenu, setOpenMenu] = useState<OpenMenu>('none');
+  const [openSubmenu, setOpenSubmenu] = useState<OpenSubmenu>('none');
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const closeMenus = () => { setOpenMenu('none'); setOpenSubmenu('none'); };
+  const isMobile = useIsMobile();
+  const [isDragging, setIsDragging] = useState(false);
+  // Double-tap seek (mobile YouTube-style)
+  const lastTapRef = useRef<{ time: number; side: 'left' | 'right' } | null>(null);
+  const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [doubleTapFeedback, setDoubleTapFeedback] = useState<{ side: 'left' | 'right'; key: number } | null>(null);
+  const doubleTapKeyRef = useRef(0);
+  // Touch scrubbing state
+  const [isTouchScrubbing, setIsTouchScrubbing] = useState(false);
+  // Cleanup tap timers on unmount
+  useEffect(() => () => {
+    if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+  }, []);
+  // Refs for tracking loaded URLs (declared before effects that use them)
+  const lastSubtitleUrlRef = useRef<string | null>(null);
+  const lastChaptersUrlRef = useRef<string | null>(null);
+
+  // Track swap token for reset - declared here so session reset can access it
+  const prevSwapTokenRef = useRef(voicedSwapToken);
+  // Track URL for sync - declared here so session reset can access it
+  const prevFullVideoUrlRef = useRef(fullVideoUrl);
+  const lastReceivedTokenRef = useRef(voicedSwapToken);
+
+  // withSwapVersionParam removed: appending ad-hoc query params can break signed URLs.
+  // Cache busting is unnecessary because refreshed assets already produce a new URL.
+
+  // Reset all state when sessionId changes to prevent data bleeding between sessions
+  const prevSessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    // Only reset on actual session change, not initial mount
+    if (prevSessionIdRef.current === sessionId) return;
+    prevSessionIdRef.current = sessionId;
+
+    setSubtitles([]);
+    setChapters([]);
+    setCurrentSubtitle('');
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
+    setIsEnded(false);
+    // Reset URL tracking refs
+    lastSubtitleUrlRef.current = null;
+    lastChaptersUrlRef.current = null;
+    // Reset slot state.
+    setActiveVideo('A');
+    setSrcA(fullVideoUrl);
+    setSrcB(null);
+    swapRequestIdRef.current = 0;
+    swapInProgressRef.current = false;
+    // Reset swap token tracking to prevent false swap triggers
+    prevSwapTokenRef.current = voicedSwapToken;
+    // Sync URL tracking ref to prevent redundant URL-sync effect run
+    prevFullVideoUrlRef.current = fullVideoUrl;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fullVideoUrl/voicedSwapToken used for refs only, not effect triggers
+  }, [sessionId]);
+
+  // Reset URL tracking refs and clear stale data when videoUrl changes
+  // (new video means subtitles/chapters need to be re-fetched)
+  const prevVideoUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    const getBasePath = (url: string | null) => url?.split('?')[0] || null;
+    const prevBase = getBasePath(prevVideoUrlRef.current);
+    const currBase = getBasePath(videoUrl);
+
+    if (currBase !== prevBase) {
+      // Different video entirely (e.g., session switch) - clear everything immediately
+      lastSubtitleUrlRef.current = null;
+      lastChaptersUrlRef.current = null;
+      setSubtitles([]);
+      setChapters([]);
+      setCurrentSubtitle('');
+    } else if (videoUrl !== prevVideoUrlRef.current) {
+      // Same video path but different URL means a refreshed output (new scenes or voiceover)
+      // Clear refs to trigger re-fetch, but keep existing data displayed for smooth transition
+      lastSubtitleUrlRef.current = null;
+      lastChaptersUrlRef.current = null;
+    }
+    prevVideoUrlRef.current = videoUrl;
+  }, [videoUrl]);
+
+  useEffect(() => {
+    if (voicedSwapToken === lastReceivedTokenRef.current) return;
+    console.log('[VideoSwap] PreviewTab received new token', {
+      sessionId,
+      previousToken: lastReceivedTokenRef.current,
+      nextToken: voicedSwapToken,
+      fullVideoUrl,
+      activeVideo,
+    });
+    lastReceivedTokenRef.current = voicedSwapToken;
+  }, [sessionId, voicedSwapToken, fullVideoUrl, activeVideo]);
+
+  useEffect(() => {
+    console.log('[VideoSwap] fullVideoUrl updated in PreviewTab', {
+      sessionId,
+      fullVideoUrl,
+      rawVideoUrl: videoUrl,
+      voicedSwapToken,
+      activeVideo,
+    });
+  }, [sessionId, fullVideoUrl, videoUrl, voicedSwapToken, activeVideo]);
+
+  // Note: fullVideoUrl is computed at the top of the function (before hooks)
+  // to ensure it's available for state initialization
+
+  // Sync srcA/srcB with fullVideoUrl for non-swap updates.
+  // Upstream nonce gating ensures same-base voiced URL refreshes are ignored before reaching here.
+  useEffect(() => {
+    // Skip if swap in progress (swap effect handles URL change)
+    if (swapInProgressRef.current) return;
+
+    // Skip if swap token changed - a swap is about to happen, let swap effect handle it
+    if (voicedSwapToken !== prevSwapTokenRef.current) return;
+
+    let rafId: number | undefined;
+
+    // Update active slot if URL actually changed.
+    // This path represents a fresh silent render and should restart playback at 0.
+    if (fullVideoUrl !== prevFullVideoUrlRef.current) {
+      const activeVideoEl = videoRef.current;
+      if (activeVideoEl) {
+        activeVideoEl.pause();
+        desiredTimeRef.current = 0;
+        desiredPausedRef.current = true;
+      }
+      setCurrentTime(0);
+      setDuration(0);
+      setIsPlaying(false);
+      setIsEnded(false);
+      if (activeVideo === 'A') {
+        setSrcA(fullVideoUrl);
+      } else {
+        setSrcB(fullVideoUrl);
+      }
+      // Explicitly call .load() after React flushes the src change to the DOM.
+      // Without this, browsers may not reload an already-loaded video element
+      // when its src attribute changes (e.g., multi-turn: turn 2 silent video
+      // replacing turn 1 voiced video on the same element).
+      const el = activeVideoEl;
+      rafId = requestAnimationFrame(() => {
+        // Skip if a swap started between effect and rAF (avoids redundant load)
+        if (swapInProgressRef.current) return;
+        el?.load();
+      });
+    }
+    prevFullVideoUrlRef.current = fullVideoUrl;
+
+    return () => { if (rafId !== undefined) cancelAnimationFrame(rafId); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo
+  }, [fullVideoUrl, activeVideo, voicedSwapToken]);
+
+  // Seamless video swap effect - preload on inactive element, then swap visibility
+  useEffect(() => {
+    if (voicedSwapToken === prevSwapTokenRef.current) return;
+
+    // Guard against concurrent swaps - if one is in progress, just update the token ref
+    // and let the current swap complete. The next token change will trigger a new swap.
+    if (swapInProgressRef.current) {
+      console.log('[VideoSwap] Swap already in progress, updating token ref only', {
+        sessionId,
+        skippedToken: voicedSwapToken,
+        currentSwapRequestId: swapRequestIdRef.current,
+      });
+      prevSwapTokenRef.current = voicedSwapToken;
+      return;
+    }
+
+    console.log('[VideoSwap] Swap effect triggered', {
+      sessionId,
+      previousToken: prevSwapTokenRef.current,
+      nextToken: voicedSwapToken,
+      fullVideoUrl,
+      activeVideo,
+    });
+
+    if (!fullVideoUrl) {
+      console.warn('[VideoSwap] Swap skipped: no fullVideoUrl');
+      prevSwapTokenRef.current = voicedSwapToken;
+      return;
+    }
+
+    const activeVideoEl = videoRef.current;
+    const inactiveVideoEl = inactiveVideoRef.current;
+
+    if (!activeVideoEl || !inactiveVideoEl) {
+      console.warn('[VideoSwap] Swap skipped: video elements missing');
+      prevSwapTokenRef.current = voicedSwapToken;
+      return;
+    }
+
+    const requestId = ++swapRequestIdRef.current;
+    swapInProgressRef.current = true;
+    let settled = false;
+
+    // Use the full video URL directly for the swap.
+    // Note: Do NOT append cache-busting params to signed URLs - adding query
+    // params invalidates the AWS v4 signature, causing 503 errors.
+    const swapUrl = fullVideoUrl;
+
+    // Update React state for inactive element's src FIRST - before any DOM manipulation
+    // This ensures React doesn't re-render and reload the video after we set currentTime
+    const setInactiveSrc = activeVideo === 'A' ? setSrcB : setSrcA;
+    setInactiveSrc(swapUrl);
+
+    console.log('[VideoSwap] Preloading on inactive element', { requestId, swapUrl });
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      inactiveVideoEl.removeEventListener('canplay', onCanPlay);
+      inactiveVideoEl.removeEventListener('error', onError);
+    };
+
+    const finishSwap = (success: boolean, reason: string) => {
+      if (settled || requestId !== swapRequestIdRef.current) return;
+      settled = true;
+      swapInProgressRef.current = false;
+      cleanup();
+      prevSwapTokenRef.current = voicedSwapToken;
+      prevFullVideoUrlRef.current = fullVideoUrl;
+      console.log('[VideoSwap] finishSwap', { success, reason, requestId });
+    };
+
+    // Fallback: update active video directly if seamless swap fails
+    const fallbackToDirectUpdate = (reason: string) => {
+      if (settled) return; // Guard against multiple calls
+      console.log('[VideoSwap] Falling back to direct update:', reason);
+
+      // Capture CURRENT state (not stale) for fallback
+      const currentTime = activeVideoEl.currentTime;
+      const currentRate = activeVideoEl.playbackRate;
+      const wasPaused = activeVideoEl.paused;
+      const currentVolume = activeVideoEl.volume;
+      const currentMuted = activeVideoEl.muted;
+
+      const setActiveSrc = activeVideo === 'A' ? setSrcA : setSrcB;
+      setActiveSrc(swapUrl);
+
+      // Restore state after src change via loadedmetadata
+      const restoreState = () => {
+        activeVideoEl.removeEventListener('loadedmetadata', restoreState);
+        try {
+          const targetTime = Math.min(currentTime, Math.max(0, (activeVideoEl.duration || 0) - 0.1));
+          if (targetTime > 0 && Number.isFinite(targetTime)) {
+            activeVideoEl.currentTime = targetTime;
+          }
+          activeVideoEl.playbackRate = currentRate;
+          activeVideoEl.volume = currentVolume;
+          activeVideoEl.muted = currentMuted;
+          if (!wasPaused) {
+            activeVideoEl.play().catch(() => {});
+          }
+        } catch { /* ignore */ }
+      };
+      activeVideoEl.addEventListener('loadedmetadata', restoreState);
+
+      finishSwap(false, `fallback-${reason}`);
+    };
+
+    const onCanPlay = async () => {
+      // Guard: check settled AND requestId to prevent re-entry
+      if (settled || requestId !== swapRequestIdRef.current) return;
+      settled = true; // Set immediately to prevent re-entry
+      cleanup(); // Remove listeners immediately
+
+      // Capture FRESH playback state right before swap (not stale from effect start)
+      const freshTime = activeVideoEl.currentTime;
+      const freshRate = activeVideoEl.playbackRate;
+      const freshPaused = activeVideoEl.paused;
+      const freshVolume = activeVideoEl.volume;
+      const freshMuted = activeVideoEl.muted;
+      const inactiveDuration = inactiveVideoEl.duration;
+
+      console.log('[VideoSwap] Inactive video ready, executing swap', {
+        freshTime,
+        freshPaused,
+        freshRate,
+        inactiveDuration,
+        inactiveCurrentTimeBefore: inactiveVideoEl.currentTime,
+      });
+
+      try {
+        // Sync playback state to inactive video
+        const targetTime = Math.min(freshTime, Math.max(0, (inactiveDuration || 0) - 0.1));
+        if (targetTime > 0 && Number.isFinite(targetTime)) {
+          inactiveVideoEl.currentTime = targetTime;
+          console.log('[VideoSwap] Set inactive currentTime', { targetTime, actualTime: inactiveVideoEl.currentTime });
+        } else {
+          console.log('[VideoSwap] Skipped setting currentTime', { targetTime, freshTime, inactiveDuration });
+        }
+        inactiveVideoEl.playbackRate = freshRate;
+        inactiveVideoEl.volume = freshVolume;
+        inactiveVideoEl.muted = freshMuted;
+
+        // Wait for seek to complete before swapping
+        await new Promise<void>((resolve) => {
+          if (inactiveVideoEl.readyState >= 2) {
+            resolve();
+          } else {
+            const onSeeked = () => {
+              inactiveVideoEl.removeEventListener('seeked', onSeeked);
+              resolve();
+            };
+            inactiveVideoEl.addEventListener('seeked', onSeeked);
+            // Timeout for seek in case it never fires
+            setTimeout(resolve, 200);
+          }
+        });
+
+        // If was playing, start playback on inactive before swap
+        if (!freshPaused) {
+          try {
+            await inactiveVideoEl.play();
+          } catch (e) {
+            if ((e as Error).name !== 'AbortError') {
+              console.warn('[VideoSwap] Play on inactive failed, continuing anyway');
+              // Don't fallback - just swap without playing, user can click play
+            }
+          }
+        }
+
+        // Execute the swap - switch active video (src was already updated at effect start)
+        // Swap visibility (only once due to settled guard)
+        setActiveVideo(prev => prev === 'A' ? 'B' : 'A');
+
+        // Pause old video after a brief delay to avoid event handler conflicts
+        setTimeout(() => {
+          activeVideoEl.pause();
+        }, 50);
+
+        // Update refs for consistency
+        desiredTimeRef.current = targetTime;
+        desiredRateRef.current = freshRate;
+        desiredPausedRef.current = freshPaused;
+
+        // Update isPlaying state to match new video
+        setIsPlaying(!freshPaused);
+
+        swapInProgressRef.current = false;
+        prevSwapTokenRef.current = voicedSwapToken;
+        prevFullVideoUrlRef.current = fullVideoUrl;
+
+        // Log final state after swap
+        const newActiveVideoEl = activeVideo === 'A' ? videoBRef.current : videoARef.current;
+        console.log('[VideoSwap] Seamless swap complete', {
+          requestId,
+          targetTime,
+          newActiveTime: newActiveVideoEl?.currentTime,
+          newActivePaused: newActiveVideoEl?.paused,
+          swappedFrom: activeVideo,
+          swappedTo: activeVideo === 'A' ? 'B' : 'A',
+        });
+      } catch (e) {
+        console.warn('[VideoSwap] Swap execution failed:', e);
+        settled = false; // Allow fallback
+        fallbackToDirectUpdate('execution-error');
+      }
+    };
+
+    const onError = () => {
+      if (settled || requestId !== swapRequestIdRef.current) return;
+      const mediaError = inactiveVideoEl.error;
+      console.warn('[VideoSwap] Preload error on inactive element', {
+        errorCode: mediaError?.code,
+        errorMessage: mediaError?.message,
+        networkState: inactiveVideoEl.networkState,
+        readyState: inactiveVideoEl.readyState,
+        srcBase: inactiveVideoEl.src?.split('?')[0],
+      });
+      fallbackToDirectUpdate('preload-error');
+    };
+
+    // Timeout fallback
+    timeoutId = setTimeout(() => {
+      if (settled || requestId !== swapRequestIdRef.current) return;
+      console.warn('[VideoSwap] Preload timeout');
+      fallbackToDirectUpdate('timeout');
+    }, 8000);
+
+    // Set up listeners and start preload on inactive element
+    inactiveVideoEl.addEventListener('canplay', onCanPlay);
+    inactiveVideoEl.addEventListener('error', onError);
+    // Don't set src directly on the DOM element - React state (setInactiveSrc above)
+    // handles the src update. Calling .load() after React renders via requestAnimationFrame
+    // to avoid a race where direct DOM manipulation + React re-render cause double loads.
+    const rafId = requestAnimationFrame(() => {
+      if (settled || requestId !== swapRequestIdRef.current) return;
+      inactiveVideoEl.load();
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      cleanup();
+      if (!settled && requestId === swapRequestIdRef.current) {
+        swapInProgressRef.current = false;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voicedSwapToken, fullVideoUrl, activeVideo, sessionId]);
+
+  // Only include sandbox context in URLs when sandbox has been activated by user
+  // interaction (sending a message), to avoid waking paused local runtimes on visit.
+  const activeSandboxId = sandboxActive ? sandboxId : null;
+  const projectDir = activeSandboxId ? getProjectPath(activeSandboxId) : null;
+
+  // Construct subtitle URL and include sandbox context when available:
+  // this lets the API use sandbox-first for live sessions, DB-first for rehydration.
+  // Gate on fullVideoUrl to avoid fetching before video exists.
+  const fullSubtitleUrl = fullVideoUrl
+    ? sessionId
+      ? activeSandboxId && projectDir
+        ? `/api/subtitles?session_id=${encodeURIComponent(sessionId)}&sandbox_id=${encodeURIComponent(activeSandboxId)}&project_path=${encodeURIComponent(projectDir)}`
+        : `/api/subtitles?session_id=${encodeURIComponent(sessionId)}`
+      : projectDir && activeSandboxId
+        ? `/api/subtitles?sandbox_id=${encodeURIComponent(activeSandboxId)}&project_path=${encodeURIComponent(projectDir)}`
+        : null
+    : null;
+
+  // Note: We no longer poll sandbox for video existence.
+  // Videos are served from CDN and existence is determined by fullVideoUrl being set.
+
+  // Construct chapters URL - uses session_id to fetch persisted chapters from DB
+  const fullChaptersUrl = sessionId
+    ? `/api/chapters?session_id=${encodeURIComponent(sessionId)}`
+    : null;
+
+  // Load subtitles - fetches with retry if data not ready yet
+  useEffect(() => {
+    if (!fullSubtitleUrl) return;
+    // Skip if already successfully loaded for this URL
+    if (lastSubtitleUrlRef.current === fullSubtitleUrl) return;
+
+    // AbortController to cancel stale fetches on session switch
+    const abortController = new AbortController();
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let retryCount = 0;
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY = 2000;
+
+    const loadSubtitles = async () => {
+      try {
+        const response = await fetch(fullSubtitleUrl, { signal: abortController.signal });
+        if (response.ok && !abortController.signal.aborted) {
+          const text = await response.text();
+          const parsed = parseSRT(text);
+          // Only mark as loaded if we actually got subtitles
+          if (parsed.length > 0) {
+            lastSubtitleUrlRef.current = fullSubtitleUrl;
+            setSubtitlesOn(true); // Auto-enable if subtitles exist
+            setSubtitles(parsed);
+          } else if (retryCount < MAX_RETRIES && !abortController.signal.aborted) {
+            // Retry if empty - data may not be ready yet
+            retryCount++;
+            retryTimeout = setTimeout(loadSubtitles, RETRY_DELAY);
+          }
+        } else if (!response.ok && retryCount < MAX_RETRIES && !abortController.signal.aborted) {
+          // Retry on non-2xx responses (404, 500, etc.) - data may not be ready yet
+          retryCount++;
+          retryTimeout = setTimeout(loadSubtitles, RETRY_DELAY);
+        }
+      } catch {
+        // Subtitles not available or request aborted - retry if not aborted
+        if (retryCount < MAX_RETRIES && !abortController.signal.aborted) {
+          retryCount++;
+          retryTimeout = setTimeout(loadSubtitles, RETRY_DELAY);
+        }
+      }
+    };
+
+    loadSubtitles();
+
+    return () => {
+      abortController.abort();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
+  }, [fullSubtitleUrl, videoUrl]);
+
+  // Load chapters - fetches with retry if data not ready yet
+  useEffect(() => {
+    if (!fullChaptersUrl) return;
+    // Skip if already successfully loaded for this URL
+    if (lastChaptersUrlRef.current === fullChaptersUrl) return;
+
+    // AbortController to cancel stale fetches on session switch
+    const abortController = new AbortController();
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let retryCount = 0;
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY = 2000;
+
+    const loadChapters = async () => {
+      try {
+        const response = await fetch(fullChaptersUrl, { signal: abortController.signal });
+        if (response.ok && !abortController.signal.aborted) {
+          const data = await response.json();
+          // Only mark as loaded if we actually got chapters data
+          if (Array.isArray(data) && data.length > 0) {
+            lastChaptersUrlRef.current = fullChaptersUrl;
+            setChapters(data);
+          } else if (retryCount < MAX_RETRIES && !abortController.signal.aborted) {
+            // Retry if empty - data may not be ready yet
+            retryCount++;
+            retryTimeout = setTimeout(loadChapters, RETRY_DELAY);
+          }
+        } else if (!response.ok && retryCount < MAX_RETRIES && !abortController.signal.aborted) {
+          // Retry on non-2xx responses (404, 500, etc.) - data may not be ready yet
+          retryCount++;
+          retryTimeout = setTimeout(loadChapters, RETRY_DELAY);
+        }
+      } catch {
+        // Chapters not available or request aborted - retry if not aborted
+        if (retryCount < MAX_RETRIES && !abortController.signal.aborted) {
+          retryCount++;
+          retryTimeout = setTimeout(loadChapters, RETRY_DELAY);
+        }
+      }
+    };
+
+    loadChapters();
+
+    return () => {
+      abortController.abort();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
+  }, [fullChaptersUrl, videoUrl]);
+
+  // Compute current chapter based on time (derived state)
+  const currentChapter = useMemo(() => {
+    if (chapters.length === 0) return null;
+    // Find the chapter that contains the current time
+    const chapter = [...chapters].reverse().find(c => currentTime >= c.start);
+    return chapter || chapters[0];
+  }, [currentTime, chapters]);
+
+  // Update current subtitle based on time
+  useEffect(() => {
+    if (!subtitlesOn || subtitles.length === 0) {
+      setCurrentSubtitle('');
+      return;
+    }
+    const sub = subtitles.find(s => currentTime >= s.start && currentTime < s.end);
+    setCurrentSubtitle(sub?.text || '');
+  }, [currentTime, subtitles, subtitlesOn]);
+
+  // Video event handlers - re-attach when active video changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Skip timeupdate while dragging to prevent progress bar jumps
+    const handleTimeUpdate = () => {
+      if (!isDraggingRef.current) {
+        setCurrentTime(video.currentTime);
+        // Keep ref in sync for swap state mirroring
+        desiredTimeRef.current = video.currentTime;
+      }
+    };
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration);
+    };
+    const handlePlay = () => {
+      setIsPlaying(true);
+      setIsEnded(false);
+      desiredPausedRef.current = false;
+    };
+    const handlePause = () => {
+      setIsPlaying(false);
+      desiredPausedRef.current = true;
+    };
+    const handleEnded = () => { setIsPlaying(false); setIsEnded(true); };
+    const handleRateChange = () => {
+      desiredRateRef.current = video.playbackRate;
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('ended', handleEnded);
+    video.addEventListener('ratechange', handleRateChange);
+
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('ratechange', handleRateChange);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo which is in deps
+  }, [fullVideoUrl, activeVideo]);
+
+  const togglePlay = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (isEnded) {
+      video.currentTime = 0;
+      setIsEnded(false);
+    }
+    if (video.paused) {
+      // Catch AbortError when video source changes during play
+      video.play().catch((e) => {
+        if (e.name !== 'AbortError') console.error('Play error:', e);
+      });
+    } else {
+      video.pause();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo, re-run when play state changes
+  }, [isEnded, activeVideo]);
+
+  // Shared helper: convert clientX to seek time using progress bar rect
+  const getTimeFromClientX = useCallback((clientX: number): number | null => {
+    const video = videoRef.current;
+    const bar = progressBarRef.current;
+    if (!video || !bar) return null;
+    const videoDuration = Number.isFinite(video.duration) ? video.duration : duration;
+    if (videoDuration <= 0) return null;
+    const rect = bar.getBoundingClientRect();
+    const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return percent * videoDuration;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo
+  }, [duration, activeVideo]);
+
+  const seek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Suppress click if it's from a drag release (prevents extra Range request)
+    if (justDraggedRef.current) {
+      justDraggedRef.current = false;
+      return;
+    }
+    const newTime = getTimeFromClientX(e.clientX);
+    if (newTime === null) return;
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = newTime;
+    setCurrentTime(newTime);
+    desiredTimeRef.current = newTime;
+    setIsEnded(false);
+  }, [getTimeFromClientX]);
+
+  const seekBy = useCallback((delta: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    // Use state duration as fallback where video.duration may transiently be NaN
+    const videoDuration = Number.isFinite(video.duration) ? video.duration : duration;
+    if (videoDuration <= 0) return;
+    const newTime = Math.max(0, Math.min(videoDuration, video.currentTime + delta));
+    video.currentTime = newTime;
+    setCurrentTime(newTime); // Immediate UI update
+    desiredTimeRef.current = newTime; // Keep ref in sync for swap
+    setIsEnded(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo
+  }, [duration, activeVideo]);
+
+  const changeSpeed = useCallback((speed: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.playbackRate = speed;
+    setPlaybackSpeed(speed);
+    desiredRateRef.current = speed; // Keep ref in sync for swap
+    closeMenus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo
+  }, [activeVideo]);
+
+  const insertText = (text: string) => {
+    window.dispatchEvent(new CustomEvent("chat-insert-text", { detail: text }));
+  };
+
+  const captureFrameAndInsert = (textFn: (t: number) => string) => {
+    const video = videoRef.current;
+    const t = video?.currentTime ?? currentTime;
+    const text = textFn(t);
+    if (!video || video.videoWidth === 0) {
+      insertText(text);
+      return;
+    }
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { insertText(text); return; }
+      ctx.drawImage(video, 0, 0);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const ts = formatTime(t).replace(":", "m") + "s";
+          const file = new File([blob], `${ts}.png`, { type: "image/png" });
+          window.dispatchEvent(new CustomEvent("chat-add-image", { detail: file }));
+        }
+        insertText(text);
+      }, "image/png");
+    } catch {
+      // CORS tainted canvas or other error — fall back to text only
+      insertText(text);
+    }
+  };
+
+  // Unified fullscreen toggle (used by keyboard shortcut, mobile button, desktop button)
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+      return;
+    }
+    const container = videoRef.current?.closest('[data-video-container]') as HTMLElement | null;
+    if (container?.requestFullscreen) {
+      container.requestFullscreen().catch(() => {});
+    } else {
+      // iOS Safari fallback: fullscreen the video element directly
+      const video = videoRef.current as HTMLVideoElement & { webkitEnterFullscreen?: () => void } | null;
+      video?.webkitEnterFullscreen?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo
+  }, [activeVideo]);
+
+  // Mobile: timer-based tap detection (single tap = play/pause, double tap = seek ±5s)
+  const handleMobileTap = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const side: 'left' | 'right' = x < rect.width / 2 ? 'left' : 'right';
+    const now = Date.now();
+    const last = lastTapRef.current;
+
+    if (last && now - last.time < 300 && last.side === side) {
+      // Double tap detected
+      if (singleTapTimerRef.current) {
+        clearTimeout(singleTapTimerRef.current);
+        singleTapTimerRef.current = null;
+      }
+      lastTapRef.current = null;
+      seekBy(side === 'left' ? -5 : 5);
+      setDoubleTapFeedback({ side, key: ++doubleTapKeyRef.current });
+      setTimeout(() => setDoubleTapFeedback(null), 500);
+    } else {
+      // First tap - wait to see if double
+      lastTapRef.current = { time: now, side };
+      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+      singleTapTimerRef.current = setTimeout(() => {
+        singleTapTimerRef.current = null;
+        lastTapRef.current = null;
+        togglePlay();
+      }, 300);
+    }
+  }, [seekBy, togglePlay]);
+
+  // Desktop: immediate click = play/pause, native dblclick = seek ±5s (no delay)
+  const handleDesktopClick = useCallback(() => { togglePlay(); }, [togglePlay]);
+  const handleDesktopDblClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const side: 'left' | 'right' = x < rect.width / 2 ? 'left' : 'right';
+    seekBy(side === 'left' ? -5 : 5);
+    setDoubleTapFeedback({ side, key: ++doubleTapKeyRef.current });
+    setTimeout(() => setDoubleTapFeedback(null), 500);
+  }, [seekBy]);
+
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadQuality, setDownloadQuality] = useState<'current' | 'hq'>('current');
+
+  const downloadVideoBlob = async (url: string, filename: string) => {
+    setIsDownloading(true);
+    let blobUrl: string | null = null;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      window.open(url, "_blank");
+    } finally {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      setIsDownloading(false);
+    }
+  };
+
+  const downloadLockRef = useRef(false);
+  const handleDownload = async () => {
+    if (downloadLockRef.current) return;
+    downloadLockRef.current = true;
+    try {
+      if (downloadQuality === 'current') {
+        if (!fullVideoUrl) return;
+        await downloadVideoBlob(fullVideoUrl, toFilename(sessionId ?? null, sessionModel, ""));
+        setShowDownloadModal(false);
+      } else {
+        // HQ download
+        if (hqRenderStatus === 'completed' && hqRenderProgress?.hq_video_url) {
+          await downloadVideoBlob(hqRenderProgress.hq_video_url, toFilename(sessionId ?? null, sessionModel, "_hq"));
+          setShowDownloadModal(false);
+        } else if (hqRenderStatus !== 'rendering') {
+          // Trigger HQ render
+          if (!sessionId) return;
+          setIsDownloading(true);
+          try {
+            await fetch('/api/render-hq', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ session_id: sessionId }),
+            });
+          } catch {
+          } finally {
+            setIsDownloading(false);
+          }
+        }
+      }
+    } finally {
+      downloadLockRef.current = false;
+    }
+  };
+
+  const handleCancelHqRender = async () => {
+    if (!sessionId) return;
+    try {
+      await fetch('/api/render-hq', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+    } catch {}
+  };
+
+  const handleRetryHqRender = async () => {
+    if (!sessionId) return;
+    try {
+      await fetch('/api/render-hq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+    } catch {}
+  };
+
+  // Auto-download when HQ render completes
+  const prevHqStatusRef = useRef(hqRenderStatus);
+  useEffect(() => {
+    if (
+      prevHqStatusRef.current === 'rendering' &&
+      hqRenderStatus === 'completed' &&
+      hqRenderProgress?.hq_video_url &&
+      showDownloadModal &&
+      downloadQuality === 'hq'
+    ) {
+      downloadVideoBlob(hqRenderProgress.hq_video_url, toFilename(sessionId ?? null, sessionModel, "_hq")).then(() => {
+        setShowDownloadModal(false);
+      });
+    }
+    prevHqStatusRef.current = hqRenderStatus;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hqRenderStatus]);
+
+  // Keyboard shortcuts - document-level listener (works regardless of focus)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if typing in input/textarea or modal is open
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (showDownloadModal) return;
+
+      switch (e.code) {
+        case 'Space':
+        case 'KeyK':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowLeft':
+        case 'KeyJ':
+          e.preventDefault();
+          seekBy(-5);
+          break;
+        case 'ArrowRight':
+        case 'KeyL':
+          e.preventDefault();
+          seekBy(5);
+          break;
+        case 'KeyC':
+          e.preventDefault();
+          setSubtitlesOn(prev => !prev);
+          break;
+        case 'KeyT':
+          e.preventDefault();
+          captureFrameAndInsert((t) => `[${formatTime(t)}]: `);
+          break;
+        case 'KeyF':
+          if (e.metaKey || e.ctrlKey || e.altKey) break; // Don't hijack Cmd+F / Ctrl+F
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, seekBy, toggleFullscreen, currentTime, showDownloadModal]);
+
+  // Progress bar drag handling with throttled seeking
+  // Updates UI immediately but throttles video.currentTime to reduce Range requests
+  useEffect(() => {
+    if (!isDragging) return;
+
+    // Track dragging state in ref for event handlers
+    isDraggingRef.current = true;
+    // Reset movement tracking - will be set true on first mousemove
+    didMoveRef.current = false;
+
+    const applySeek = (time: number) => {
+      const video = videoRef.current;
+      if (!video) return;
+      video.currentTime = time;
+      pendingSeekTimeRef.current = null;
+    };
+
+    const scheduleSeek = (time: number) => {
+      pendingSeekTimeRef.current = time;
+      if (throttleTimerRef.current === null) {
+        throttleTimerRef.current = setTimeout(() => {
+          throttleTimerRef.current = null;
+          if (pendingSeekTimeRef.current !== null) {
+            applySeek(pendingSeekTimeRef.current);
+          }
+        }, SCRUB_THROTTLE_MS);
+      }
+    };
+
+    const handleDragMove = (clientX: number) => {
+      const newTime = getTimeFromClientX(clientX);
+      if (newTime === null) return;
+      didMoveRef.current = true;
+      setCurrentTime(newTime);
+      desiredTimeRef.current = newTime;
+      setIsEnded(false);
+      scheduleSeek(newTime);
+    };
+
+    const handleDragEnd = () => {
+      if (throttleTimerRef.current !== null) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+      if (pendingSeekTimeRef.current !== null) {
+        applySeek(pendingSeekTimeRef.current);
+      }
+      if (didMoveRef.current) {
+        justDraggedRef.current = true;
+      }
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      setIsTouchScrubbing(false);
+    };
+
+    const handleMouseMove = (e: MouseEvent) => handleDragMove(e.clientX);
+    const handleMouseUp = () => handleDragEnd();
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault(); // Prevent page scroll while scrubbing
+      if (e.touches[0]) handleDragMove(e.touches[0].clientX);
+    };
+    const handleTouchEnd = () => handleDragEnd();
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+      if (throttleTimerRef.current !== null) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
+      }
+      isDraggingRef.current = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo
+  }, [isDragging, getTimeFromClientX]);
+
+  // Show placeholder if no video URL available
+  if (!fullVideoUrl) {
+    return (
+      <Placeholder
+        message={sandboxId ? "Preview will appear here when a video is generated" : "No active session. Start a chat to generate a video."}
+        icon="video"
+        testId="video-placeholder"
+      />
+    );
+  }
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <div data-video-container className="flex flex-col h-full bg-black relative">
+      {/* Video slots - active slot is updated directly on voiced swaps */}
+      <div className="flex-1 relative flex items-center justify-center min-h-0">
+        {/* Video A - active playback slot */}
+        <video
+          ref={videoARef}
+          data-testid={activeVideo === 'A' ? "video-player" : "video-player-inactive"}
+          src={srcA || undefined}
+          crossOrigin="anonymous"
+          className={`absolute inset-0 w-full h-full object-contain ${activeVideo === 'A' ? 'z-10' : 'z-0 opacity-0 pointer-events-none'}`}
+          playsInline
+          preload="auto"
+          onCanPlay={activeVideo === 'A' ? onCanPlay : undefined}
+        >
+          Your browser does not support the video tag.
+        </video>
+        {/* Video B - inactive slot retained for compatibility */}
+        <video
+          ref={videoBRef}
+          data-testid={activeVideo === 'B' ? "video-player" : "video-player-inactive"}
+          src={srcB || undefined}
+          crossOrigin="anonymous"
+          className={`absolute inset-0 w-full h-full object-contain ${activeVideo === 'B' ? 'z-10' : 'z-0 opacity-0 pointer-events-none'}`}
+          playsInline
+          preload="auto"
+          onCanPlay={activeVideo === 'B' ? onCanPlay : undefined}
+        >
+          Your browser does not support the video tag.
+        </video>
+
+        {/* Tap/click overlay: single tap/click = play/pause, double = seek ±5s */}
+        <div
+          className="absolute inset-0 z-[11] cursor-pointer"
+          onClick={isMobile ? handleMobileTap : handleDesktopClick}
+          onDoubleClick={!isMobile ? handleDesktopDblClick : undefined}
+        >
+          {/* Double-tap/click seek feedback */}
+          {doubleTapFeedback && (
+            <div
+              key={doubleTapFeedback.key}
+              className={`absolute top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 pointer-events-none ${
+                doubleTapFeedback.side === 'left' ? 'left-[15%]' : 'right-[15%]'
+              }`}
+              style={{ animation: 'dtap-fade 0.5s ease-out forwards' }}
+            >
+              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                {doubleTapFeedback.side === 'left' ? (
+                  <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>
+                )}
+              </div>
+              <span className="text-white text-xs font-medium">5s</span>
+            </div>
+          )}
+        </div>
+
+        {/* Subtitle overlay */}
+        {subtitlesOn && currentSubtitle && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 text-center pointer-events-none max-w-[80%] z-10">
+            <span className={`inline-block bg-black/75 text-white px-4 py-1.5 rounded ${
+              subtitleSize === 'small' ? 'text-sm' : subtitleSize === 'large' ? 'text-2xl' : 'text-lg'
+            }`}>
+              {currentSubtitle}
+            </span>
+          </div>
+        )}
+
+        {/* Progress bar - segmented by chapters like YouTube */}
+        <div
+          ref={progressBarRef}
+          className={`absolute bottom-12 left-3 right-3 cursor-pointer z-[15] flex items-center group ${isDragging || isTouchScrubbing ? 'dragging' : ''}`}
+          style={{ height: isTouchScrubbing ? 40 : (isMobile ? 28 : 20), transition: 'height 0.15s ease' }}
+          onClick={seek}
+          onMouseDown={() => setIsDragging(true)}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            setIsTouchScrubbing(true);
+            setIsDragging(true);
+            // Immediately seek to touch position
+            const newTime = getTimeFromClientX(e.touches[0].clientX);
+            if (newTime !== null) {
+              setCurrentTime(newTime);
+              desiredTimeRef.current = newTime;
+            }
+          }}
+        >
+          {chapters.length > 1 ? (
+            // Segmented progress bar with chapters
+            <div className={`w-full flex gap-[3px] ${isTouchScrubbing ? 'h-1.5' : 'h-1 group-hover:h-1.5'} transition-[height]`}>
+              {chapters.map((chapter, index) => {
+                const chapterEnd = chapter.start + chapter.duration;
+                // Calculate fill percentage for this segment
+                let fillPercent = 0;
+                if (currentTime >= chapterEnd) {
+                  fillPercent = 100;
+                } else if (currentTime > chapter.start) {
+                  fillPercent = ((currentTime - chapter.start) / chapter.duration) * 100;
+                }
+                return (
+                  <div
+                    key={index}
+                    className="h-full bg-zinc-700 rounded-sm overflow-hidden relative"
+                    style={{ flexGrow: chapter.duration }}
+                    title={chapter.name}
+                  >
+                    <div
+                      className="h-full"
+                      style={{ background: "var(--accent)", width: `${fillPercent}%` }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            // Simple progress bar (no chapters or single chapter)
+            <div className={`w-full bg-zinc-700 rounded-sm overflow-hidden ${isTouchScrubbing ? 'h-1.5' : 'h-1 group-hover:h-1.5'} transition-[height]`}>
+              <div
+                className="h-full"
+                style={{ background: "var(--accent)", width: `${progress}%` }}
+              />
+            </div>
+          )}
+          {/* Progress dot - visible during playback, drag, or hover (like YouTube) */}
+          <div
+            className={`absolute top-1/2 rounded-full -translate-y-1/2 transition-[transform] duration-100 ${isDragging || isTouchScrubbing || isPlaying ? 'scale-100' : 'scale-0 group-hover:scale-100'}`}
+            style={{
+              background: "var(--accent)",
+              left: `calc(${progress}% - ${isTouchScrubbing ? 8 : 6}px)`,
+              width: isTouchScrubbing ? 16 : 12,
+              height: isTouchScrubbing ? 16 : 12,
+              transition: 'width 0.15s, height 0.15s, left 0.05s',
+            }}
+          />
+        </div>
+
+        {/* Controls overlay */}
+        <div className="absolute bottom-0 left-0 right-0 flex items-center gap-2 px-3 py-2 bg-gradient-to-t from-black/90 to-transparent z-20">
+          {/* Play/Pause/Replay button - single button that switches */}
+          <button
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
+            onClick={togglePlay}
+          >
+            {isEnded ? (
+              <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white">
+                <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+              </svg>
+            ) : isPlaying ? (
+              <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white">
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            )}
+          </button>
+
+          {/* Time display */}
+          <div className="text-sm text-white font-mono">
+            <span>{formatTime(currentTime)}</span>
+            <span className="text-zinc-400 mx-1">/</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+
+          {/* Chapter name with copy-to-chat icon */}
+          {currentChapter && chapters.length > 1 && (
+            <div className="flex items-center gap-1.5 ml-3">
+              {!isMobile && (
+                <>
+                  <span className="text-zinc-500">•</span>
+                  <span className="text-sm text-zinc-300 truncate max-w-[200px]" title={currentChapter.name}>
+                    {currentChapter.name}
+                  </span>
+                </>
+              )}
+              <button
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
+                onClick={() => captureFrameAndInsert((t) => `[${formatTime(t)}] ${currentChapter.name}: `)}
+                title="Capture frame + timestamp to chat"
+                aria-label="Capture frame and timestamp to chat"
+              >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+              </button>
+            </div>
+          )}
+
+          <div className="flex-1" />
+
+          {isMobile ? (
+            /* Mobile: more button + fullscreen button */
+            <div className="flex items-center gap-1">
+              <div className="relative">
+              <button
+                className={`w-9 h-9 flex items-center justify-center rounded transition-colors ${openMenu === 'more' ? 'bg-white/20' : 'hover:bg-white/10'}`}
+                onClick={() => { setOpenMenu(openMenu === 'more' ? 'none' : 'more'); setOpenSubmenu('none'); }}
+                title="More options"
+                aria-label="More options"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+                  <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+                </svg>
+              </button>
+              {openMenu === 'more' && (
+                <div className="absolute bottom-full right-0 mb-2 bg-zinc-800 rounded-lg shadow-lg min-w-[200px] z-20 overflow-hidden">
+                  {/* Subtitles toggle */}
+                  <button
+                    className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 flex items-center gap-3"
+                    onClick={() => { setSubtitlesOn(!subtitlesOn); closeMenus(); }}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current flex-shrink-0">
+                      <path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z"/>
+                    </svg>
+                    <span>Subtitles</span>
+                    <span className={`ml-auto text-xs ${subtitlesOn ? 'text-[var(--accent)]' : 'text-zinc-500'}`}>{subtitlesOn ? 'On' : 'Off'}</span>
+                  </button>
+
+                  <div className="h-px bg-zinc-700" />
+
+                  {/* Subtitle size */}
+                  <button
+                    className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 flex items-center gap-3"
+                    onClick={() => { setOpenSubmenu(openSubmenu === 'size' ? 'none' : 'size'); }}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current flex-shrink-0">
+                      <path d="M9 4v3h5v12h3V7h5V4H9zm-6 8h3v7h3v-7h3V9H3v3z"/>
+                    </svg>
+                    <span>Subtitle size</span>
+                    <span className="ml-auto text-xs text-zinc-400">{subtitleSize.charAt(0).toUpperCase() + subtitleSize.slice(1)}</span>
+                  </button>
+                  {openSubmenu === 'size' && (
+                    <div className="bg-zinc-700/50">
+                      {(['small', 'medium', 'large'] as const).map((size) => (
+                        <button
+                          key={size}
+                          className={`w-full px-4 py-2 pl-11 text-left text-sm hover:bg-zinc-700 ${subtitleSize === size ? 'text-[var(--accent)]' : 'text-zinc-300'}`}
+                          onClick={() => { setSubtitleSize(size); closeMenus(); }}
+                        >
+                          {subtitleSize === size ? '✓ ' : '  '}{size.charAt(0).toUpperCase() + size.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="h-px bg-zinc-700" />
+
+                  {/* Playback speed */}
+                  <button
+                    className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 flex items-center gap-3"
+                    onClick={() => { setOpenSubmenu(openSubmenu === 'speed' ? 'none' : 'speed'); }}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current flex-shrink-0">
+                      <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                    </svg>
+                    <span>Speed</span>
+                    <span className="ml-auto text-xs text-zinc-400">{playbackSpeed === 1 ? 'Normal' : `${playbackSpeed}x`}</span>
+                  </button>
+                  {openSubmenu === 'speed' && (
+                    <div className="bg-zinc-700/50">
+                      {[0.5, 0.75, 1, 1.25, 1.5, 2].map((speed) => (
+                        <button
+                          key={speed}
+                          className={`w-full px-4 py-2 pl-11 text-left text-sm hover:bg-zinc-700 ${playbackSpeed === speed ? 'text-[var(--accent)]' : 'text-zinc-300'}`}
+                          onClick={() => { changeSpeed(speed); closeMenus(); }}
+                        >
+                          {playbackSpeed === speed ? '✓ ' : '  '}{speed === 1 ? 'Normal' : `${speed}x`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="h-px bg-zinc-700" />
+
+                  {/* Download */}
+                  <button
+                    className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 flex items-center gap-3"
+                    onClick={() => { setShowDownloadModal(true); closeMenus(); }}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current flex-shrink-0">
+                      <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                    </svg>
+                    <span>Download</span>
+                  </button>
+                </div>
+              )}
+              </div>
+              {/* Fullscreen / expand button */}
+              <button
+                className="w-9 h-9 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
+                onClick={toggleFullscreen}
+                title="Fullscreen"
+                aria-label="Fullscreen"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+                  <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                </svg>
+              </button>
+            </div>
+          ) : (
+            /* Desktop: separate CC, Settings, Download buttons */
+            <>
+              {/* CC button */}
+              <button
+                className={`w-9 h-9 flex items-center justify-center rounded transition-colors ${subtitlesOn ? 'bg-white/20' : 'hover:bg-white/10'}`}
+                onClick={() => setSubtitlesOn(!subtitlesOn)}
+                title="Subtitles (C)"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+                  <path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z"/>
+                </svg>
+              </button>
+
+              {/* Settings button with gear icon */}
+              <div className="relative">
+                <button
+                  className={`w-9 h-9 flex items-center justify-center rounded transition-colors ${openMenu === 'settings' ? 'bg-white/20' : 'hover:bg-white/10'}`}
+                  onClick={() => { setOpenMenu(openMenu === 'settings' ? 'none' : 'settings'); setOpenSubmenu('none'); }}
+                  title="Settings"
+                >
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+                    <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                  </svg>
+                </button>
+                {openMenu === 'settings' && (
+                  <div className="absolute bottom-full right-0 mb-2 bg-zinc-800 rounded-lg shadow-lg overflow-visible min-w-[180px] z-20">
+                    {/* Subtitle size option */}
+                    <div
+                      className="px-4 py-2 text-sm text-white hover:bg-zinc-700 cursor-pointer flex items-center justify-between"
+                      onMouseEnter={() => setOpenSubmenu('size')}
+                    >
+                      <span>Subtitle size</span>
+                      <span className="text-zinc-400">›</span>
+                    </div>
+                    {openSubmenu === 'size' && (
+                      <div
+                        className="absolute right-full top-0 mr-1 bg-zinc-800 rounded-lg shadow-lg overflow-hidden min-w-[140px]"
+                        onMouseLeave={() => setOpenSubmenu('none')}
+                      >
+                        {(['small', 'medium', 'large'] as const).map((size) => (
+                          <button
+                            key={size}
+                            className={`w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 ${subtitleSize === size ? 'text-[var(--accent)]' : 'text-white'}`}
+                            onClick={() => { setSubtitleSize(size); closeMenus(); }}
+                          >
+                            {subtitleSize === size && <span>✓</span>}
+                            <span className={subtitleSize !== size ? 'ml-5' : ''}>{size.charAt(0).toUpperCase() + size.slice(1)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="h-px bg-zinc-700 my-1" />
+                    {/* Playback speed option */}
+                    <div
+                      className="px-4 py-2 text-sm text-white hover:bg-zinc-700 cursor-pointer flex items-center justify-between"
+                      onMouseEnter={() => setOpenSubmenu('speed')}
+                    >
+                      <span>Playback speed</span>
+                      <span className="text-zinc-400">›</span>
+                    </div>
+                    {openSubmenu === 'speed' && (
+                      <div
+                        className="absolute right-full bottom-0 mr-1 bg-zinc-800 rounded-lg shadow-lg overflow-hidden min-w-[140px]"
+                        onMouseLeave={() => setOpenSubmenu('none')}
+                      >
+                        {[0.5, 0.75, 1, 1.25, 1.5, 2].map((speed) => (
+                          <button
+                            key={speed}
+                            className={`w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 ${playbackSpeed === speed ? 'text-[var(--accent)]' : 'text-white'}`}
+                            onClick={() => changeSpeed(speed)}
+                          >
+                            {playbackSpeed === speed && <span>✓</span>}
+                            <span className={playbackSpeed !== speed ? 'ml-5' : ''}>{speed === 1 ? 'Normal' : `${speed}x`}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Download button */}
+              <button
+                className="w-9 h-9 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
+                onClick={() => setShowDownloadModal(true)}
+                title="Download"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                </svg>
+              </button>
+
+              {/* Fullscreen button */}
+              <button
+                className="w-9 h-9 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
+                onClick={toggleFullscreen}
+                title="Fullscreen (F)"
+                aria-label="Fullscreen"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+                  <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Download Modal */}
+      {showDownloadModal && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
+          onClick={(e) => e.target === e.currentTarget && setShowDownloadModal(false)}
+        >
+          <div className="bg-zinc-800 rounded-xl p-6 min-w-[320px] max-w-[400px] shadow-2xl">
+            <h3 className="text-lg font-semibold text-white mb-4">Download video</h3>
+
+            {/* Rendering progress view */}
+            {hqRenderStatus === 'rendering' && hqRenderProgress && downloadQuality === 'hq' ? (
+              <div className="mb-5">
+                {/* Segmented progress bar */}
+                <div style={{ display: "flex", gap: 2, height: 6, marginBottom: 12 }}>
+                  {Array.from({ length: Math.max(hqRenderProgress.total, 1) }).map((_, i) => {
+                    const isCompleted = i < hqRenderProgress.completed;
+                    const isCurrent = i === hqRenderProgress.completed;
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          flex: 1,
+                          borderRadius: 3,
+                          background: isCompleted
+                            ? "var(--accent)"
+                            : isCurrent
+                              ? "var(--accent)"
+                              : "rgba(255,255,255,0.1)",
+                          opacity: isCurrent ? undefined : 1,
+                          animation: isCurrent ? "pulse 1.5s ease-in-out infinite" : undefined,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="text-sm text-zinc-300 mb-1">
+                  Rendering scene {hqRenderProgress.completed + 1} of {hqRenderProgress.total}
+                  {hqRenderProgress.current_scene && `: ${hqRenderProgress.current_scene}`}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {hqRenderProgress.total > 0
+                    ? `${Math.round((hqRenderProgress.completed / hqRenderProgress.total) * 100)}%`
+                    : "Starting..."}
+                </div>
+                <div className="flex gap-3 justify-end mt-4">
+                  <button
+                    className="px-5 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
+                    onClick={handleCancelHqRender}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <style>{`@keyframes pulse { 0%,100% { opacity: 0.4 } 50% { opacity: 1 } }`}</style>
+              </div>
+            ) : hqRenderStatus === 'failed' && downloadQuality === 'hq' ? (
+              /* Failed state */
+              <div className="mb-5">
+                <div className="text-sm text-red-400 mb-3">
+                  {hqRenderProgress?.error || "Render failed"}
+                </div>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    className="px-5 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
+                    onClick={() => setShowDownloadModal(false)}
+                  >
+                    Close
+                  </button>
+                  <button
+                    className="px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                    style={{ background: "var(--accent)", color: "var(--text-primary)" }}
+                    onClick={handleRetryHqRender}
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Quality selector */
+              <>
+                <div className="space-y-2 mb-5">
+                  {/* Current quality option */}
+                  <div
+                    className="flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer"
+                    style={{
+                      background: downloadQuality === 'current' ? "rgba(255,255,255,0.08)" : "transparent",
+                      borderColor: downloadQuality === 'current' ? "var(--accent)" : "rgba(255,255,255,0.1)",
+                    }}
+                    onClick={() => setDownloadQuality('current')}
+                  >
+                    <div className="w-5 h-5 border-2 rounded-full flex items-center justify-center" style={{ borderColor: downloadQuality === 'current' ? "var(--accent)" : "rgba(255,255,255,0.3)" }}>
+                      {downloadQuality === 'current' && <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--accent)" }} />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-white">Current quality</div>
+                      <div className="text-xs text-zinc-400">Instant download</div>
+                    </div>
+                  </div>
+                  {/* HQ option */}
+                  <div
+                    className="flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer"
+                    style={{
+                      background: downloadQuality === 'hq' ? "rgba(255,255,255,0.08)" : "transparent",
+                      borderColor: downloadQuality === 'hq' ? "var(--accent)" : "rgba(255,255,255,0.1)",
+                    }}
+                    onClick={() => setDownloadQuality('hq')}
+                  >
+                    <div className="w-5 h-5 border-2 rounded-full flex items-center justify-center" style={{ borderColor: downloadQuality === 'hq' ? "var(--accent)" : "rgba(255,255,255,0.3)" }}>
+                      {downloadQuality === 'hq' && <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--accent)" }} />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-white">High quality (1080p, 30fps)</div>
+                      <div className="text-xs text-zinc-400">
+                        {hqRenderStatus === 'completed' && hqRenderProgress?.hq_video_url
+                          ? "Ready to download"
+                          : "Requires rendering"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    className="px-5 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
+                    onClick={() => setShowDownloadModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-5 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
+                    style={{ background: "var(--accent)", color: "var(--text-primary)" }}
+                    onMouseEnter={(e) => { if (!isDownloading) e.currentTarget.style.background = "var(--accent-hover)"; }}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "var(--accent)"}
+                    onClick={handleDownload}
+                    disabled={isDownloading}
+                  >
+                    {isDownloading
+                      ? "Downloading..."
+                      : downloadQuality === 'hq' && hqRenderStatus !== 'completed'
+                        ? "Render & Download"
+                        : "Download"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Close menus when clicking outside — z-[19] sits above mobile tap overlay (z-[11]) and progress bar (z-[15]) but below controls (z-20) */}
+      {openMenu !== 'none' && (
+        <div
+          className="fixed inset-0 z-[19]"
+          onClick={closeMenus}
+        />
+      )}
+
+      {/* Animations for mobile interactions */}
+      <style>{`
+        @keyframes dtap-fade { 0% { opacity: 1; transform: translateY(-50%) scale(1); } 100% { opacity: 0; transform: translateY(-50%) scale(1.2); } }
+      `}</style>
+    </div>
+  );
+}

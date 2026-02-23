@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 44" width="310" height="44">
+  <!-- LaTeX Sigma (∑) symbol -->
+  <text
+    x="2"
+    y="36"
+    font-family="'Computer Modern', 'Latin Modern Math', 'STIX Two Math', 'Cambria Math', serif"
+    font-size="42"
+    font-weight="400"
+    fill="#40E0D0"
+  >∑</text>
+
+  <!-- Manimate text - same baseline -->
+  <text
+    x="44"
+    y="34"
+    font-family="'Computer Modern Serif', Georgia, 'Times New Roman', serif"
+    font-size="34"
+    font-weight="400"
+    fill="#1C1E21"
+  >Manimate</text>
+</svg>

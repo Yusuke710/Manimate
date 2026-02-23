@@ -1,0 +1,3 @@
+- The project name is Manimate, not Ralph
+- After every implementations, review your code with /codex to get feedback. Ensure the implementation is simplest and scalable. Less is more.
+- do not worry abuot legacy code as we are not in production and we can restore it from git history
