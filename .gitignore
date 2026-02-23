@@ -45,12 +45,6 @@ next-env.d.ts
 # archive
 /archive
 
-# Supabase CLI temp files
-supabase/.temp/
-
-# Sentry Config File
-.env.sentry-build-plugin
-
 # Manim render output
 media/
 .git.backup-before-magent-20260223-104004/
