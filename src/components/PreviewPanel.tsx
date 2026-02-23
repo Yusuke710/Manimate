@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo, useReducer } from "react";
-import { getProjectPath } from "@/lib/sandbox-utils";
+
 import { parseVoiceoverFailure } from "@/lib/voiceover-error";
 import { useIsMobile } from "@/lib/useIsMobile";
 import type { HqRenderProgress } from "@/lib/types";
@@ -1115,22 +1115,9 @@ function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voic
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voicedSwapToken, fullVideoUrl, activeVideo, sessionId]);
 
-  // Only include sandbox context in URLs when sandbox has been activated by user
-  // interaction (sending a message), to avoid waking paused local runtimes on visit.
-  const activeSandboxId = sandboxActive ? sandboxId : null;
-  const projectDir = activeSandboxId ? getProjectPath(activeSandboxId) : null;
-
-  // Construct subtitle URL and include sandbox context when available:
-  // this lets the API use sandbox-first for live sessions, DB-first for rehydration.
   // Gate on fullVideoUrl to avoid fetching before video exists.
-  const fullSubtitleUrl = fullVideoUrl
-    ? sessionId
-      ? activeSandboxId && projectDir
-        ? `/api/subtitles?session_id=${encodeURIComponent(sessionId)}&sandbox_id=${encodeURIComponent(activeSandboxId)}&project_path=${encodeURIComponent(projectDir)}`
-        : `/api/subtitles?session_id=${encodeURIComponent(sessionId)}`
-      : projectDir && activeSandboxId
-        ? `/api/subtitles?sandbox_id=${encodeURIComponent(activeSandboxId)}&project_path=${encodeURIComponent(projectDir)}`
-        : null
+  const fullSubtitleUrl = fullVideoUrl && sessionId
+    ? `/api/subtitles?session_id=${encodeURIComponent(sessionId)}`
     : null;
 
   // Note: We no longer poll sandbox for video existence.
