@@ -29,6 +29,7 @@ import {
   clearLocalVoiceoverArtifacts,
   startLocalVoiceoverJob,
 } from "@/lib/local/voiceover";
+import { readLocalProjectSubtitles } from "@/lib/local/subtitles";
 import { clearLocalHqArtifacts } from "@/lib/local/hq-render";
 import {
   DEFAULT_ASPECT_RATIO,
@@ -172,6 +173,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
     let sandboxId: string | null = null;
     let claudeSessionId = "";
     let modelForRun = "claude";
+    let currentTurnId: string | null = null;
 
     const persistActivity = async (
       type: string,
@@ -182,6 +184,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
       insertLocalActivityEvent({
         session_id: sessionId,
         run_id: runId,
+        turn_id: currentTurnId,
         type,
         message,
         payload: payload ?? null,
@@ -244,6 +247,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         content: rawPrompt,
         metadata: hasImages ? { images: body.images } : null,
       });
+      currentTurnId = userMessageId;
 
       const run = createLocalRun({
         session_id: sessionId,
@@ -489,7 +493,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
 
       const planContent = await readTextFileIfExists(path.join(projectDir, "plan.md"));
       const scriptContent = await readTextFileIfExists(path.join(projectDir, "script.py"));
-      const subtitlesContent = await readTextFileIfExists(path.join(projectDir, "subtitles.srt"));
+      const subtitlesContent = await readLocalProjectSubtitles(projectDir);
 
       const postRunVideo = await detectVideoFile(projectDir);
       const videoChanged = Boolean(
@@ -507,6 +511,12 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
       const finishedAt = new Date().toISOString();
 
       if (wasCanceled) {
+        insertLocalMessage({
+          session_id: sessionId,
+          role: "assistant",
+          content: "Stopped by user",
+        });
+
         updateLocalRun(runId, {
           status: "canceled",
           finished_at: finishedAt,

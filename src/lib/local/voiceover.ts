@@ -16,6 +16,7 @@ import {
   updateLocalSession,
 } from "@/lib/local/db";
 import { runLocalCommand } from "@/lib/local/command";
+import { readLocalProjectSubtitles } from "@/lib/local/subtitles";
 
 const VOICEOVER_CONCURRENCY = 3;
 const MIN_SEGMENT_DURATION = 0.05;
@@ -132,14 +133,7 @@ async function readSubtitles(sessionId: string): Promise<string | null> {
   }
 
   const { projectDir } = ensureLocalSessionLayout(sessionId);
-  const subtitlePath = path.join(projectDir, "subtitles.srt");
-
-  try {
-    const file = await fsp.readFile(subtitlePath, "utf8");
-    return file.trim() ? file : null;
-  } catch {
-    return null;
-  }
+  return readLocalProjectSubtitles(projectDir);
 }
 
 function buildTimedCaptions(captions: Caption[]): Caption[] {
@@ -338,6 +332,12 @@ async function runVoiceoverJob(sessionId: string, jobId: string): Promise<void> 
     return;
   }
 
+  if (!session.subtitles_content?.trim()) {
+    updateLocalSession(sessionId, {
+      subtitles_content: subtitles,
+    });
+  }
+
   const captions = buildTimedCaptions(parseSRT(subtitles));
   if (captions.length === 0) {
     if (!isCurrentJob(sessionId, jobId)) return;
@@ -467,7 +467,9 @@ export async function startLocalVoiceoverJob(
   });
 
   const jobId = crypto.randomUUID();
-  const promise = runVoiceoverJob(sessionId, jobId)
+  const startedAt = new Date().toISOString();
+  const promise = Promise.resolve()
+    .then(() => runVoiceoverJob(sessionId, jobId))
     .catch((error) => {
       if (!isCurrentJob(sessionId, jobId)) return;
       const rawMessage = error instanceof Error ? error.message : String(error);
@@ -485,7 +487,7 @@ export async function startLocalVoiceoverJob(
   activeVoiceoverJobs.set(sessionId, {
     id: jobId,
     sessionId,
-    startedAt: new Date().toISOString(),
+    startedAt,
     promise,
   });
 
@@ -496,6 +498,14 @@ export async function startLocalVoiceoverJob(
     status: 202,
     message: "Voiceover generation started",
   };
+}
+
+export function isLocalVoiceoverJobActive(sessionId: string): boolean {
+  return activeVoiceoverJobs.has(sessionId);
+}
+
+export function getLocalVoiceoverJobStartedAt(sessionId: string): string | null {
+  return activeVoiceoverJobs.get(sessionId)?.startedAt || null;
 }
 
 export async function clearLocalVoiceoverArtifacts(sessionId: string): Promise<void> {

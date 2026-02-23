@@ -15,6 +15,7 @@ const DEFAULT_MODEL_ID = "eleven_flash_v2_5";
 const FALLBACK_MODEL_IDS = ["eleven_turbo_v2_5", "eleven_multilingual_v2"] as const;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
+const TTS_REQUEST_TIMEOUT_MS = 60_000;
 
 // ElevenLabs Creator plan pay-as-you-go rate: $0.30 per 1000 characters
 const TTS_BASE_RATE_PER_CHAR = 0.30 / 1000;
@@ -174,21 +175,32 @@ export async function generateTTSForCaption(
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         const url = `${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`;
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "xi-api-key": apiKey,
-          },
-          body: JSON.stringify({
-            text,
-            model_id: modelId,
-            voice_settings: {
-              stability: 0.5,
-              similarity_boost: 0.75,
+        const controller = new AbortController();
+        const timeoutId = setTimeout(
+          () => controller.abort(),
+          TTS_REQUEST_TIMEOUT_MS
+        );
+        let response: Response;
+        try {
+          response = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "xi-api-key": apiKey,
             },
-          }),
-        });
+            signal: controller.signal,
+            body: JSON.stringify({
+              text,
+              model_id: modelId,
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.75,
+              },
+            }),
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         if (response.status === 429) {
           // Rate limited - wait and retry same model

@@ -11,12 +11,21 @@ import {
   localFileToApiUrl,
 } from "@/lib/local/config";
 import {
+  backfillLocalActivityTurnIds,
   createLocalSession,
   getLocalActiveRun,
   getLocalSession,
   listLocalActivityEvents,
   listLocalMessages,
+  updateLocalRun,
+  updateLocalSession,
 } from "@/lib/local/db";
+import { getActiveLocalRunBySessionId } from "@/lib/local/runtime";
+import {
+  getLocalVoiceoverJobStartedAt,
+  isLocalVoiceoverJobActive,
+  startLocalVoiceoverJob,
+} from "@/lib/local/voiceover";
 import type { HqRenderProgress } from "@/lib/types";
 
 type MessageMetadata = {
@@ -33,6 +42,16 @@ type MessageMetadata = {
 
 interface RouteParams {
   params: Promise<{ sessionId: string }>;
+}
+
+const RUN_STALE_MS = 2 * 60 * 1000;
+const VOICEOVER_STALE_MS = 2 * 60 * 1000;
+
+function isOlderThan(timestamp: string | null | undefined, thresholdMs: number): boolean {
+  if (!timestamp) return false;
+  const parsed = Date.parse(timestamp);
+  if (!Number.isFinite(parsed)) return false;
+  return Date.now() - parsed > thresholdMs;
 }
 
 function parseHqRenderProgress(raw: string | null): HqRenderProgress | null {
@@ -76,8 +95,47 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     };
   });
 
+  let activeRun = getLocalActiveRun(sessionId);
+  if (activeRun) {
+    const hasLiveProcess = Boolean(getActiveLocalRunBySessionId(sessionId));
+    const staleRunRef = activeRun.last_event_at || activeRun.started_at || activeRun.created_at;
+    if (!hasLiveProcess && isOlderThan(staleRunRef, RUN_STALE_MS)) {
+      updateLocalRun(activeRun.id, {
+        status: "canceled",
+        finished_at: new Date().toISOString(),
+        error_message: "Run was interrupted before completion",
+      });
+      activeRun = null;
+    }
+  }
+
+  const voiceoverInProgress =
+    session.voiceover_status === "pending" || session.voiceover_status === "generating";
+  const hasLiveVoiceoverJob = isLocalVoiceoverJobActive(sessionId);
+  const liveVoiceoverStartedAt = getLocalVoiceoverJobStartedAt(sessionId);
+  const staleDbVoiceover = !hasLiveVoiceoverJob && isOlderThan(session.updated_at, VOICEOVER_STALE_MS);
+  const staleLiveVoiceover = hasLiveVoiceoverJob && isOlderThan(liveVoiceoverStartedAt, VOICEOVER_STALE_MS);
+  const staleVoiceover = voiceoverInProgress && (staleDbVoiceover || staleLiveVoiceover);
+
+  if (staleVoiceover) {
+    const restart = await startLocalVoiceoverJob(sessionId, {
+      force: true,
+      silentIfUnavailable: true,
+    });
+    if (!restart.started) {
+      updateLocalSession(sessionId, {
+        voiceover_status: "failed",
+        voiceover_error: restart.message || "Voiceover generation stalled. Please retry.",
+      });
+    }
+    const refreshed = getLocalSession(sessionId);
+    if (refreshed) {
+      session = refreshed;
+    }
+  }
+
+  backfillLocalActivityTurnIds(sessionId);
   const activityEvents = listLocalActivityEvents(sessionId);
-  const activeRun = getLocalActiveRun(sessionId);
 
   let videoUrl = session.last_video_url;
   if (!videoUrl && session.video_path) {

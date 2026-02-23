@@ -1,11 +1,10 @@
-import fsp from "node:fs/promises";
-import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import {
   ensureLocalSessionLayout,
   getSessionIdFromSandboxId,
 } from "@/lib/local/config";
-import { getLocalSession } from "@/lib/local/db";
+import { getLocalSession, updateLocalSession } from "@/lib/local/db";
+import { readLocalProjectSubtitles } from "@/lib/local/subtitles";
 
 function subtitleResponse(content: string): Response {
   return new Response(content, {
@@ -40,14 +39,15 @@ export async function GET(request: NextRequest): Promise<Response> {
   }
 
   const { projectDir } = ensureLocalSessionLayout(resolvedSessionId);
-  const subtitlePath = path.join(projectDir, "subtitles.srt");
-
   try {
-    const fileContent = await fsp.readFile(subtitlePath, "utf8");
-    if (!fileContent.trim()) {
+    const content = await readLocalProjectSubtitles(projectDir);
+    if (!content?.trim()) {
       return NextResponse.json({ error: "No subtitles found" }, { status: 404 });
     }
-    return subtitleResponse(fileContent);
+    if (!session.subtitles_content?.trim()) {
+      updateLocalSession(resolvedSessionId, { subtitles_content: content });
+    }
+    return subtitleResponse(content);
   } catch {
     return NextResponse.json({ error: "No subtitles found" }, { status: 404 });
   }

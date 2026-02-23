@@ -588,3 +588,26 @@ export function listLocalActivityEvents(sessionId: string): LocalActivityEvent[]
     .all(sessionId) as Record<string, unknown>[];
   return rows.map(mapActivityEvent);
 }
+
+/**
+ * Backfill missing activity_events.turn_id by assigning each orphan event
+ * to the latest user message at or before the event timestamp.
+ */
+export function backfillLocalActivityTurnIds(sessionId: string): void {
+  openDb()
+    .prepare(`
+      UPDATE activity_events
+      SET turn_id = (
+        SELECT messages.id
+        FROM messages
+        WHERE messages.session_id = activity_events.session_id
+          AND messages.role = 'user'
+          AND messages.created_at <= activity_events.created_at
+        ORDER BY messages.created_at DESC
+        LIMIT 1
+      )
+      WHERE session_id = ?
+        AND turn_id IS NULL
+    `)
+    .run(sessionId);
+}
