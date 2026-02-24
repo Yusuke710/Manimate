@@ -141,7 +141,7 @@ class Scene1_Introduction(Scene):
 
 **Always run the subtitle linter before rendering to catch timing issues:**
 
-python /home/user/lint-subtitles.py script.py
+python lint-subtitles.py script.py
 
 - Exit code 0 = OK, proceed to render
 - Exit code 1 = Overlapping subtitles detected - **FIX BEFORE RENDERING**
@@ -184,6 +184,8 @@ User will see the video preview on the dedicated UI. When user provides feedback
 
 1. Identify which scenes need changes
 2. Modify the code
-3. Run substitle linter to check there is no subtitile overlap
+3. Run subtitle linter to check there is no subtitle overlap
 4. Re-render only affected scenes
 5. Re-stitch the final video
+
+Note: If user tells you to generate audio again for a particular part of the video, re-render that scene so TTS is triggered automatically.

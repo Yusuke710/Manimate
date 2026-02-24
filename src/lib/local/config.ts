@@ -56,11 +56,6 @@ const MANIM_PROMPT_PATH = path.join(
   "prompts",
   "CLAUDE.md"
 );
-const LINT_SUBTITLES_PATH = path.join(
-  process.cwd(),
-  "scripts",
-  "lint-subtitles.py"
-);
 
 export function ensureLocalSessionLayout(sessionId: string): {
   sessionRoot: string;
@@ -83,16 +78,6 @@ export function ensureLocalSessionLayout(sessionId: string): {
       fs.copyFileSync(MANIM_PROMPT_PATH, destClaudeMd);
     } catch {
       // Non-fatal: Claude will still work, just without the expert prompt.
-    }
-  }
-
-  // Copy lint-subtitles.py so CLAUDE.md's reference to it works.
-  const destLinter = path.join(paths.projectDir, "lint-subtitles.py");
-  if (!fs.existsSync(destLinter)) {
-    try {
-      fs.copyFileSync(LINT_SUBTITLES_PATH, destLinter);
-    } catch {
-      // Non-fatal.
     }
   }
 
