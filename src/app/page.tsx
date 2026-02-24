@@ -23,9 +23,6 @@ import {
   type AspectRatio,
 } from "@/lib/aspect-ratio";
 
-// Welcome prompt key: used to pass prompt from WelcomeView to ChatPanel via sessionStorage
-const WELCOME_PROMPT_KEY = "manimate-welcome-prompt";
-const WELCOME_PENDING_KEY = "manimate-welcome-pending";
 const MODEL_PREF_KEY = "manimate-preferred-model";
 const VOICE_PREF_KEY = "manimate-preferred-voice";
 const VOICE_NAMES_KEY = "manimate-voice-names";
@@ -749,13 +746,14 @@ interface ChatPanelProps {
   sessionId: string | null;
   aspectRatio: AspectRatio;
   onSessionAspectRatio?: (ratio: AspectRatio) => void;
+  hasPendingWelcomePayload?: (sessionId: string) => boolean;
   consumeWelcomePayload?: (sessionId: string) => { prompt: string; images?: File[] } | null;
   /** Resolves true when the session row exists in DB (for optimistic navigation) */
   sessionReady?: Promise<boolean> | null;
   isMobile?: boolean;
 }
 
-function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, consumeWelcomePayload, sessionReady, isMobile = false }: ChatPanelProps) {
+function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWelcomePayload, consumeWelcomePayload, sessionReady, isMobile = false }: ChatPanelProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(chatReducer, initialState);
   const draftKey = sessionId ? `chat-draft:${sessionId}` : undefined;
@@ -857,7 +855,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, consumeWelcom
   // With key={sessionId} on ChatPanel, this runs once per session
   useEffect(() => {
     // Skip bootstrap fetch for welcome-prompted sessions (auto-send will fire)
-    const isWelcomeCreated = sessionStorage.getItem(WELCOME_PENDING_KEY) === "1";
+    const isWelcomeCreated = sessionId ? Boolean(hasPendingWelcomePayload?.(sessionId)) : false;
     if (!sessionId || isWelcomeCreated) return;
 
     dispatch({ type: "SET_LOADING_MESSAGES", isLoadingMessages: true });
@@ -1179,24 +1177,14 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, consumeWelcom
     }
   }, [addActivity, sessionId, state.model, sessionReady, aspectRatio, resolveArtifactType]);
 
-  // Auto-send stored welcome prompt when a new session loads
+  // Auto-send pending welcome payload when a new session loads
   const welcomeSentRef = useRef(false);
   useEffect(() => {
     if (!sessionId || welcomeSentRef.current) return;
     const pending = consumeWelcomePayload?.(sessionId);
-    if (pending) {
-      welcomeSentRef.current = true;
-      sessionStorage.removeItem(WELCOME_PENDING_KEY);
-      sessionStorage.removeItem(WELCOME_PROMPT_KEY);
-      handleSend(pending.prompt, pending.images);
-      return;
-    }
-    const prompt = sessionStorage.getItem(WELCOME_PROMPT_KEY);
-    if (!prompt) return;
+    if (!pending) return;
     welcomeSentRef.current = true;
-    sessionStorage.removeItem(WELCOME_PENDING_KEY);
-    sessionStorage.removeItem(WELCOME_PROMPT_KEY);
-    handleSend(prompt);
+    handleSend(pending.prompt, pending.images);
   }, [sessionId, handleSend, consumeWelcomePayload]);
 
   const handleCancel = useCallback(async () => {
@@ -1430,6 +1418,10 @@ function HomeContent() {
     fetch("/api/sandbox/prewarm", { method: "POST" }).catch(() => {});
   }, []);
 
+  const hasPendingWelcomePayload = useCallback((sessionId: string) => {
+    return pendingWelcomePayloadRef.current.has(sessionId);
+  }, []);
+
   const consumeWelcomePayload = useCallback((sessionId: string) => {
     const payload = pendingWelcomePayloadRef.current.get(sessionId);
     if (!payload) return null;
@@ -1444,9 +1436,6 @@ function HomeContent() {
 
     const id = crypto.randomUUID();
     pendingWelcomePayloadRef.current.set(id, { prompt: trimmedPrompt, images });
-    sessionStorage.setItem(WELCOME_PENDING_KEY, "1");
-    if (trimmedPrompt) sessionStorage.setItem(WELCOME_PROMPT_KEY, trimmedPrompt);
-    else sessionStorage.removeItem(WELCOME_PROMPT_KEY);
 
     // Fire session creation in background; resolve to boolean for ChatPanel.
     // Timeout prevents indefinite stall on cold start / slow network.
@@ -1464,8 +1453,6 @@ function HomeContent() {
     }).then(r => r.ok).catch(() => false as const).then((ok) => {
       if (!ok) {
         pendingWelcomePayloadRef.current.delete(id);
-        sessionStorage.removeItem(WELCOME_PENDING_KEY);
-        sessionStorage.removeItem(WELCOME_PROMPT_KEY);
       }
       return ok;
     }).finally(() => {
@@ -1601,6 +1588,7 @@ function HomeContent() {
             sessionId={activeSessionId}
             aspectRatio={aspectRatio}
             onSessionAspectRatio={setAspectRatio}
+            hasPendingWelcomePayload={hasPendingWelcomePayload}
             consumeWelcomePayload={consumeWelcomePayload}
             isMobile={isMobile}
             sessionReady={
