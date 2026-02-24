@@ -358,7 +358,6 @@ async function runVoiceoverJob(sessionId: string, jobId: string): Promise<void> 
   const muxedVideoPath = path.join(tempDir, "video_voiced.mp4");
 
   await fsp.mkdir(tempDir, { recursive: true });
-  await fsp.mkdir(cacheDir, { recursive: true });
 
   try {
     const segments = await generateCaptionBatch(

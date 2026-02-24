@@ -102,24 +102,16 @@ function getCaptionCachePath(cacheDir: string, cacheKey: string): string {
   return path.join(cacheDir, `${cacheKey}.mp3`);
 }
 
-async function safeUnlink(filePath: string): Promise<void> {
-  try {
-    await fsp.unlink(filePath);
-  } catch {
-    // Ignore missing files.
-  }
-}
-
-async function hasUsableCachedAudio(filePath: string): Promise<boolean> {
+async function readCachedAudio(filePath: string): Promise<Buffer | null> {
   try {
     const stat = await fsp.stat(filePath);
     if (!stat.isFile() || stat.size < MIN_VALID_CACHE_BYTES) {
-      await safeUnlink(filePath);
-      return false;
+      await fsp.unlink(filePath).catch(() => undefined);
+      return null;
     }
-    return true;
+    return await fsp.readFile(filePath);
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -129,7 +121,7 @@ async function writeFileAtomic(targetPath: string, contents: Buffer): Promise<vo
   try {
     await fsp.rename(tempPath, targetPath);
   } catch (error) {
-    await safeUnlink(tempPath);
+    await fsp.unlink(tempPath).catch(() => undefined);
     throw error;
   }
 }
@@ -152,9 +144,10 @@ export async function generateTTSForCaptionWithCache(
 
   await fsp.mkdir(cacheDir, { recursive: true });
 
-  if (await hasUsableCachedAudio(cachePath)) {
+  const cachedAudio = await readCachedAudio(cachePath);
+  if (cachedAudio) {
     return {
-      audio: await fsp.readFile(cachePath),
+      audio: cachedAudio,
       characterCount: text.length,
       modelIdUsed: modelId,
       cached: true,
@@ -168,9 +161,10 @@ export async function generateTTSForCaptionWithCache(
   if (!generation) {
     createdInflight = true;
     generation = (async () => {
-      if (await hasUsableCachedAudio(cachePath)) {
+      const concurrentCachedAudio = await readCachedAudio(cachePath);
+      if (concurrentCachedAudio) {
         return {
-          audio: await fsp.readFile(cachePath),
+          audio: concurrentCachedAudio,
           characterCount: text.length,
           modelIdUsed: modelId,
         } as TTSResult;
@@ -186,9 +180,8 @@ export async function generateTTSForCaptionWithCache(
   }
 
   const generated = await generation;
-  const audio = await fsp.readFile(cachePath);
   return {
-    audio,
+    audio: generated.audio,
     characterCount: generated.characterCount,
     modelIdUsed: generated.modelIdUsed,
     cached: !createdInflight,
