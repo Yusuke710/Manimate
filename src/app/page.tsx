@@ -67,7 +67,6 @@ function usePreferredAspectRatio() {
 function ModelSelector({ model, onChange, disabled }: { model: string; onChange: (model: string) => void; disabled?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const selectableModels = AVAILABLE_MODELS.filter((m) => m.id !== model);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -116,7 +115,7 @@ function ModelSelector({ model, onChange, disabled }: { model: string; onChange:
           zIndex: 50, overflow: "hidden",
           minWidth: 180,
         }}>
-          {selectableModels.map((m) => (
+          {AVAILABLE_MODELS.map((m) => (
             <button
               key={m.id}
               onClick={() => { onChange(m.id); setIsOpen(false); }}
@@ -124,16 +123,16 @@ function ModelSelector({ model, onChange, disabled }: { model: string; onChange:
                 display: "flex", flexDirection: "column", gap: 1,
                 width: "100%", padding: "8px 14px",
                 border: "none",
-                background: "transparent",
+                background: m.id === model ? "var(--bg-active)" : "transparent",
                 cursor: "pointer",
                 fontFamily: "var(--font)",
                 transition: "background 0.12s",
                 textAlign: "left",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+              onMouseEnter={(e) => { if (m.id !== model) e.currentTarget.style.background = "var(--bg-hover)"; }}
+              onMouseLeave={(e) => { if (m.id !== model) e.currentTarget.style.background = "transparent"; }}
             >
-              <span style={{ fontSize: 13, fontWeight: 400, color: "var(--text-secondary)" }}>
+              <span style={{ fontSize: 13, fontWeight: m.id === model ? 600 : 400, color: m.id === model ? "var(--text-primary)" : "var(--text-secondary)" }}>
                 {m.label}
               </span>
               <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
