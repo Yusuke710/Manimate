@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ActivityEvent, Message } from "@/lib/types";
+import { getModelDisplayLabel } from "@/lib/models";
 
 // Unified timeline item
 type TimelineItem =
@@ -463,7 +464,7 @@ function ExpandedContent({ event }: { event: ActivityEvent }) {
     case "system_init":
       return (
         <div>
-          {event.model && <div>Model: <strong>{event.model}</strong></div>}
+          {event.model && <div>Model: <strong>{getModelDisplayLabel(event.model)}</strong></div>}
           {event.tools && event.tools.length > 0 && (
             <div>Tools: {event.tools.slice(0, 10).join(", ")}{event.tools.length > 10 && ` +${event.tools.length - 10} more`}</div>
           )}

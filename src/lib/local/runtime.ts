@@ -1,5 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
+import { isRegisteredModelId } from "@/lib/models";
 
 export interface ActiveLocalRunProcess {
   sessionId: string;
@@ -112,7 +113,14 @@ export async function cancelLocalRunProcess(input: {
 export function normalizeLocalClaudeModel(model: string | null | undefined): string | null {
   const candidate = model?.trim();
   if (!candidate) return null;
-  if (candidate.toLowerCase().includes("claude")) {
+
+  const lower = candidate.toLowerCase();
+  if (isRegisteredModelId(lower)) {
+    return lower;
+  }
+
+  // Backward compatibility for existing sessions that still store full model IDs.
+  if (lower.startsWith("claude-")) {
     return candidate;
   }
   return null;

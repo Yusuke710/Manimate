@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLocalClaudeEnv } from "@/lib/local/runtime";
+import { buildLocalClaudeEnv, normalizeLocalClaudeModel } from "@/lib/local/runtime";
 
 describe("buildLocalClaudeEnv", () => {
   it("removes provider env keys and CODEX-prefixed vars", () => {
@@ -30,5 +30,21 @@ describe("buildLocalClaudeEnv", () => {
     expect(env.HOME).toBe("/tmp/home");
     expect(env.CI).toBe("1");
     expect(env.NODE_ENV).toBe("test");
+  });
+});
+
+describe("normalizeLocalClaudeModel", () => {
+  it("accepts Claude model aliases", () => {
+    expect(normalizeLocalClaudeModel("opus")).toBe("opus");
+    expect(normalizeLocalClaudeModel("sonnet")).toBe("sonnet");
+    expect(normalizeLocalClaudeModel("haiku")).toBe("haiku");
+  });
+
+  it("accepts full Claude model IDs for backward compatibility", () => {
+    expect(normalizeLocalClaudeModel("claude-opus-4-6")).toBe("claude-opus-4-6");
+  });
+
+  it("rejects unknown model names", () => {
+    expect(normalizeLocalClaudeModel("gpt-4o")).toBeNull();
   });
 });

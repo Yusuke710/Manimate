@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { DEFAULT_MODEL, MODEL_REGISTRY } from "@/lib/models";
+import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
 import { isAspectRatio, type AspectRatio } from "@/lib/aspect-ratio";
 import {
   createLocalSession,
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   try {
     const body = await request.json();
-    if (body.model && typeof body.model === "string" && Object.hasOwn(MODEL_REGISTRY, body.model)) {
+    if (body.model && typeof body.model === "string" && isRegisteredModelId(body.model)) {
       model = body.model;
     }
     if (body.id && typeof body.id === "string") {

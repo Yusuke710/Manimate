@@ -9,7 +9,12 @@ import PreviewPanel from "@/components/PreviewPanel";
 import { SessionsSidebar } from "@/components/SessionsSidebar";
 import { SSEEvent, ActivityEvent, Message, DBActivityEvent, ActiveRun, dbActivityEventToUI, ImageAttachment, HqRenderProgress } from "@/lib/types";
 import { useIsMobile } from "@/lib/useIsMobile";
-import { AVAILABLE_MODELS, DEFAULT_MODEL } from "@/lib/models";
+import {
+  AVAILABLE_MODELS,
+  DEFAULT_MODEL,
+  getModelDisplayLabel,
+  isRegisteredModelId,
+} from "@/lib/models";
 import { AVAILABLE_VOICES, DEFAULT_VOICE_ID, getVoicePageUrl } from "@/lib/voices";
 import {
   ASPECT_RATIO_OPTIONS,
@@ -29,7 +34,7 @@ function usePreferredModel() {
   const [model, setModel] = useState(() => {
     try {
       const saved = localStorage.getItem(MODEL_PREF_KEY);
-      if (saved && AVAILABLE_MODELS.some(m => m.id === saved)) return saved;
+      if (saved && isRegisteredModelId(saved)) return saved;
     } catch {}
     return DEFAULT_MODEL;
   });
@@ -58,16 +63,11 @@ function usePreferredAspectRatio() {
   return [ratio, set] as const;
 }
 
-// Get model display label
-function getModelLabel(modelId: string): string {
-  const model = AVAILABLE_MODELS.find(m => m.id === modelId);
-  return model?.label || modelId;
-}
-
 // Manus-style model selector dropdown
 function ModelSelector({ model, onChange, disabled }: { model: string; onChange: (model: string) => void; disabled?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const selectableModels = AVAILABLE_MODELS.filter((m) => m.id !== model);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -97,7 +97,7 @@ function ModelSelector({ model, onChange, disabled }: { model: string; onChange:
           <rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
         </svg>
         <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
-          {getModelLabel(model)}
+          {getModelDisplayLabel(model)}
         </span>
         {AVAILABLE_MODELS.length > 1 && (
           <svg width="11" height="11" viewBox="0 0 20 20" fill="var(--text-tertiary)" style={{ transition: "transform 0.15s", transform: isOpen ? "rotate(180deg)" : "none" }}>
@@ -116,7 +116,7 @@ function ModelSelector({ model, onChange, disabled }: { model: string; onChange:
           zIndex: 50, overflow: "hidden",
           minWidth: 180,
         }}>
-          {AVAILABLE_MODELS.map((m) => (
+          {selectableModels.map((m) => (
             <button
               key={m.id}
               onClick={() => { onChange(m.id); setIsOpen(false); }}
@@ -124,16 +124,16 @@ function ModelSelector({ model, onChange, disabled }: { model: string; onChange:
                 display: "flex", flexDirection: "column", gap: 1,
                 width: "100%", padding: "8px 14px",
                 border: "none",
-                background: m.id === model ? "var(--bg-active)" : "transparent",
+                background: "transparent",
                 cursor: "pointer",
                 fontFamily: "var(--font)",
                 transition: "background 0.12s",
                 textAlign: "left",
               }}
-              onMouseEnter={(e) => { if (m.id !== model) e.currentTarget.style.background = "var(--bg-hover)"; }}
-              onMouseLeave={(e) => { if (m.id !== model) e.currentTarget.style.background = "transparent"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
-              <span style={{ fontSize: 13, fontWeight: m.id === model ? 600 : 400, color: m.id === model ? "var(--text-primary)" : "var(--text-secondary)" }}>
+              <span style={{ fontSize: 13, fontWeight: 400, color: "var(--text-secondary)" }}>
                 {m.label}
               </span>
               <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
