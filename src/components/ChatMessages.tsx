@@ -370,6 +370,14 @@ function PillIcon({ event }: { event: ActivityEvent }) {
 }
 
 // Manus-style step pill
+function getToolResultText(event: ActivityEvent): string {
+  if (event.type !== "tool_result") return event.message;
+  if (typeof event.toolResult === "string" && event.toolResult.trim().length > 0) {
+    return event.toolResult;
+  }
+  return event.message;
+}
+
 function ActivityPill({ event }: { event: ActivityEvent }) {
   const [expanded, setExpanded] = useState(false);
   const summary = getCompactSummary(event);
@@ -377,7 +385,7 @@ function ActivityPill({ event }: { event: ActivityEvent }) {
   const isError = event.type === "error" || (event.type === "tool_result" && event.isError);
   const hasExpandable =
     (event.type === "tool_use" && event.toolInput) ||
-    (event.type === "tool_result" && event.message.length > 80) ||
+    (event.type === "tool_result" && getToolResultText(event).length > 80) ||
     event.type === "system_init" ||
     event.type === "error";
 
@@ -447,7 +455,8 @@ function getCompactSummary(event: ActivityEvent): string {
   }
   if (event.type === "tool_result" || event.type === "assistant_text") {
     const maxLen = event.type === "tool_result" ? 80 : 100;
-    return event.message.length > maxLen ? event.message.slice(0, maxLen) + "..." : event.message;
+    const text = event.type === "tool_result" ? getToolResultText(event) : event.message;
+    return text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
   }
   return event.message;
 }
@@ -480,7 +489,7 @@ function ExpandedContent({ event }: { event: ActivityEvent }) {
     case "tool_result":
       return (
         <pre style={{ maxHeight: 192, overflow: "auto", whiteSpace: "pre-wrap", background: "#1f2937", color: "#d4d4d4", padding: 8, borderRadius: 6, fontFamily: "monospace", fontSize: 12 }}>
-          {event.message}
+          {getToolResultText(event)}
         </pre>
       );
     case "error":

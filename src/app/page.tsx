@@ -746,6 +746,15 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
   const videoUrlBaseRef = useRef<string | null>(null);
   const videoUrlRef = useRef<string | null>(null);
   const reconnectedRunIdRef = useRef<string | null>(null);
+  const resolveArtifactType = useCallback((filePath?: string): "plan" | "script" | null => {
+    if (!filePath) return null;
+    const normalized = filePath.replace(/\\/g, "/").trim().toLowerCase();
+    if (!normalized) return null;
+    const name = normalized.split("/").pop();
+    if (name === "plan.md") return "plan";
+    if (name === "script.py") return "script";
+    return null;
+  }, []);
 
   // Sync refs with state
   useEffect(() => { sandboxIdRef.current = state.sandboxId; }, [state.sandboxId]);
@@ -1065,18 +1074,19 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
 
               const toolInput = event.tool_input as { file_path?: string; content?: string } | undefined;
               const filePath = toolInput?.file_path || "";
+              const artifactType = resolveArtifactType(filePath);
               if (event.tool_name === "Write" && toolInput?.content) {
-                if (filePath.endsWith("/plan.md")) dispatch({ type: "SET_PLAN_CONTENT", content: toolInput.content });
-                else if (filePath.endsWith("/script.py")) dispatch({ type: "SET_SCRIPT_CONTENT", content: toolInput.content });
-              } else if (event.tool_name === "Edit") {
+                if (artifactType === "plan") dispatch({ type: "SET_PLAN_CONTENT", content: toolInput.content });
+                else if (artifactType === "script") dispatch({ type: "SET_SCRIPT_CONTENT", content: toolInput.content });
+              } else if (event.tool_name === "Edit" && artifactType) {
                 const sid = event.sandbox_id || sandboxIdRef.current;
-                if (sid && (filePath.endsWith("/plan.md") || filePath.endsWith("/script.py"))) {
+                if (sid) {
                   const capturedSid = sid;
                   fetch(`/api/files?sandbox_id=${encodeURIComponent(sid)}&path=${encodeURIComponent(filePath)}`)
                     .then(r => r.ok ? r.text() : null)
                     .then(text => {
                       if (text !== null && sandboxIdRef.current === capturedSid) {
-                        if (filePath.endsWith("/plan.md")) dispatch({ type: "SET_PLAN_CONTENT", content: text });
+                        if (artifactType === "plan") dispatch({ type: "SET_PLAN_CONTENT", content: text });
                         else dispatch({ type: "SET_SCRIPT_CONTENT", content: text });
                       }
                     })
@@ -1084,7 +1094,11 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
                 }
               }
             } else if (event.type === "tool_result") {
-              addActivity({ type: "tool_result", message: event.message, toolResult: event.tool_result, isError: event.is_error }, turnId);
+              const toolOutput =
+                typeof event.tool_result === "string" && event.tool_result.trim()
+                  ? event.tool_result
+                  : event.message;
+              addActivity({ type: "tool_result", message: toolOutput, toolResult: event.tool_result, isError: event.is_error }, turnId);
             }
 
             if (event.type === "progress") {
@@ -1137,7 +1151,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
       abortControllerRef.current = null;
       currentAssistantMessageIdRef.current = null;
     }
-  }, [addActivity, sessionId, state.model, sessionReady, aspectRatio]);
+  }, [addActivity, sessionId, state.model, sessionReady, aspectRatio, resolveArtifactType]);
 
   // Auto-send stored welcome prompt when a new session loads
   const welcomeSentRef = useRef(false);
