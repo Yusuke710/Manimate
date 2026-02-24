@@ -222,7 +222,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
             <CodeTab content={scriptContent} />
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
-            <PreviewTab videoUrl={effectiveVideoUrl} sandboxId={sandboxId} sessionId={sessionId} voicedSwapToken={voicedSwapToken} hqRenderStatus={hqRenderStatusProp} hqRenderProgress={hqRenderProgressProp} sessionModel={sessionModel} onCanPlay={() => {
+            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} voicedSwapToken={voicedSwapToken} hqRenderStatus={hqRenderStatusProp} hqRenderProgress={hqRenderProgressProp} sessionModel={sessionModel} onCanPlay={() => {
               setIsVideoPlayable(true);
               if (!userSelectedTabRef.current) setActiveTab("preview");
             }} />
@@ -695,7 +695,7 @@ function toFilename(sessionId: string | null, model: string | null, suffix: stri
   return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
 }
 
-function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRenderStatus = null, hqRenderProgress = null, sessionModel = null, onCanPlay }: { videoUrl: string | null; sandboxId: string | null; sessionId?: string | null; voicedSwapToken?: number; hqRenderStatus?: string | null; hqRenderProgress?: HqRenderProgress | null; sessionModel?: string | null; onCanPlay?: () => void }) {
+function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voicedSwapToken = 0, hqRenderStatus = null, hqRenderProgress = null, sessionModel = null, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; voicedSwapToken?: number; hqRenderStatus?: string | null; hqRenderProgress?: HqRenderProgress | null; sessionModel?: string | null; onCanPlay?: () => void }) {
   // Compute full video URL first (before any hooks that use it)
   const fullVideoUrl = videoUrl?.startsWith("http") || videoUrl?.startsWith("/") ? videoUrl : null;
 
@@ -809,10 +809,12 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
   // Reset URL tracking refs and clear stale data when videoUrl changes
   // (new video means subtitles/chapters need to be re-fetched)
   const prevVideoUrlRef = useRef<string | null>(null);
+  const prevVideoRefreshNonceRef = useRef(videoRefreshNonce);
   useEffect(() => {
     const getBasePath = (url: string | null) => url?.split('?')[0] || null;
     const prevBase = getBasePath(prevVideoUrlRef.current);
     const currBase = getBasePath(videoUrl);
+    const nonceChanged = videoRefreshNonce !== prevVideoRefreshNonceRef.current;
 
     if (currBase !== prevBase) {
       // Different video entirely (e.g., session switch) - clear everything immediately
@@ -821,14 +823,15 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
       setSubtitles([]);
       setChapters([]);
       setCurrentSubtitle('');
-    } else if (videoUrl !== prevVideoUrlRef.current) {
+    } else if (videoUrl !== prevVideoUrlRef.current || nonceChanged) {
       // Same video path but different URL means a refreshed output (new scenes or voiceover)
       // Clear refs to trigger re-fetch, but keep existing data displayed for smooth transition
       lastSubtitleUrlRef.current = null;
       lastChaptersUrlRef.current = null;
     }
     prevVideoUrlRef.current = videoUrl;
-  }, [videoUrl]);
+    prevVideoRefreshNonceRef.current = videoRefreshNonce;
+  }, [videoUrl, videoRefreshNonce]);
 
   useEffect(() => {
     if (voicedSwapToken === lastReceivedTokenRef.current) return;
@@ -993,6 +996,7 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
       const restoreState = () => {
         activeVideoEl.removeEventListener('loadedmetadata', restoreState);
         try {
+          setDuration(Number.isFinite(activeVideoEl.duration) ? activeVideoEl.duration : 0);
           const targetTime = Math.min(currentTime, Math.max(0, (activeVideoEl.duration || 0) - 0.1));
           if (targetTime > 0 && Number.isFinite(targetTime)) {
             activeVideoEl.currentTime = targetTime;
@@ -1088,6 +1092,7 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
 
         // Update isPlaying state to match new video
         setIsPlaying(!freshPaused);
+        setDuration(Number.isFinite(inactiveDuration) ? inactiveDuration : 0);
 
         swapInProgressRef.current = false;
         prevSwapTokenRef.current = voicedSwapToken;
@@ -1183,7 +1188,7 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
       setSubtitles(parsed);
       return true;
     });
-  }, [fullSubtitleUrl, videoUrl]);
+  }, [fullSubtitleUrl, videoUrl, videoRefreshNonce]);
 
   // Load chapters - fetches with retry if data not ready yet
   useEffect(() => {
@@ -1202,7 +1207,7 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
       setChapters(data);
       return true;
     });
-  }, [fullChaptersUrl, videoUrl]);
+  }, [fullChaptersUrl, videoUrl, videoRefreshNonce]);
 
   // Compute current chapter based on time (derived state)
   const currentChapter = useMemo(() => {
@@ -1390,28 +1395,6 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
       }
     }), []);
 
-  const captureFrameFromApi = useCallback(async (timestamp: number): Promise<File | null> => {
-    if (!sessionId) return null;
-
-    try {
-      const response = await fetch(
-        `/api/frame?session_id=${encodeURIComponent(sessionId)}&time=${encodeURIComponent(timestamp.toFixed(3))}`,
-        { cache: "no-store" }
-      );
-      if (!response.ok) return null;
-
-      const blob = await response.blob();
-      if (!blob.size) return null;
-
-      const ts = formatTime(timestamp).replace(":", "m") + "s";
-      const type = blob.type || "image/png";
-      const ext = type.includes("jpeg") || type.includes("jpg") ? "jpg" : "png";
-      return new File([blob], `${ts}.${ext}`, { type });
-    } catch {
-      return null;
-    }
-  }, [sessionId]);
-
   const captureFrameAndInsert = useCallback((textFn: (t: number) => string) => {
     const video = videoRef.current;
     const t = video?.currentTime ?? currentTimeRef.current;
@@ -1422,9 +1405,6 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
       if (video && video.videoWidth > 0) {
         frameFile = await captureFrameFromCanvas(video, t);
       }
-      if (!frameFile) {
-        frameFile = await captureFrameFromApi(t);
-      }
 
       if (frameFile) {
         insertImage(frameFile);
@@ -1432,7 +1412,7 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
 
       insertText(text);
     })();
-  }, [captureFrameFromApi, captureFrameFromCanvas, insertImage, insertText, videoRef]);
+  }, [captureFrameFromCanvas, insertImage, insertText, videoRef]);
 
   // Unified fullscreen toggle (used by keyboard shortcut, mobile button, desktop button)
   const toggleFullscreen = useCallback(() => {
