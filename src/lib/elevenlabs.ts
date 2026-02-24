@@ -7,6 +7,8 @@
  */
 
 import { createHash } from "crypto";
+import fsp from "node:fs/promises";
+import path from "node:path";
 
 import { DEFAULT_VOICE_ID } from "@/lib/voices";
 
@@ -16,6 +18,7 @@ const FALLBACK_MODEL_IDS = ["eleven_turbo_v2_5", "eleven_multilingual_v2"] as co
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 const TTS_REQUEST_TIMEOUT_MS = 60_000;
+const MIN_VALID_CACHE_BYTES = 100;
 
 // ElevenLabs Creator plan pay-as-you-go rate: $0.30 per 1000 characters
 const TTS_BASE_RATE_PER_CHAR = 0.30 / 1000;
@@ -43,6 +46,12 @@ export interface TTSResult {
   audio: Buffer;
   characterCount: number;
   modelIdUsed: string;
+}
+
+export interface CachedTTSResult extends TTSResult {
+  cached: boolean;
+  cacheKey: string;
+  cachePath: string;
 }
 
 export function getTTSCostUsd(characterCount: number, modelId: string): number {
@@ -87,6 +96,105 @@ export function getCaptionCacheKey(
   const hash = createHash("sha256");
   hash.update(`${voiceId}:${modelId}:${text}`);
   return hash.digest("hex").slice(0, 16);
+}
+
+function getCaptionCachePath(cacheDir: string, cacheKey: string): string {
+  return path.join(cacheDir, `${cacheKey}.mp3`);
+}
+
+async function safeUnlink(filePath: string): Promise<void> {
+  try {
+    await fsp.unlink(filePath);
+  } catch {
+    // Ignore missing files.
+  }
+}
+
+async function hasUsableCachedAudio(filePath: string): Promise<boolean> {
+  try {
+    const stat = await fsp.stat(filePath);
+    if (!stat.isFile() || stat.size < MIN_VALID_CACHE_BYTES) {
+      await safeUnlink(filePath);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function writeFileAtomic(targetPath: string, contents: Buffer): Promise<void> {
+  const tempPath = `${targetPath}.${process.pid}.${Date.now()}.tmp`;
+  await fsp.writeFile(tempPath, contents);
+  try {
+    await fsp.rename(tempPath, targetPath);
+  } catch (error) {
+    await safeUnlink(tempPath);
+    throw error;
+  }
+}
+
+const inflightCaptionCacheWrites = new Map<string, Promise<TTSResult>>();
+
+/**
+ * Generate TTS audio for a caption and persist it in a cache directory.
+ * Repeated calls with the same text + voice re-use the cached audio file.
+ */
+export async function generateTTSForCaptionWithCache(
+  text: string,
+  apiKey: string,
+  voiceId: string,
+  cacheDir: string,
+  modelId: string = DEFAULT_MODEL_ID
+): Promise<CachedTTSResult> {
+  const cacheKey = getCaptionCacheKey(text, voiceId, modelId);
+  const cachePath = getCaptionCachePath(cacheDir, cacheKey);
+
+  await fsp.mkdir(cacheDir, { recursive: true });
+
+  if (await hasUsableCachedAudio(cachePath)) {
+    return {
+      audio: await fsp.readFile(cachePath),
+      characterCount: text.length,
+      modelIdUsed: modelId,
+      cached: true,
+      cacheKey,
+      cachePath,
+    };
+  }
+
+  let createdInflight = false;
+  let generation = inflightCaptionCacheWrites.get(cachePath);
+  if (!generation) {
+    createdInflight = true;
+    generation = (async () => {
+      if (await hasUsableCachedAudio(cachePath)) {
+        return {
+          audio: await fsp.readFile(cachePath),
+          characterCount: text.length,
+          modelIdUsed: modelId,
+        } as TTSResult;
+      }
+
+      const generated = await generateTTSForCaption(text, apiKey, voiceId);
+      await writeFileAtomic(cachePath, generated.audio);
+      return generated;
+    })().finally(() => {
+      inflightCaptionCacheWrites.delete(cachePath);
+    });
+    inflightCaptionCacheWrites.set(cachePath, generation);
+  }
+
+  const generated = await generation;
+  const audio = await fsp.readFile(cachePath);
+  return {
+    audio,
+    characterCount: generated.characterCount,
+    modelIdUsed: generated.modelIdUsed,
+    cached: !createdInflight,
+    cacheKey,
+    cachePath,
+  };
 }
 
 /**

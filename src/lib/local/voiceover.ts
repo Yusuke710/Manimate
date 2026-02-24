@@ -1,7 +1,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import {
-  generateTTSForCaption,
+  generateTTSForCaptionWithCache,
   getElevenLabsConfig,
   parseSRT,
   type Caption,
@@ -147,7 +147,7 @@ async function generateCaptionBatch(
   captions: Caption[],
   apiKey: string,
   voiceId: string,
-  tempDir: string
+  cacheDir: string
 ): Promise<GeneratedSegment[]> {
   const segments: GeneratedSegment[] = [];
 
@@ -155,16 +155,19 @@ async function generateCaptionBatch(
     const batch = captions.slice(i, i + VOICEOVER_CONCURRENCY);
     const batchResults = await Promise.all(
       batch.map(async (caption) => {
-        const tts = await generateTTSForCaption(caption.text, apiKey, voiceId);
-        const segmentPath = path.join(tempDir, `voiceover_${caption.index}.mp3`);
-        await fsp.writeFile(segmentPath, tts.audio);
-        const audioDuration = await getMediaDurationSeconds(segmentPath);
+        const tts = await generateTTSForCaptionWithCache(
+          caption.text,
+          apiKey,
+          voiceId,
+          cacheDir
+        );
+        const audioDuration = await getMediaDurationSeconds(tts.cachePath);
 
         return {
           index: caption.index,
           start: caption.start,
           end: caption.end,
-          path: segmentPath,
+          path: tts.cachePath,
           audioDuration,
         } as GeneratedSegment;
       })
@@ -350,17 +353,19 @@ async function runVoiceoverJob(sessionId: string, jobId: string): Promise<void> 
   }
 
   const tempDir = path.join(artifactsDir, `voiceover_tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const cacheDir = path.join(artifactsDir, "voiceover_cache");
   const syncedAudioPath = path.join(artifactsDir, "voiceover.m4a");
   const muxedVideoPath = path.join(tempDir, "video_voiced.mp4");
 
   await fsp.mkdir(tempDir, { recursive: true });
+  await fsp.mkdir(cacheDir, { recursive: true });
 
   try {
     const segments = await generateCaptionBatch(
       captions,
       config.apiKey,
       selectedVoiceId,
-      tempDir
+      cacheDir
     );
     if (!isCurrentJob(sessionId, jobId)) return;
     await buildSyncedAudioTrack(segments, syncedAudioPath);
