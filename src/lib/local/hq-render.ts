@@ -337,7 +337,11 @@ async function runHqRenderJob(job: ActiveHqJob): Promise<void> {
         completed: sceneNames.length,
         total: sceneNames.length,
         current_scene: "",
-        hq_video_url: localFileToApiUrl(job.sessionId, finalOutputPath),
+        hq_video_url: localFileToApiUrl(
+          job.sessionId,
+          finalOutputPath,
+          Math.round((await fsp.stat(finalOutputPath)).mtimeMs)
+        ),
       } satisfies HqRenderProgress),
     });
   } catch (error) {

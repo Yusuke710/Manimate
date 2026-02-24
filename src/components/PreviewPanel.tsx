@@ -1211,6 +1211,16 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
     const chapter = [...chapters].reverse().find(c => currentTime >= c.start);
     return chapter || chapters[0];
   }, [currentTime, chapters]);
+  const chapterTotalDuration = useMemo(
+    () => chapters.reduce((sum, chapter) => sum + chapter.duration, 0),
+    [chapters]
+  );
+  const useSegmentedTimeline = useMemo(() => {
+    if (chapters.length <= 1) return false;
+    if (!Number.isFinite(duration) || duration <= 0) return false;
+    if (!Number.isFinite(chapterTotalDuration) || chapterTotalDuration <= 0) return false;
+    return Math.abs(chapterTotalDuration - duration) <= 0.5;
+  }, [chapters.length, duration, chapterTotalDuration]);
 
   // Update current subtitle based on time
   useEffect(() => {
@@ -1489,7 +1499,7 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
     setIsDownloading(true);
     let blobUrl: string | null = null;
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       blobUrl = URL.createObjectURL(blob);
@@ -1717,7 +1727,10 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
     );
   }
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progressDuration = useSegmentedTimeline ? chapterTotalDuration : duration;
+  const progress = progressDuration > 0
+    ? Math.max(0, Math.min(100, (currentTime / progressDuration) * 100))
+    : 0;
 
   return (
     <div data-video-container className="flex flex-col h-full bg-black relative">
@@ -1807,7 +1820,7 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
             }
           }}
         >
-          {chapters.length > 1 ? (
+          {useSegmentedTimeline ? (
             // Segmented progress bar with chapters
             <div className={`w-full flex gap-[3px] ${isTouchScrubbing ? 'h-1.5' : 'h-1 group-hover:h-1.5'} transition-[height]`}>
               {chapters.map((chapter, index) => {
@@ -1885,19 +1898,8 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
             <span>{formatTime(duration)}</span>
           </div>
 
-          <button
-            className="w-8 h-8 ml-1 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-zinc-300 hover:text-white"
-            onClick={() => captureFrameAndInsert((t) => `[${formatTime(t)}]: `)}
-            title="Capture frame + timestamp to chat (T)"
-            aria-label="Capture frame and timestamp to chat"
-          >
-            <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-              <path d="M4 4h9a2 2 0 012 2v1h1a4 4 0 014 4v5a4 4 0 01-4 4H8a4 4 0 01-4-4V6a2 2 0 012-2zm12 5h-1v5a2 2 0 11-4 0V9H8v7a2 2 0 002 2h6a2 2 0 002-2v-5a2 2 0 00-2-2zm-7-1h4V6H6v9a2 2 0 004 0V8z" />
-            </svg>
-          </button>
-
-          {/* Chapter name */}
-          {currentChapter && chapters.length > 1 && (
+          {/* Chapter name with copy-to-chat icon */}
+          {currentChapter && useSegmentedTimeline && (
             <div className="flex items-center gap-1.5 ml-3">
               {!isMobile && (
                 <>
@@ -1907,6 +1909,16 @@ function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRen
                   </span>
                 </>
               )}
+              <button
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
+                onClick={() => captureFrameAndInsert((t) => `[${formatTime(t)}] ${currentChapter.name}: `)}
+                title="Capture frame + timestamp to chat"
+                aria-label="Capture frame and timestamp to chat"
+              >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+              </button>
             </div>
           )}
 

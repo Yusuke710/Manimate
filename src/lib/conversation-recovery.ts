@@ -1,11 +1,3 @@
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: JsonValue }
-  | JsonValue[];
-
 const MAX_HISTORY_MESSAGES = 24;
 const MAX_HISTORY_IMAGES = 12;
 const MAX_HISTORY_MESSAGE_CHARS = 1500;
@@ -14,7 +6,7 @@ export interface SessionHistoryMessage {
   id: string;
   role: string;
   content: string;
-  metadata: JsonValue | null;
+  metadata: unknown;
   created_at: string;
 }
 
@@ -32,6 +24,7 @@ interface BuildConversationRecoveryContextOptions {
   userId: string;
   sessionId: string;
   excludeMessageId?: string | null;
+  allowedImagePathPrefixes?: string[];
 }
 
 interface ConversationRecoveryContext {
@@ -69,7 +62,7 @@ function truncateText(value: string, maxChars: number): string {
   return `${normalized.slice(0, maxChars)}...`;
 }
 
-function parseImagesFromMetadata(metadata: JsonValue | null): ParsedImageMetadata[] {
+function parseImagesFromMetadata(metadata: unknown): ParsedImageMetadata[] {
   if (!isRecord(metadata)) return [];
   const rawImages = metadata.images;
   if (!Array.isArray(rawImages)) return [];
@@ -110,8 +103,22 @@ function reserveSandboxFileName(
 export function buildConversationRecoveryContext(
   options: BuildConversationRecoveryContextOptions
 ): ConversationRecoveryContext {
-  const { messages, projectPath, userId, sessionId, excludeMessageId } = options;
-  const allowedPrefix = `${userId}/${sessionId}/`;
+  const {
+    messages,
+    projectPath,
+    userId,
+    sessionId,
+    excludeMessageId,
+    allowedImagePathPrefixes,
+  } = options;
+  const defaultPrefix = `${userId}/${sessionId}/`;
+  const safePrefixes = (
+    Array.isArray(allowedImagePathPrefixes) && allowedImagePathPrefixes.length > 0
+      ? allowedImagePathPrefixes
+      : [defaultPrefix]
+  )
+    .map((prefix) => prefix.trim())
+    .filter((prefix) => prefix.length > 0);
   const recentMessages = messages
     .filter((message) => message.id !== excludeMessageId)
     .slice(-MAX_HISTORY_MESSAGES);
@@ -130,7 +137,8 @@ export function buildConversationRecoveryContext(
       if (recoveredImages.length >= MAX_HISTORY_IMAGES) {
         break;
       }
-      if (!parsed.path.startsWith(allowedPrefix) || usedImagePaths.has(parsed.path)) {
+      const isAllowedPath = safePrefixes.some((prefix) => parsed.path.startsWith(prefix));
+      if (!isAllowedPath || usedImagePaths.has(parsed.path)) {
         continue;
       }
       const sandboxFileName = reserveSandboxFileName(

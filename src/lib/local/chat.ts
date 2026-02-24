@@ -17,6 +17,7 @@ import {
   getLocalSession,
   insertLocalActivityEvent,
   insertLocalMessage,
+  listLocalMessages,
   updateLocalRun,
   updateLocalSession,
 } from "@/lib/local/db";
@@ -39,6 +40,7 @@ import {
   DEFAULT_ASPECT_RATIO,
   isAspectRatio,
 } from "@/lib/aspect-ratio";
+import { buildConversationRecoveryContext } from "@/lib/conversation-recovery";
 
 type LocalChatRequest = {
   prompt: string;
@@ -133,6 +135,22 @@ function stringifyToolResult(content: unknown): string {
   } catch {
     return "";
   }
+}
+
+const TOOL_RESULT_MAX_CHARS = 6000;
+const TOOL_RESULT_MESSAGE_MAX_CHARS = 280;
+
+function truncateText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, maxChars)}\n…(truncated)`;
+}
+
+function getMessageBlocks(obj: Record<string, unknown>): Array<Record<string, unknown>> {
+  if (!obj.message || typeof obj.message !== "object") return [];
+  const message = obj.message as Record<string, unknown>;
+  const content = message.content;
+  if (!Array.isArray(content)) return [];
+  return content.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object");
 }
 
 function buildPrompt(input: {
@@ -234,9 +252,10 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
       modelForRun = typeof body.model === "string" && body.model.trim()
         ? body.model.trim()
         : session.model || "claude";
+      const resumeSessionId = session.claude_session_id || body.claude_session_id || null;
 
       sandboxId = session.sandbox_id || getLocalSandboxId(sessionId);
-      const { projectDir } = ensureLocalSessionLayout(sessionId);
+      const { projectDir, sessionRoot } = ensureLocalSessionLayout(sessionId);
 
       if (rawPrompt) {
         if (session.title === "Untitled Animation") {
@@ -257,19 +276,21 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         session_id: sessionId,
         user_message_id: userMessageId,
         sandbox_id: sandboxId,
-        claude_session_id: session.claude_session_id,
+        claude_session_id: resumeSessionId,
       });
       runId = run.id;
+      const didResume = Boolean(resumeSessionId);
+      const initMessage = didResume ? "Manimate reconnected" : "Manimate initialized";
 
       await sendEvent({
         type: "system_init",
-        message: "Local runtime initialized",
+        message: initMessage,
         model: modelForRun,
         tools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
         sandbox_id: sandboxId,
-        claude_session_id: session.claude_session_id || undefined,
+        claude_session_id: resumeSessionId || undefined,
       });
-      await persistActivity("system_init", "Local runtime initialized", {
+      await persistActivity("system_init", initMessage, {
         model: modelForRun,
       });
 
@@ -293,6 +314,39 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         }
       }
 
+      let promptBody = rawPrompt;
+      if (!resumeSessionId) {
+        const recovered = buildConversationRecoveryContext({
+          messages: listLocalMessages(sessionId),
+          projectPath: projectDir,
+          userId: "local-user",
+          sessionId,
+          excludeMessageId: userMessageId,
+          allowedImagePathPrefixes: [`${path.resolve(sessionRoot)}${path.sep}`],
+        });
+
+        if (recovered.images.length > 0) {
+          for (const image of recovered.images) {
+            const resolved = resolveSessionFilePath(sessionId, image.path);
+            if (!resolved) continue;
+            try {
+              await fsp.mkdir(path.dirname(image.sandboxPath), { recursive: true });
+              await fsp.copyFile(resolved, image.sandboxPath);
+              inputPaths.push(image.sandboxPath);
+            } catch {
+              // Ignore bad history-image copies and continue run.
+            }
+          }
+        }
+
+        if (recovered.historyPrompt) {
+          const requestLine = rawPrompt
+            ? rawPrompt
+            : "[No text prompt in this turn. Use attached images if provided.]";
+          promptBody = `${recovered.historyPrompt}\n\nCurrent user request:\n${requestLine}`;
+        }
+      }
+
       const aspectRatio = isAspectRatio(body.aspect_ratio)
         ? body.aspect_ratio
         : isAspectRatio(session.aspect_ratio)
@@ -300,18 +354,40 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
           : DEFAULT_ASPECT_RATIO;
       const prompt = buildPrompt({
         projectDir,
-        prompt: rawPrompt,
+        prompt: promptBody,
         aspectRatio,
         imagePaths: inputPaths,
       });
 
       const preRunVideo = await detectVideoFile(projectDir);
+      let streamedPlanContent: string | null = session.plan_content;
+      let streamedScriptContent: string | null = session.script_content;
+
+      const syncArtifactSnapshot = async () => {
+        if (!sessionId) return;
+        const [nextPlanContent, nextScriptContent] = await Promise.all([
+          readTextFileIfExists(path.join(projectDir, "plan.md")),
+          readTextFileIfExists(path.join(projectDir, "script.py")),
+        ]);
+        if (
+          nextPlanContent === streamedPlanContent &&
+          nextScriptContent === streamedScriptContent
+        ) {
+          return;
+        }
+        streamedPlanContent = nextPlanContent;
+        streamedScriptContent = nextScriptContent;
+        updateLocalSession(sessionId, {
+          plan_content: nextPlanContent,
+          script_content: nextScriptContent,
+        });
+      };
 
       const process = spawnLocalClaudeProcess({
         cwd: projectDir,
         prompt,
         model: modelForRun,
-        resumeSessionId: session.claude_session_id || body.claude_session_id || null,
+        resumeSessionId,
       });
 
       registerLocalRunProcess({
@@ -328,18 +404,18 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         started_at: now,
         last_event_at: now,
         sandbox_id: sandboxId,
-        claude_session_id: session.claude_session_id || null,
+        claude_session_id: resumeSessionId,
       });
 
       let state: ExecutionState = "planning";
       await sendEvent({
         type: "progress",
         state,
-        message: "Running Claude locally...",
+        message: "Running Manimate...",
         sandbox_id: sandboxId,
         run_id: runId,
       });
-      await persistActivity("progress", "Running Claude locally...");
+      await persistActivity("progress", "Running Manimate...");
 
       let ndjsonBuffer = "";
       let fullStderr = "";
@@ -367,17 +443,14 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
               finalAssistantText = obj.result;
             }
 
-            if (obj.type !== "assistant" || !obj.message || typeof obj.message !== "object") {
+            const messageType = typeof obj.type === "string" ? obj.type : "";
+            const blocks = getMessageBlocks(obj);
+            if (blocks.length === 0) {
               continue;
             }
 
-            const message = obj.message as Record<string, unknown>;
-            const blocks = Array.isArray(message.content)
-              ? message.content as Array<Record<string, unknown>>
-              : [];
-
             for (const block of blocks) {
-              if (block.type === "text" && typeof block.text === "string") {
+              if (messageType === "assistant" && block.type === "text" && typeof block.text === "string") {
                 await sendEvent({
                   type: "assistant_text",
                   message: block.text,
@@ -387,7 +460,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
                 await persistActivity("assistant_text", block.text);
               }
 
-              if (block.type === "tool_use") {
+              if (messageType === "assistant" && block.type === "tool_use") {
                 const toolName = typeof block.name === "string" ? block.name : "Tool";
                 const toolInput = (block.input && typeof block.input === "object")
                   ? block.input as Record<string, unknown>
@@ -426,19 +499,25 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
               }
 
               if (block.type === "tool_result") {
-                const result = stringifyToolResult((block as { content?: unknown }).content);
+                const blockResult = stringifyToolResult((block as { content?: unknown }).content).trim();
+                const topLevelResult = stringifyToolResult((obj as { tool_use_result?: unknown }).tool_use_result).trim();
+                const rawResult = blockResult || topLevelResult || "Tool completed with no text output.";
+                const toolResult = truncateText(rawResult, TOOL_RESULT_MAX_CHARS);
+                const message = truncateText(toolResult, TOOL_RESULT_MESSAGE_MAX_CHARS);
+                const isError = Boolean((block as { is_error?: unknown }).is_error);
                 await sendEvent({
                   type: "tool_result",
-                  message: "Tool result",
-                  tool_result: result.slice(0, 1200),
-                  is_error: Boolean((block as { is_error?: unknown }).is_error),
+                  message,
+                  tool_result: toolResult,
+                  is_error: isError,
                   sandbox_id: sandboxId || undefined,
                   claude_session_id: claudeSessionId || undefined,
                 });
-                await persistActivity("tool_result", "Tool result", {
-                  tool_result: result.slice(0, 1200),
-                  is_error: Boolean((block as { is_error?: unknown }).is_error),
+                await persistActivity("tool_result", message, {
+                  tool_result: toolResult,
+                  is_error: isError,
                 });
+                await syncArtifactSnapshot();
               }
             }
           }
