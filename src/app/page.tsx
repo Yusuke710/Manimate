@@ -25,19 +25,28 @@ import {
 
 // Welcome prompt key: used to pass prompt from WelcomeView to ChatPanel via sessionStorage
 const WELCOME_PROMPT_KEY = "manimate-welcome-prompt";
+const WELCOME_PENDING_KEY = "manimate-welcome-pending";
 const MODEL_PREF_KEY = "manimate-preferred-model";
 const VOICE_PREF_KEY = "manimate-preferred-voice";
 const VOICE_NAMES_KEY = "manimate-voice-names";
 const ASPECT_RATIO_PREF_KEY = "manimate-preferred-aspect-ratio";
 
 function usePreferredModel() {
-  const [model, setModel] = useState(() => {
+  const [model, setModel] = useState(DEFAULT_MODEL);
+
+  useEffect(() => {
+    let timer: number | null = null;
     try {
       const saved = localStorage.getItem(MODEL_PREF_KEY);
-      if (saved && isRegisteredModelId(saved)) return saved;
+      if (saved && isRegisteredModelId(saved)) {
+        timer = window.setTimeout(() => setModel(saved), 0);
+      }
     } catch {}
-    return DEFAULT_MODEL;
-  });
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
+
   const set = useCallback((m: string) => {
     setModel(m);
     try { localStorage.setItem(MODEL_PREF_KEY, m); } catch {}
@@ -46,13 +55,21 @@ function usePreferredModel() {
 }
 
 function usePreferredAspectRatio() {
-  const [ratio, setRatio] = useState<AspectRatio>(() => {
+  const [ratio, setRatio] = useState<AspectRatio>(DEFAULT_ASPECT_RATIO);
+
+  useEffect(() => {
+    let timer: number | null = null;
     try {
       const saved = localStorage.getItem(ASPECT_RATIO_PREF_KEY);
-      if (isAspectRatio(saved)) return saved;
+      if (isAspectRatio(saved)) {
+        timer = window.setTimeout(() => setRatio(saved), 0);
+      }
     } catch {}
-    return DEFAULT_ASPECT_RATIO;
-  });
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
+
   const set = useCallback((r: AspectRatio) => {
     setRatio((prev) => {
       if (prev === r) return prev;
@@ -238,13 +255,21 @@ function AspectRatioSelector({ ratio, onChange, disabled }: { ratio: AspectRatio
 }
 
 function usePreferredVoice() {
-  const [voice, setVoice] = useState(() => {
+  const [voice, setVoice] = useState(DEFAULT_VOICE_ID);
+
+  useEffect(() => {
+    let timer: number | null = null;
     try {
       const saved = localStorage.getItem(VOICE_PREF_KEY);
-      if (saved) return saved;
+      if (saved) {
+        timer = window.setTimeout(() => setVoice(saved), 0);
+      }
     } catch {}
-    return DEFAULT_VOICE_ID;
-  });
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
+
   const set = useCallback((v: string) => {
     setVoice(v);
     try { localStorage.setItem(VOICE_PREF_KEY, v); } catch {}
@@ -724,12 +749,13 @@ interface ChatPanelProps {
   sessionId: string | null;
   aspectRatio: AspectRatio;
   onSessionAspectRatio?: (ratio: AspectRatio) => void;
+  consumeWelcomePayload?: (sessionId: string) => { prompt: string; images?: File[] } | null;
   /** Resolves true when the session row exists in DB (for optimistic navigation) */
   sessionReady?: Promise<boolean> | null;
   isMobile?: boolean;
 }
 
-function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady, isMobile = false }: ChatPanelProps) {
+function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, consumeWelcomePayload, sessionReady, isMobile = false }: ChatPanelProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(chatReducer, initialState);
   const draftKey = sessionId ? `chat-draft:${sessionId}` : undefined;
@@ -831,7 +857,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
   // With key={sessionId} on ChatPanel, this runs once per session
   useEffect(() => {
     // Skip bootstrap fetch for welcome-prompted sessions (auto-send will fire)
-    const isWelcomeCreated = !!sessionStorage.getItem(WELCOME_PROMPT_KEY);
+    const isWelcomeCreated = sessionStorage.getItem(WELCOME_PENDING_KEY) === "1";
     if (!sessionId || isWelcomeCreated) return;
 
     dispatch({ type: "SET_LOADING_MESSAGES", isLoadingMessages: true });
@@ -1157,12 +1183,21 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
   const welcomeSentRef = useRef(false);
   useEffect(() => {
     if (!sessionId || welcomeSentRef.current) return;
+    const pending = consumeWelcomePayload?.(sessionId);
+    if (pending) {
+      welcomeSentRef.current = true;
+      sessionStorage.removeItem(WELCOME_PENDING_KEY);
+      sessionStorage.removeItem(WELCOME_PROMPT_KEY);
+      handleSend(pending.prompt, pending.images);
+      return;
+    }
     const prompt = sessionStorage.getItem(WELCOME_PROMPT_KEY);
     if (!prompt) return;
     welcomeSentRef.current = true;
+    sessionStorage.removeItem(WELCOME_PENDING_KEY);
     sessionStorage.removeItem(WELCOME_PROMPT_KEY);
     handleSend(prompt);
-  }, [sessionId, handleSend]);
+  }, [sessionId, handleSend, consumeWelcomePayload]);
 
   const handleCancel = useCallback(async () => {
     if (!state.isLoading || state.isCancelling) return;
@@ -1374,6 +1409,7 @@ function HomeContent() {
   // Optimistic session creation: keyed by session ID, stores Promise<boolean>
   const sessionCreationRef = useRef<{ id: string; ready: Promise<boolean> } | null>(null);
   const [pendingSessionReady, setPendingSessionReady] = useState<{ id: string; ready: Promise<boolean> } | null>(null);
+  const pendingWelcomePayloadRef = useRef<Map<string, { prompt: string; images?: File[] }>>(new Map());
 
   const handleNewSession = useCallback(() => { router.push("/"); }, [router]);
 
@@ -1394,11 +1430,23 @@ function HomeContent() {
     fetch("/api/sandbox/prewarm", { method: "POST" }).catch(() => {});
   }, []);
 
-  const handleWelcomeSend = useCallback((prompt: string, model?: string, voice?: string) => {
+  const consumeWelcomePayload = useCallback((sessionId: string) => {
+    const payload = pendingWelcomePayloadRef.current.get(sessionId);
+    if (!payload) return null;
+    pendingWelcomePayloadRef.current.delete(sessionId);
+    return payload;
+  }, []);
+
+  const handleWelcomeSend = useCallback((prompt: string, images?: File[], model?: string, voice?: string) => {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt && (!images || images.length === 0)) return;
     if (sessionCreationRef.current) return; // prevent double-submit
 
     const id = crypto.randomUUID();
-    sessionStorage.setItem(WELCOME_PROMPT_KEY, prompt);
+    pendingWelcomePayloadRef.current.set(id, { prompt: trimmedPrompt, images });
+    sessionStorage.setItem(WELCOME_PENDING_KEY, "1");
+    if (trimmedPrompt) sessionStorage.setItem(WELCOME_PROMPT_KEY, trimmedPrompt);
+    else sessionStorage.removeItem(WELCOME_PROMPT_KEY);
 
     // Fire session creation in background; resolve to boolean for ChatPanel.
     // Timeout prevents indefinite stall on cold start / slow network.
@@ -1413,7 +1461,14 @@ function HomeContent() {
         aspect_ratio: aspectRatio,
       }),
       signal: abortCtl.signal,
-    }).then(r => r.ok).catch(() => false as const).finally(() => {
+    }).then(r => r.ok).catch(() => false as const).then((ok) => {
+      if (!ok) {
+        pendingWelcomePayloadRef.current.delete(id);
+        sessionStorage.removeItem(WELCOME_PENDING_KEY);
+        sessionStorage.removeItem(WELCOME_PROMPT_KEY);
+      }
+      return ok;
+    }).finally(() => {
       clearTimeout(timeout);
       sessionCreationRef.current = null;
     });
@@ -1546,6 +1601,7 @@ function HomeContent() {
             sessionId={activeSessionId}
             aspectRatio={aspectRatio}
             onSessionAspectRatio={setAspectRatio}
+            consumeWelcomePayload={consumeWelcomePayload}
             isMobile={isMobile}
             sessionReady={
               pendingSessionReady?.id === activeSessionId
@@ -1567,7 +1623,7 @@ function WelcomeView({
   onAspectRatioChange,
   isMobile = false,
 }: {
-  onSend: (prompt: string, model?: string, voice?: string) => void;
+  onSend: (prompt: string, images?: File[], model?: string, voice?: string) => void;
   onPrewarm?: () => void;
   aspectRatio: AspectRatio;
   onAspectRatioChange: (ratio: AspectRatio) => void;
@@ -1576,9 +1632,10 @@ function WelcomeView({
   const [model, setModel] = usePreferredModel();
   const [voice, setVoice] = usePreferredVoice();
 
-  const handleSend = useCallback((prompt: string) => {
-    if (!prompt.trim()) return;
-    onSend(prompt.trim(), model, voice);
+  const handleSend = useCallback((prompt: string, images?: File[]) => {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt && (!images || images.length === 0)) return;
+    onSend(trimmedPrompt, images, model, voice);
   }, [model, voice, onSend]);
 
   return (

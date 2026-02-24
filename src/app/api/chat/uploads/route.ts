@@ -14,6 +14,16 @@ const ALLOWED_TYPES = new Set([
   "image/gif",
 ]);
 
+function getImageExtension(name: string, type: string): string {
+  const extFromName = name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (extFromName) return extFromName;
+  if (type === "image/jpeg") return "jpg";
+  if (type === "image/png") return "png";
+  if (type === "image/webp") return "webp";
+  if (type === "image/gif") return "gif";
+  return "png";
+}
+
 export async function POST(request: NextRequest): Promise<Response> {
   const formData = await request.formData();
   const sessionId = formData.get("session_id") as string | null;
@@ -57,14 +67,16 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
   }
 
-  const { uploadsDir } = ensureLocalSessionLayout(sessionId);
+  const { projectDir } = ensureLocalSessionLayout(sessionId);
+  const inputDir = path.join(projectDir, "inputs");
+  await fsp.mkdir(inputDir, { recursive: true });
   const uploaded: ImageAttachment[] = [];
 
   for (const file of imageFiles) {
-    const ext = file.name.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "") || "png";
+    const ext = getImageExtension(file.name, file.type);
     const id = crypto.randomUUID();
     const filename = `${id}.${ext}`;
-    const absolutePath = path.join(uploadsDir, filename);
+    const absolutePath = path.join(inputDir, filename);
 
     const buffer = Buffer.from(await file.arrayBuffer());
     await fsp.writeFile(absolutePath, buffer);

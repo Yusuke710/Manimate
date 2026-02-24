@@ -157,10 +157,10 @@ function buildPrompt(input: {
   projectDir: string;
   prompt: string;
   aspectRatio: string;
-  imagePaths: string[];
+  images: Array<{ path: string; originalName: string }>;
 }): string {
-  const imageSection = input.imagePaths.length
-    ? `\n\nAttached images:\n${input.imagePaths.map((p) => `- ${p}`).join("\n")}`
+  const imageSection = input.images.length
+    ? `\n\nAttached images (use Read tool to view):\n${input.images.map((image) => `- ${image.path} (${image.originalName})`).join("\n")}`
     : "";
   return `**Project Directory**: \`${input.projectDir}\` (cwd is already set)\n\n**Aspect Ratio**: ${input.aspectRatio}\n\n${input.prompt}${imageSection}`;
 }
@@ -294,25 +294,30 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         model: modelForRun,
       });
 
-      const inputPaths: string[] = [];
-      if (Array.isArray(body.images) && body.images.length > 0) {
-        const inputDir = path.join(projectDir, "inputs");
-        await fsp.mkdir(inputDir, { recursive: true });
-
-        for (const image of body.images) {
-          if (!image || typeof image.path !== "string" || typeof image.name !== "string") continue;
-          const resolved = resolveSessionFilePath(sessionId, image.path);
-          if (!resolved) continue;
-          const base = path.basename(resolved).replace(/[^a-zA-Z0-9._-]/g, "_");
-          const dest = path.join(inputDir, base);
-          try {
-            await fsp.copyFile(resolved, dest);
-            inputPaths.push(dest);
-          } catch {
-            // Ignore bad image copies and continue run.
-          }
+      const promptImages: Array<{ path: string; originalName: string }> = [];
+      const requestImages = Array.isArray(body.images) ? body.images : [];
+      const requestedImageCount = requestImages.length;
+      const seenRequestImagePaths = new Set<string>();
+      for (const image of requestImages) {
+        if (
+          !image ||
+          typeof image.path !== "string" ||
+          typeof image.name !== "string"
+        ) {
+          continue;
+        }
+        const resolved = resolveSessionFilePath(sessionId, image.path);
+        if (!resolved || seenRequestImagePaths.has(resolved)) continue;
+        try {
+          const stats = await fsp.stat(resolved);
+          if (!stats.isFile()) continue;
+          seenRequestImagePaths.add(resolved);
+          promptImages.push({ path: resolved, originalName: image.name });
+        } catch {
+          // Ignore missing/inaccessible files and continue run.
         }
       }
+      const preparedRequestImageCount = promptImages.length;
 
       let promptBody = rawPrompt;
       if (!resumeSessionId) {
@@ -332,7 +337,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
             try {
               await fsp.mkdir(path.dirname(image.sandboxPath), { recursive: true });
               await fsp.copyFile(resolved, image.sandboxPath);
-              inputPaths.push(image.sandboxPath);
+              promptImages.push({ path: image.sandboxPath, originalName: image.name });
             } catch {
               // Ignore bad history-image copies and continue run.
             }
@@ -347,6 +352,10 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         }
       }
 
+      if (requestedImageCount > 0 && preparedRequestImageCount === 0) {
+        throw new Error("Attached images could not be prepared for local Claude access");
+      }
+
       const aspectRatio = isAspectRatio(body.aspect_ratio)
         ? body.aspect_ratio
         : isAspectRatio(session.aspect_ratio)
@@ -356,7 +365,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         projectDir,
         prompt: promptBody,
         aspectRatio,
-        imagePaths: inputPaths,
+        images: promptImages,
       });
 
       const preRunVideo = await detectVideoFile(projectDir);

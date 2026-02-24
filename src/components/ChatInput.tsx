@@ -277,6 +277,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
                 }}
               />
               <button
+                type="button"
                 onClick={() => removeImage(index)}
                 style={{
                   position: "absolute", top: -5, right: -5,
@@ -358,6 +359,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
             }}
           />
           <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || images.length >= MAX_IMAGES}
             style={{
@@ -385,6 +387,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
             {/* Stop or Send button */}
             {isLoading ? (
               <button
+                type="button"
                 data-testid="stop-button"
                 onClick={onStop}
                 style={{
@@ -405,8 +408,12 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
               </button>
             ) : (
               <button
+                type="button"
                 data-testid="send-button"
-                onClick={handleSend}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSend();
+                }}
                 disabled={!canSend}
                 style={{
                   width: 36, height: 36,
@@ -476,6 +483,7 @@ function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
       }}
     >
       <button
+        type="button"
         onClick={(e) => { e.stopPropagation(); ref.current?.close(); }}
         aria-label="Close preview"
         style={{

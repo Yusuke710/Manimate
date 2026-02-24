@@ -30,7 +30,6 @@ export function getSessionIdFromSandboxId(sandboxId: string): string {
 export function getLocalSessionPaths(sessionId: string): {
   sessionRoot: string;
   projectDir: string;
-  uploadsDir: string;
   artifactsDir: string;
 } {
   const safeId = sanitizeLocalId(sessionId);
@@ -38,7 +37,6 @@ export function getLocalSessionPaths(sessionId: string): {
   return {
     sessionRoot,
     projectDir: path.join(sessionRoot, "project"),
-    uploadsDir: path.join(sessionRoot, "uploads"),
     artifactsDir: path.join(sessionRoot, "artifacts"),
   };
 }
@@ -60,14 +58,12 @@ const MANIM_PROMPT_PATH = path.join(
 export function ensureLocalSessionLayout(sessionId: string): {
   sessionRoot: string;
   projectDir: string;
-  uploadsDir: string;
   artifactsDir: string;
 } {
   ensureLocalLayout();
   const paths = getLocalSessionPaths(sessionId);
   fs.mkdirSync(paths.sessionRoot, { recursive: true });
   fs.mkdirSync(paths.projectDir, { recursive: true });
-  fs.mkdirSync(paths.uploadsDir, { recursive: true });
   fs.mkdirSync(paths.artifactsDir, { recursive: true });
 
   // Copy the Manim expert prompt into the project dir (only if missing).
@@ -90,7 +86,6 @@ export function ensureLocalSessionLayout(sessionId: string): {
  * Allowed forms:
  * - absolute path under session project directory
  * - relative path (resolved under project directory)
- * - compatibility path: /home/user/<sandbox_id>/...
  */
 export function resolveSessionFilePath(
   sessionId: string,
@@ -102,12 +97,9 @@ export function resolveSessionFilePath(
   const { sessionRoot, projectDir } = ensureLocalSessionLayout(sessionId);
   const sessionRootResolved = path.resolve(sessionRoot);
   const projectRoot = path.resolve(projectDir);
-  const virtualPrefix = `/home/user/${sanitizeLocalId(sessionId)}`;
 
   let candidate = raw;
-  if (candidate.startsWith(virtualPrefix)) {
-    candidate = path.join(projectRoot, candidate.slice(virtualPrefix.length));
-  } else if (!path.isAbsolute(candidate)) {
+  if (!path.isAbsolute(candidate)) {
     candidate = path.join(projectRoot, candidate);
   }
 
