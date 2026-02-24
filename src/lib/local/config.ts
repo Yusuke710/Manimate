@@ -136,6 +136,14 @@ export function resolveSessionFilePath(
   return null;
 }
 
-export function localFileToApiUrl(sessionId: string, absolutePath: string): string {
-  return `/api/files?session_id=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(absolutePath)}`;
+export function localFileToApiUrl(
+  sessionId: string,
+  absolutePath: string,
+  version?: string | number | null
+): string {
+  const base = `/api/files?session_id=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(absolutePath)}`;
+  if (version === undefined || version === null || String(version).length === 0) {
+    return base;
+  }
+  return `${base}&_v=${encodeURIComponent(String(version))}`;
 }

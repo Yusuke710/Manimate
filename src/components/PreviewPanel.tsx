@@ -13,9 +13,6 @@ interface PreviewPanelProps {
   videoUrl: string | null;
   videoUpdateNonce?: number;
   sandboxId: string | null;
-  /** Whether the sandbox has been activated by user interaction (sending a message).
-   *  When false, subtitle/chapter fetches use DB-only paths to avoid waking paused local runtimes. */
-  sandboxActive?: boolean;
   /** Callback to activate the sandbox (e.g. when user clicks Retry voiceover). */
   onActivateSandbox?: () => void;
   sessionId?: string | null;
@@ -28,7 +25,7 @@ interface PreviewPanelProps {
   sessionModel?: string | null;
 }
 
-export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sandboxActive = true, onActivateSandbox, sessionId, planContent = null, scriptContent = null, voiceoverStatus: voiceoverStatusProp = null, voiceoverError: voiceoverErrorProp = null, hqRenderStatus: hqRenderStatusProp = null, hqRenderProgress: hqRenderProgressProp = null, sessionModel = null }: PreviewPanelProps) {
+export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, onActivateSandbox, sessionId, planContent = null, scriptContent = null, voiceoverStatus: voiceoverStatusProp = null, voiceoverError: voiceoverErrorProp = null, hqRenderStatus: hqRenderStatusProp = null, hqRenderProgress: hqRenderProgressProp = null, sessionModel = null }: PreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>("plan");
   const voiceoverStatus = voiceoverStatusProp as VoiceoverStatus;
   const voiceoverError = voiceoverErrorProp;
@@ -225,7 +222,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
             <CodeTab content={scriptContent} />
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
-            <PreviewTab videoUrl={effectiveVideoUrl} sandboxId={sandboxId} sandboxActive={sandboxActive} sessionId={sessionId} voicedSwapToken={voicedSwapToken} hqRenderStatus={hqRenderStatusProp} hqRenderProgress={hqRenderProgressProp} sessionModel={sessionModel} onCanPlay={() => {
+            <PreviewTab videoUrl={effectiveVideoUrl} sandboxId={sandboxId} sessionId={sessionId} voicedSwapToken={voicedSwapToken} hqRenderStatus={hqRenderStatusProp} hqRenderProgress={hqRenderProgressProp} sessionModel={sessionModel} onCanPlay={() => {
               setIsVideoPlayable(true);
               if (!userSelectedTabRef.current) setActiveTab("preview");
             }} />
@@ -654,6 +651,41 @@ function parseSRT(srtText: string): Subtitle[] {
 
 // Throttle interval for scrubbing (ms) - balances responsiveness vs network requests
 const SCRUB_THROTTLE_MS = 100;
+const FETCH_RETRY_MAX_ATTEMPTS = 5;
+const FETCH_RETRY_DELAY_MS = 2000;
+
+function runRetryingLoad(
+  loader: (signal: AbortSignal) => Promise<boolean>
+): () => void {
+  const abortController = new AbortController();
+  let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+  let retryCount = 0;
+
+  const attemptLoad = async () => {
+    let success = false;
+    try {
+      success = await loader(abortController.signal);
+    } catch {
+      success = false;
+    }
+
+    if (success || abortController.signal.aborted) return;
+    if (retryCount >= FETCH_RETRY_MAX_ATTEMPTS) return;
+
+    retryCount += 1;
+    retryTimeout = setTimeout(() => {
+      retryTimeout = null;
+      void attemptLoad();
+    }, FETCH_RETRY_DELAY_MS);
+  };
+
+  void attemptLoad();
+
+  return () => {
+    abortController.abort();
+    if (retryTimeout) clearTimeout(retryTimeout);
+  };
+}
 
 /** Build download filename: manimate-{model}-{shortId}.mp4 (Runway-style) */
 function toFilename(sessionId: string | null, model: string | null, suffix: string): string {
@@ -663,7 +695,7 @@ function toFilename(sessionId: string | null, model: string | null, suffix: stri
   return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
 }
 
-function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voicedSwapToken = 0, hqRenderStatus = null, hqRenderProgress = null, sessionModel = null, onCanPlay }: { videoUrl: string | null; sandboxId: string | null; sandboxActive?: boolean; sessionId?: string | null; voicedSwapToken?: number; hqRenderStatus?: string | null; hqRenderProgress?: HqRenderProgress | null; sessionModel?: string | null; onCanPlay?: () => void }) {
+function PreviewTab({ videoUrl, sandboxId, sessionId, voicedSwapToken = 0, hqRenderStatus = null, hqRenderProgress = null, sessionModel = null, onCanPlay }: { videoUrl: string | null; sandboxId: string | null; sessionId?: string | null; voicedSwapToken?: number; hqRenderStatus?: string | null; hqRenderProgress?: HqRenderProgress | null; sessionModel?: string | null; onCanPlay?: () => void }) {
   // Compute full video URL first (before any hooks that use it)
   const fullVideoUrl = videoUrl?.startsWith("http") || videoUrl?.startsWith("/") ? videoUrl : null;
 
@@ -700,6 +732,7 @@ function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voic
   const [isPlaying, setIsPlaying] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const currentTimeRef = useRef(0);
   const [duration, setDuration] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [subtitleSize, setSubtitleSize] = useState<'small' | 'medium' | 'large'>('medium');
@@ -727,6 +760,9 @@ function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voic
   useEffect(() => () => {
     if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
   }, []);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
   // Refs for tracking loaded URLs (declared before effects that use them)
   const lastSubtitleUrlRef = useRef<string | null>(null);
   const lastChaptersUrlRef = useRef<string | null>(null);
@@ -1134,49 +1170,19 @@ function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voic
     // Skip if already successfully loaded for this URL
     if (lastSubtitleUrlRef.current === fullSubtitleUrl) return;
 
-    // AbortController to cancel stale fetches on session switch
-    const abortController = new AbortController();
-    let retryTimeout: NodeJS.Timeout | null = null;
-    let retryCount = 0;
-    const MAX_RETRIES = 5;
-    const RETRY_DELAY = 2000;
+    return runRetryingLoad(async (signal) => {
+      const response = await fetch(fullSubtitleUrl, { signal });
+      if (!response.ok || signal.aborted) return false;
 
-    const loadSubtitles = async () => {
-      try {
-        const response = await fetch(fullSubtitleUrl, { signal: abortController.signal });
-        if (response.ok && !abortController.signal.aborted) {
-          const text = await response.text();
-          const parsed = parseSRT(text);
-          // Only mark as loaded if we actually got subtitles
-          if (parsed.length > 0) {
-            lastSubtitleUrlRef.current = fullSubtitleUrl;
-            setSubtitlesOn(true); // Auto-enable if subtitles exist
-            setSubtitles(parsed);
-          } else if (retryCount < MAX_RETRIES && !abortController.signal.aborted) {
-            // Retry if empty - data may not be ready yet
-            retryCount++;
-            retryTimeout = setTimeout(loadSubtitles, RETRY_DELAY);
-          }
-        } else if (!response.ok && retryCount < MAX_RETRIES && !abortController.signal.aborted) {
-          // Retry on non-2xx responses (404, 500, etc.) - data may not be ready yet
-          retryCount++;
-          retryTimeout = setTimeout(loadSubtitles, RETRY_DELAY);
-        }
-      } catch {
-        // Subtitles not available or request aborted - retry if not aborted
-        if (retryCount < MAX_RETRIES && !abortController.signal.aborted) {
-          retryCount++;
-          retryTimeout = setTimeout(loadSubtitles, RETRY_DELAY);
-        }
-      }
-    };
+      const text = await response.text();
+      const parsed = parseSRT(text);
+      if (parsed.length === 0) return false;
 
-    loadSubtitles();
-
-    return () => {
-      abortController.abort();
-      if (retryTimeout) clearTimeout(retryTimeout);
-    };
+      lastSubtitleUrlRef.current = fullSubtitleUrl;
+      setSubtitlesOn(true); // Auto-enable if subtitles exist
+      setSubtitles(parsed);
+      return true;
+    });
   }, [fullSubtitleUrl, videoUrl]);
 
   // Load chapters - fetches with retry if data not ready yet
@@ -1185,47 +1191,17 @@ function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voic
     // Skip if already successfully loaded for this URL
     if (lastChaptersUrlRef.current === fullChaptersUrl) return;
 
-    // AbortController to cancel stale fetches on session switch
-    const abortController = new AbortController();
-    let retryTimeout: NodeJS.Timeout | null = null;
-    let retryCount = 0;
-    const MAX_RETRIES = 5;
-    const RETRY_DELAY = 2000;
+    return runRetryingLoad(async (signal) => {
+      const response = await fetch(fullChaptersUrl, { signal });
+      if (!response.ok || signal.aborted) return false;
 
-    const loadChapters = async () => {
-      try {
-        const response = await fetch(fullChaptersUrl, { signal: abortController.signal });
-        if (response.ok && !abortController.signal.aborted) {
-          const data = await response.json();
-          // Only mark as loaded if we actually got chapters data
-          if (Array.isArray(data) && data.length > 0) {
-            lastChaptersUrlRef.current = fullChaptersUrl;
-            setChapters(data);
-          } else if (retryCount < MAX_RETRIES && !abortController.signal.aborted) {
-            // Retry if empty - data may not be ready yet
-            retryCount++;
-            retryTimeout = setTimeout(loadChapters, RETRY_DELAY);
-          }
-        } else if (!response.ok && retryCount < MAX_RETRIES && !abortController.signal.aborted) {
-          // Retry on non-2xx responses (404, 500, etc.) - data may not be ready yet
-          retryCount++;
-          retryTimeout = setTimeout(loadChapters, RETRY_DELAY);
-        }
-      } catch {
-        // Chapters not available or request aborted - retry if not aborted
-        if (retryCount < MAX_RETRIES && !abortController.signal.aborted) {
-          retryCount++;
-          retryTimeout = setTimeout(loadChapters, RETRY_DELAY);
-        }
-      }
-    };
+      const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) return false;
 
-    loadChapters();
-
-    return () => {
-      abortController.abort();
-      if (retryTimeout) clearTimeout(retryTimeout);
-    };
+      lastChaptersUrlRef.current = fullChaptersUrl;
+      setChapters(data);
+      return true;
+    });
   }, [fullChaptersUrl, videoUrl]);
 
   // Compute current chapter based on time (derived state)
@@ -1339,7 +1315,7 @@ function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voic
     setCurrentTime(newTime);
     desiredTimeRef.current = newTime;
     setIsEnded(false);
-  }, [getTimeFromClientX]);
+  }, [getTimeFromClientX, videoRef]);
 
   const seekBy = useCallback((delta: number) => {
     const video = videoRef.current;
@@ -1365,38 +1341,88 @@ function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voic
   // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo
   }, [activeVideo]);
 
-  const insertText = (text: string) => {
+  const insertText = useCallback((text: string) => {
     window.dispatchEvent(new CustomEvent("chat-insert-text", { detail: text }));
-  };
+  }, []);
 
-  const captureFrameAndInsert = (textFn: (t: number) => string) => {
-    const video = videoRef.current;
-    const t = video?.currentTime ?? currentTime;
-    const text = textFn(t);
-    if (!video || video.videoWidth === 0) {
-      insertText(text);
-      return;
-    }
-    try {
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) { insertText(text); return; }
-      ctx.drawImage(video, 0, 0);
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const ts = formatTime(t).replace(":", "m") + "s";
-          const file = new File([blob], `${ts}.png`, { type: "image/png" });
-          window.dispatchEvent(new CustomEvent("chat-add-image", { detail: file }));
+  const insertImage = useCallback((file: File) => {
+    window.dispatchEvent(new CustomEvent("chat-add-image", { detail: file }));
+  }, []);
+
+  const captureFrameFromCanvas = useCallback((
+    video: HTMLVideoElement,
+    timestamp: number
+  ): Promise<File | null> =>
+    new Promise((resolve) => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(null);
+          return;
         }
-        insertText(text);
-      }, "image/png");
+
+        ctx.drawImage(video, 0, 0);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            resolve(null);
+            return;
+          }
+
+          const ts = formatTime(timestamp).replace(":", "m") + "s";
+          resolve(new File([blob], `${ts}.png`, { type: "image/png" }));
+        }, "image/png");
+      } catch {
+        resolve(null);
+      }
+    }), []);
+
+  const captureFrameFromApi = useCallback(async (timestamp: number): Promise<File | null> => {
+    if (!sessionId) return null;
+
+    try {
+      const response = await fetch(
+        `/api/frame?session_id=${encodeURIComponent(sessionId)}&time=${encodeURIComponent(timestamp.toFixed(3))}`,
+        { cache: "no-store" }
+      );
+      if (!response.ok) return null;
+
+      const blob = await response.blob();
+      if (!blob.size) return null;
+
+      const ts = formatTime(timestamp).replace(":", "m") + "s";
+      const type = blob.type || "image/png";
+      const ext = type.includes("jpeg") || type.includes("jpg") ? "jpg" : "png";
+      return new File([blob], `${ts}.${ext}`, { type });
     } catch {
-      // CORS tainted canvas or other error — fall back to text only
-      insertText(text);
+      return null;
     }
-  };
+  }, [sessionId]);
+
+  const captureFrameAndInsert = useCallback((textFn: (t: number) => string) => {
+    const video = videoRef.current;
+    const t = video?.currentTime ?? currentTimeRef.current;
+    const text = textFn(t);
+    void (async () => {
+      let frameFile: File | null = null;
+
+      if (video && video.videoWidth > 0) {
+        frameFile = await captureFrameFromCanvas(video, t);
+      }
+      if (!frameFile) {
+        frameFile = await captureFrameFromApi(t);
+      }
+
+      if (frameFile) {
+        insertImage(frameFile);
+      }
+
+      insertText(text);
+    })();
+  }, [captureFrameFromApi, captureFrameFromCanvas, insertImage, insertText, videoRef]);
 
   // Unified fullscreen toggle (used by keyboard shortcut, mobile button, desktop button)
   const toggleFullscreen = useCallback(() => {
@@ -1597,7 +1623,7 @@ function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voic
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, seekBy, toggleFullscreen, currentTime, showDownloadModal]);
+  }, [togglePlay, seekBy, toggleFullscreen, captureFrameAndInsert, showDownloadModal]);
 
   // Progress bar drag handling with throttled seeking
   // Updates UI immediately but throttles video.currentTime to reduce Range requests
@@ -1859,7 +1885,18 @@ function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voic
             <span>{formatTime(duration)}</span>
           </div>
 
-          {/* Chapter name with copy-to-chat icon */}
+          <button
+            className="w-8 h-8 ml-1 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-zinc-300 hover:text-white"
+            onClick={() => captureFrameAndInsert((t) => `[${formatTime(t)}]: `)}
+            title="Capture frame + timestamp to chat (T)"
+            aria-label="Capture frame and timestamp to chat"
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+              <path d="M4 4h9a2 2 0 012 2v1h1a4 4 0 014 4v5a4 4 0 01-4 4H8a4 4 0 01-4-4V6a2 2 0 012-2zm12 5h-1v5a2 2 0 11-4 0V9H8v7a2 2 0 002 2h6a2 2 0 002-2v-5a2 2 0 00-2-2zm-7-1h4V6H6v9a2 2 0 004 0V8z" />
+            </svg>
+          </button>
+
+          {/* Chapter name */}
           {currentChapter && chapters.length > 1 && (
             <div className="flex items-center gap-1.5 ml-3">
               {!isMobile && (
@@ -1870,16 +1907,6 @@ function PreviewTab({ videoUrl, sandboxId, sandboxActive = true, sessionId, voic
                   </span>
                 </>
               )}
-              <button
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
-                onClick={() => captureFrameAndInsert((t) => `[${formatTime(t)}] ${currentChapter.name}: `)}
-                title="Capture frame + timestamp to chat"
-                aria-label="Capture frame and timestamp to chat"
-              >
-                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                </svg>
-              </button>
             </div>
           )}
 

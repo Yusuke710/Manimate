@@ -739,14 +739,13 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
   const sandboxIdRef = useRef<string | null>(null);
   const claudeSessionIdRef = useRef<string | null>(null);
 
-  // Gate sandbox connections: only pass sandboxId to child components (PreviewPanel)
-  // after the user sends a message, to avoid waking paused
-  // local runtimes just by visiting a past session.
-  const [sandboxActivated, setSandboxActivated] = useState(false);
-  const activateSandbox = useCallback(() => setSandboxActivated(true), []);
+  // Kept for PreviewPanel retry hook compatibility.
+  // Local mode does not require explicit sandbox activation gating.
+  const activateSandbox = useCallback(() => {}, []);
   const planContentRef = useRef<string | null>(null);
   const scriptContentRef = useRef<string | null>(null);
   const videoUrlBaseRef = useRef<string | null>(null);
+  const videoUrlRef = useRef<string | null>(null);
   const reconnectedRunIdRef = useRef<string | null>(null);
 
   // Sync refs with state
@@ -754,6 +753,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
   useEffect(() => { claudeSessionIdRef.current = state.claudeSessionId; }, [state.claudeSessionId]);
   useEffect(() => { planContentRef.current = state.planContent; }, [state.planContent]);
   useEffect(() => { scriptContentRef.current = state.scriptContent; }, [state.scriptContent]);
+  useEffect(() => { videoUrlRef.current = state.videoUrl; }, [state.videoUrl]);
 
   const applyFetchedSessionData = useCallback(
     (
@@ -844,6 +844,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
         }
 
         if (data.session.last_video_url) {
+          videoUrlRef.current = data.session.last_video_url;
           videoUrlBaseRef.current = data.session.last_video_url.split('?')[0];
           dispatch({ type: "SET_VIDEO_URL", url: data.session.last_video_url });
         }
@@ -852,7 +853,6 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
           const activeRun = data.activeRun as ActiveRun;
           if (activeRun.status === "running" || activeRun.status === "queued") {
             reconnectedRunIdRef.current = activeRun.id;
-            setSandboxActivated(true); // sandbox already in use by active run
             dispatch({ type: "SET_LOADING", isLoading: true });
             const lastProgressEvent = data.activityEvents
               ? [...data.activityEvents].reverse().find((e: DBActivityEvent) => e.type === "progress" || e.type === "tool_use")
@@ -881,14 +881,20 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
         applyFetchedSessionData(data, { preserveExistingArtifacts: true });
 
         if (data.session.last_video_url) {
+          const fullChanged = data.session.last_video_url !== videoUrlRef.current;
           const newBase = data.session.last_video_url.split('?')[0];
           const baseChanged = newBase !== videoUrlBaseRef.current;
+          videoUrlRef.current = data.session.last_video_url;
           videoUrlBaseRef.current = newBase;
           // Skip video URL dispatch while SSE stream is active — SSE complete is authoritative.
           // doRefetch only sets video URL as fallback (page reload, reconnection, missed SSE).
           // Voiced video swaps are handled by SET_VOICEOVER in applyFetchedSessionData.
           if (!abortControllerRef.current) {
-            dispatch({ type: "SET_VIDEO_URL", url: data.session.last_video_url, bumpNonce: baseChanged });
+            dispatch({
+              type: "SET_VIDEO_URL",
+              url: data.session.last_video_url,
+              bumpNonce: baseChanged || fullChanged,
+            });
           }
         }
 
@@ -900,7 +906,6 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
 
         // Activate sandbox if an active run is detected (sandbox is already in use)
         if (data.activeRun && (data.activeRun.status === "running" || data.activeRun.status === "queued")) {
-          setSandboxActivated(true);
         }
 
         const trackedRunId = reconnectedRunIdRef.current;
@@ -933,7 +938,6 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
   }, []);
 
   const handleSend = useCallback(async (prompt: string, images?: File[]) => {
-    setSandboxActivated(true); // user is actively interacting
     const currentSandboxId = sandboxIdRef.current;
     const currentClaudeSessionId = claudeSessionIdRef.current;
     const turnId = crypto.randomUUID();
@@ -1098,6 +1102,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
               dispatch({ type: "SET_STATUS", statusMessage: null });
               addActivity({ type: "complete", message: event.message || "Complete" }, turnId);
               if (event.video_url) {
+                videoUrlRef.current = event.video_url;
                 videoUrlBaseRef.current = event.video_url.split('?')[0];
                 dispatch({ type: "SET_VIDEO_URL", url: event.video_url, bumpNonce: true });
               }
@@ -1195,7 +1200,6 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, sessionReady,
       videoUrl={state.videoUrl}
       videoUpdateNonce={state.videoUpdateNonce}
       sandboxId={state.sandboxId}
-      sandboxActive={sandboxActivated}
       onActivateSandbox={activateSandbox}
       sessionId={sessionId}
       planContent={state.planContent}
@@ -1348,6 +1352,11 @@ function HomeContent() {
   const [aspectRatio, setAspectRatio] = usePreferredAspectRatio();
 
   const activeSessionId = searchParams.get("session");
+  useEffect(() => {
+    if (isMobile) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional UX behavior: collapse sidebar when entering a session
+    setSidebarCollapsed(Boolean(activeSessionId));
+  }, [activeSessionId, isMobile]);
 
   // Optimistic session creation: keyed by session ID, stores Promise<boolean>
   const sessionCreationRef = useRef<{ id: string; ready: Promise<boolean> } | null>(null);

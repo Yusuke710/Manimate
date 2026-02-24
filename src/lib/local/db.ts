@@ -22,6 +22,7 @@ export interface LocalSession {
   plan_content: string | null;
   script_content: string | null;
   subtitles_content: string | null;
+  chapters: string | null;
   voiceover_status: string | null;
   voiceover_error: string | null;
   voiceover_audio_path: string | null;
@@ -79,6 +80,7 @@ type SessionUpdateInput = Partial<{
   plan_content: string | null;
   script_content: string | null;
   subtitles_content: string | null;
+  chapters: string | null;
   voiceover_status: string | null;
   voiceover_error: string | null;
   voiceover_audio_path: string | null;
@@ -157,6 +159,7 @@ function mapSession(row: Record<string, unknown>): LocalSession {
     plan_content: row.plan_content ? String(row.plan_content) : null,
     script_content: row.script_content ? String(row.script_content) : null,
     subtitles_content: row.subtitles_content ? String(row.subtitles_content) : null,
+    chapters: row.chapters ? String(row.chapters) : null,
     voiceover_status: row.voiceover_status ? String(row.voiceover_status) : null,
     voiceover_error: row.voiceover_error ? String(row.voiceover_error) : null,
     voiceover_audio_path: row.voiceover_audio_path
@@ -401,6 +404,7 @@ export function updateLocalSession(sessionId: string, updates: SessionUpdateInpu
     "plan_content",
     "script_content",
     "subtitles_content",
+    "chapters",
     "voiceover_status",
     "voiceover_error",
     "voiceover_audio_path",

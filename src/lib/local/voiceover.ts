@@ -387,6 +387,10 @@ async function runVoiceoverJob(sessionId: string, jobId: string): Promise<void> 
 
     await fsp.copyFile(muxedVideoPath, videoPath);
     if (!isCurrentJob(sessionId, jobId)) return;
+    const voicedVideoStat = await fsp.stat(videoPath).catch(() => null);
+    const voicedVideoVersion = voicedVideoStat
+      ? Math.round(voicedVideoStat.mtimeMs)
+      : Date.now();
 
     updateLocalSession(sessionId, {
       voiceover_status: "completed",
@@ -394,7 +398,7 @@ async function runVoiceoverJob(sessionId: string, jobId: string): Promise<void> 
       voiceover_audio_path: syncedAudioPath,
       hq_render_status: null,
       hq_render_progress: null,
-      last_video_url: localFileToApiUrl(sessionId, videoPath),
+      last_video_url: localFileToApiUrl(sessionId, videoPath, voicedVideoVersion),
     });
   } catch (error) {
     if (!isCurrentJob(sessionId, jobId)) return;

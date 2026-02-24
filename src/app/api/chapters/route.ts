@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionIdFromSandboxId } from "@/lib/local/config";
-import { getLocalSession } from "@/lib/local/db";
+import {
+  ensureLocalSessionLayout,
+  getSessionIdFromSandboxId,
+} from "@/lib/local/config";
+import { getLocalSession, updateLocalSession } from "@/lib/local/db";
+import {
+  parseStoredLocalChapters,
+  readLocalProjectChapters,
+  serializeLocalChapters,
+  type LocalChapter,
+} from "@/lib/local/chapters";
 
-export interface Chapter {
-  name: string;
-  start: number;
-  duration: number;
+function responseWithNoCache(chapters: LocalChapter[]): Response {
+  return NextResponse.json(chapters, {
+    status: 200,
+    headers: { "Cache-Control": "no-cache" },
+  });
 }
 
 export async function GET(request: NextRequest): Promise<Response> {
@@ -26,8 +36,21 @@ export async function GET(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json([], {
-    status: 200,
-    headers: { "Cache-Control": "no-cache" },
-  });
+  const stored = parseStoredLocalChapters(session.chapters);
+  if (stored.length > 0) {
+    return responseWithNoCache(stored);
+  }
+
+  const { projectDir } = ensureLocalSessionLayout(resolvedSessionId);
+
+  try {
+    const chapters = await readLocalProjectChapters(projectDir);
+    const serialized = serializeLocalChapters(chapters);
+    if (serialized !== session.chapters) {
+      updateLocalSession(resolvedSessionId, { chapters: serialized });
+    }
+    return responseWithNoCache(chapters);
+  } catch {
+    return responseWithNoCache([]);
+  }
 }

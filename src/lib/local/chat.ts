@@ -29,6 +29,10 @@ import {
   clearLocalVoiceoverArtifacts,
   startLocalVoiceoverJob,
 } from "@/lib/local/voiceover";
+import {
+  readLocalProjectChapters,
+  serializeLocalChapters,
+} from "@/lib/local/chapters";
 import { readLocalProjectSubtitles } from "@/lib/local/subtitles";
 import { clearLocalHqArtifacts } from "@/lib/local/hq-render";
 import {
@@ -502,10 +506,16 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
           postRunVideo.stats.mtimeMs !== preRunVideo.stats.mtimeMs ||
           postRunVideo.stats.size !== preRunVideo.stats.size)
       );
+      const chapters = videoChanged ? await readLocalProjectChapters(projectDir) : [];
+      const serializedChapters = serializeLocalChapters(chapters);
 
       let videoUrl: string | null = null;
       if (videoChanged && postRunVideo) {
-        videoUrl = localFileToApiUrl(sessionId, postRunVideo.path);
+        videoUrl = localFileToApiUrl(
+          sessionId,
+          postRunVideo.path,
+          Math.round(postRunVideo.stats.mtimeMs)
+        );
       }
 
       const finishedAt = new Date().toISOString();
@@ -597,6 +607,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         plan_content: planContent,
         script_content: scriptContent,
         subtitles_content: subtitlesContent,
+        chapters: videoChanged ? serializedChapters : session.chapters,
         video_path: videoChanged && postRunVideo ? postRunVideo.path : session.video_path,
         last_video_url: videoUrl || session.last_video_url,
         voiceover_status: videoChanged ? null : session.voiceover_status,

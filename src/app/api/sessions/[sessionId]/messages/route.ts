@@ -4,6 +4,7 @@
  * GET /api/sessions/[sessionId]/messages
  */
 
+import fsp from "node:fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_MODEL } from "@/lib/models";
 import {
@@ -139,7 +140,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
 
   let videoUrl = session.last_video_url;
   if (!videoUrl && session.video_path) {
-    videoUrl = localFileToApiUrl(sessionId, session.video_path);
+    const stat = await fsp.stat(session.video_path).catch(() => null);
+    const version = stat ? Math.round(stat.mtimeMs) : null;
+    videoUrl = localFileToApiUrl(sessionId, session.video_path, version);
   }
 
   const hqRenderProgress = parseHqRenderProgress(session.hq_render_progress);
