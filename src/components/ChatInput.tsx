@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
+import ImageLightbox from "@/components/ImageLightbox";
 
 const MAX_IMAGES = 12;
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
@@ -28,8 +29,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
   const [prompt, setPrompt] = useState("");
   const [images, setImages] = useState<ImagePreview[]>([]);
   const [dragOver, setDragOver] = useState(false);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const lightboxRef = useRef<HTMLDialogElement>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasPrewarmedRef = useRef(false);
@@ -111,6 +111,17 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    if (images.length === 0) {
+      setLightboxIndex(null);
+      return;
+    }
+    if (lightboxIndex >= images.length) {
+      setLightboxIndex(images.length - 1);
+    }
+  }, [images.length, lightboxIndex]);
+
   const addImages = useCallback((files: File[]) => {
     const validFiles = files.filter((f) => {
       if (!ALLOWED_TYPES.includes(f.type)) return false;
@@ -145,6 +156,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
     onSend(prompt.trim(), imageFiles);
     setPrompt("");
     setImages([]);
+    setLightboxIndex(null);
     // Clear draft immediately on send — update ref so unmount flush won't re-save
     promptRef.current = "";
     if (draftKey) {
@@ -268,7 +280,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
               <img
                 src={img.url}
                 alt={img.file.name}
-                onClick={() => setLightboxUrl(img.url)}
+                onClick={() => setLightboxIndex(index)}
                 style={{
                   height: thumbSize, width: thumbSize,
                   borderRadius: 6, objectFit: "cover",
@@ -450,62 +462,14 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
       )}
 
       {/* Image lightbox */}
-      {lightboxUrl && (
-        <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      {lightboxIndex !== null && images.length > 0 && (
+        <ImageLightbox
+          images={images.map((img) => ({ url: img.url, name: img.file.name }))}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
     </div>
-  );
-}
-
-function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    dialog.showModal();
-    const handleClose = () => onClose();
-    dialog.addEventListener("close", handleClose);
-    return () => dialog.removeEventListener("close", handleClose);
-  }, [onClose]);
-
-  return (
-    <dialog
-      ref={ref}
-      aria-label="Image preview"
-      onClick={(e) => { if (e.target === ref.current) ref.current?.close(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 9999,
-        width: "100vw", height: "100vh", maxWidth: "100vw", maxHeight: "100vh",
-        background: "rgba(0,0,0,0.75)", border: "none", padding: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        cursor: "zoom-out",
-      }}
-    >
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); ref.current?.close(); }}
-        aria-label="Close preview"
-        style={{
-          position: "absolute", top: 16, right: 16,
-          width: 36, height: 36, borderRadius: "50%",
-          background: "rgba(255,255,255,0.15)", border: "none",
-          color: "#fff", fontSize: 20, cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}
-      >
-        &times;
-      </button>
-      <img
-        src={url}
-        alt="Preview"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          maxWidth: "90vw", maxHeight: "90vh",
-          borderRadius: 8, objectFit: "contain",
-          cursor: "default",
-        }}
-      />
-    </dialog>
   );
 }

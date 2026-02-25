@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ActivityEvent, Message } from "@/lib/types";
 import { getModelDisplayLabel } from "@/lib/models";
+import ImageLightbox from "@/components/ImageLightbox";
 
 // Unified timeline item
 type TimelineItem =
@@ -16,6 +17,16 @@ interface ChatMessagesProps {
   activityEvents?: ActivityEvent[];
   isLoading?: boolean;
   isLoadingMessages?: boolean;
+}
+
+interface LightboxImage {
+  url: string;
+  name: string;
+}
+
+interface LightboxState {
+  images: LightboxImage[];
+  index: number;
 }
 
 // Merge messages and activities into a unified chronological timeline
@@ -135,7 +146,7 @@ export default function ChatMessages({
 }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const isNearBottom = useRef(true);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const timeline = buildTimeline(messages, activityEvents);
   const grouped = groupActivities(timeline);
 
@@ -180,7 +191,13 @@ export default function ChatMessages({
     <div onScroll={handleScroll} data-testid="chat-messages" style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
       {grouped.map((item, index) => {
         if (item.type === "message") {
-          return <MessageRow key={`msg-${item.data.id}`} message={item.data} onImageClick={setLightboxUrl} />;
+          return (
+            <MessageRow
+              key={`msg-${item.data.id}`}
+              message={item.data}
+              onImageClick={(images, imageIndex) => setLightbox({ images, index: imageIndex })}
+            />
+          );
         } else if (item.type === "activity_group") {
           return <ActivityGroupCard key={`grp-${index}`} group={item.data} />;
         } else {
@@ -189,12 +206,19 @@ export default function ChatMessages({
       })}
       {isLoading && <LoadingIndicator />}
       <div ref={bottomRef} />
-      {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+      {lightbox && (
+        <ImageLightbox
+          images={lightbox.images}
+          index={lightbox.index}
+          onIndexChange={(nextIndex) => setLightbox((prev) => (prev ? { ...prev, index: nextIndex } : prev))}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   );
 }
 
-function MessageRow({ message, onImageClick }: { message: Message; onImageClick: (url: string) => void }) {
+function MessageRow({ message, onImageClick }: { message: Message; onImageClick: (images: LightboxImage[], index: number) => void }) {
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -565,10 +589,17 @@ function ToolInputDetail({ input, toolName }: { input?: Record<string, unknown>;
 }
 
 /** Collapsible image grid — shows up to 6 inline, rest behind "+N" toggle */
-function ImageGrid({ images, onImageClick }: { images: { id: string; url?: string; name: string }[]; onImageClick: (url: string) => void }) {
+function ImageGrid({
+  images,
+  onImageClick,
+}: {
+  images: { id: string; url?: string; name: string }[];
+  onImageClick: (images: LightboxImage[], index: number) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const visible = images.filter((img): img is typeof img & { url: string } => !!img.url);
   if (visible.length === 0) return null;
+  const lightboxImages = visible.map((img) => ({ url: img.url, name: img.name }));
 
   const hasOverflow = visible.length > 6;
   const shown = hasOverflow && !expanded ? visible.slice(0, 5) : visible;
@@ -580,7 +611,7 @@ function ImageGrid({ images, onImageClick }: { images: { id: string; url?: strin
       {shown.map((img) => (
         <button
           key={img.id}
-          onClick={() => onImageClick(img.url)}
+          onClick={() => onImageClick(lightboxImages, visible.findIndex((candidate) => candidate.id === img.id))}
           style={{ padding: 0, border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}
           aria-label={`View ${img.name}`}
         >
@@ -602,58 +633,6 @@ function ImageGrid({ images, onImageClick }: { images: { id: string; url?: strin
         </button>
       )}
     </div>
-  );
-}
-
-function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    dialog.showModal();
-    const handleClose = () => onClose();
-    dialog.addEventListener("close", handleClose);
-    return () => dialog.removeEventListener("close", handleClose);
-  }, [onClose]);
-
-  return (
-    <dialog
-      ref={ref}
-      aria-label="Image preview"
-      onClick={(e) => { if (e.target === ref.current) ref.current?.close(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 9999,
-        width: "100vw", height: "100vh", maxWidth: "100vw", maxHeight: "100vh",
-        background: "rgba(0,0,0,0.75)", border: "none", padding: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        cursor: "zoom-out",
-      }}
-    >
-      <button
-        onClick={(e) => { e.stopPropagation(); ref.current?.close(); }}
-        aria-label="Close preview"
-        style={{
-          position: "absolute", top: 16, right: 16,
-          width: 36, height: 36, borderRadius: "50%",
-          background: "rgba(255,255,255,0.15)", border: "none",
-          color: "#fff", fontSize: 20, cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}
-      >
-        &times;
-      </button>
-      <img
-        src={url}
-        alt="Preview"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          maxWidth: "90vw", maxHeight: "90vh",
-          borderRadius: 8, objectFit: "contain",
-          cursor: "default",
-        }}
-      />
-    </dialog>
   );
 }
 
