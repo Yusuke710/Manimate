@@ -55,6 +55,12 @@ const MANIM_PROMPT_PATH = path.join(
   "CLAUDE.md"
 );
 
+const SUBTITLE_LINTER_PATH = path.join(
+  process.cwd(),
+  "scripts",
+  "lint-subtitles.py"
+);
+
 export function ensureLocalSessionLayout(sessionId: string): {
   sessionRoot: string;
   projectDir: string;
@@ -74,6 +80,17 @@ export function ensureLocalSessionLayout(sessionId: string): {
       fs.copyFileSync(MANIM_PROMPT_PATH, destClaudeMd);
     } catch {
       // Non-fatal: Claude will still work, just without the expert prompt.
+    }
+  }
+
+  // Copy subtitle linter into project dir so prompt command works:
+  // `python lint-subtitles.py script.py`
+  const destSubtitleLinter = path.join(paths.projectDir, "lint-subtitles.py");
+  if (!fs.existsSync(destSubtitleLinter)) {
+    try {
+      fs.copyFileSync(SUBTITLE_LINTER_PATH, destSubtitleLinter);
+    } catch {
+      // Non-fatal: Claude can still render without linter pre-check.
     }
   }
 
