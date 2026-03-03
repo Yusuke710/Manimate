@@ -1596,6 +1596,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voi
           seekBy(5);
           break;
         case 'KeyC':
+          if (e.metaKey || e.ctrlKey || e.altKey) break; // Don't hijack Ctrl+C / Cmd+C (copy)
           e.preventDefault();
           setSubtitlesOn(prev => !prev);
           break;
