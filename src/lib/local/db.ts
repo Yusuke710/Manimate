@@ -467,6 +467,13 @@ export function listLocalMessages(sessionId: string): LocalMessage[] {
   return rows.map(mapMessage);
 }
 
+export function hasLocalMessages(sessionId: string): boolean {
+  const row = openDb()
+    .prepare("SELECT 1 FROM messages WHERE session_id = ? LIMIT 1")
+    .get(sessionId);
+  return row !== undefined;
+}
+
 export function createLocalRun(input: {
   session_id: string;
   user_message_id?: string | null;

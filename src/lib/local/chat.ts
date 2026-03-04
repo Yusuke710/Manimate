@@ -16,6 +16,7 @@ import {
   createLocalRun,
   getLocalSession,
   insertLocalActivityEvent,
+  hasLocalMessages,
   insertLocalMessage,
   listLocalMessages,
   updateLocalRun,
@@ -89,6 +90,13 @@ async function readTextFileIfExists(filePath: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Extracts the first H1 title from plan.md content. Returns null if none found. */
+function extractPlanTitle(planContent: string): string | null {
+  const match = planContent.match(/^#\s+(.+)/m);
+  if (!match) return null;
+  return match[1].replace(/\s+#+\s*$/, "").trim();
 }
 
 /**
@@ -264,6 +272,8 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         }
       }
 
+      const shouldPrepend = rawPrompt.length > 0 && !resumeSessionId && !hasLocalMessages(sessionId);
+
       const userMessageId = insertLocalMessage({
         session_id: sessionId,
         role: "user",
@@ -319,7 +329,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
       }
       const preparedRequestImageCount = promptImages.length;
 
-      let promptBody = rawPrompt;
+      let promptBody = shouldPrepend ? `Visualize: ${rawPrompt}` : rawPrompt;
       if (!resumeSessionId) {
         const recovered = buildConversationRecoveryContext({
           messages: listLocalMessages(sessionId),
@@ -348,7 +358,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
           const requestLine = rawPrompt
             ? rawPrompt
             : "[No text prompt in this turn. Use attached images if provided.]";
-          promptBody = `${recovered.historyPrompt}\n\nCurrent user request:\n${requestLine}`;
+          promptBody = `${recovered.historyPrompt}\n\n${requestLine}`;
         }
       }
 
@@ -386,9 +396,11 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         }
         streamedPlanContent = nextPlanContent;
         streamedScriptContent = nextScriptContent;
+        const midRunPlanTitle = nextPlanContent ? extractPlanTitle(nextPlanContent) : null;
         updateLocalSession(sessionId, {
           plan_content: nextPlanContent,
           script_content: nextScriptContent,
+          ...(midRunPlanTitle ? { title: midRunPlanTitle } : {}),
         });
       };
 
@@ -622,11 +634,13 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
           claude_session_id: claudeSessionId || session.claude_session_id,
           error_message: "Stopped by user",
         });
+        const canceledPlanTitle = planContent ? extractPlanTitle(planContent) : null;
         updateLocalSession(sessionId, {
           status: "active",
           sandbox_id: sandboxId,
           claude_session_id: claudeSessionId || session.claude_session_id,
           model: modelForRun,
+          ...(canceledPlanTitle ? { title: canceledPlanTitle } : {}),
           plan_content: planContent,
           script_content: scriptContent,
           subtitles_content: subtitlesContent,
@@ -652,11 +666,13 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
           claude_session_id: claudeSessionId || session.claude_session_id,
           error_message: message,
         });
+        const failedPlanTitle = planContent ? extractPlanTitle(planContent) : null;
         updateLocalSession(sessionId, {
           status: "active",
           sandbox_id: sandboxId,
           claude_session_id: claudeSessionId || session.claude_session_id,
           model: modelForRun,
+          ...(failedPlanTitle ? { title: failedPlanTitle } : {}),
           plan_content: planContent,
           script_content: scriptContent,
           subtitles_content: subtitlesContent,
@@ -687,11 +703,13 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         ]);
       }
 
+      const planTitle = planContent ? extractPlanTitle(planContent) : null;
       updateLocalSession(sessionId, {
         status: "active",
         sandbox_id: sandboxId,
         claude_session_id: claudeSessionId || session.claude_session_id,
         model: modelForRun,
+        ...(planTitle ? { title: planTitle } : {}),
         plan_content: planContent,
         script_content: scriptContent,
         subtitles_content: subtitlesContent,
