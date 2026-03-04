@@ -28,10 +28,6 @@ import {
   spawnLocalClaudeProcess,
 } from "@/lib/local/runtime";
 import {
-  clearLocalVoiceoverArtifacts,
-  startLocalVoiceoverJob,
-} from "@/lib/local/voiceover";
-import {
   readLocalProjectChapters,
   serializeLocalChapters,
 } from "@/lib/local/chapters";
@@ -41,6 +37,7 @@ import {
   DEFAULT_ASPECT_RATIO,
   isAspectRatio,
 } from "@/lib/aspect-ratio";
+import { DEFAULT_VOICE_ID } from "@/lib/voices";
 import { buildConversationRecoveryContext } from "@/lib/conversation-recovery";
 
 type LocalChatRequest = {
@@ -165,12 +162,13 @@ function buildPrompt(input: {
   projectDir: string;
   prompt: string;
   aspectRatio: string;
+  voiceId: string;
   images: Array<{ path: string; originalName: string }>;
 }): string {
   const imageSection = input.images.length
     ? `\n\nAttached images (use Read tool to view):\n${input.images.map((image) => `- ${image.path} (${image.originalName})`).join("\n")}`
     : "";
-  return `**Project Directory**: \`${input.projectDir}\` (cwd is already set)\n\n**Aspect Ratio**: ${input.aspectRatio}\n\n${input.prompt}${imageSection}`;
+  return `**Project Directory**: \`${input.projectDir}\` (cwd is already set)\n\n**Aspect Ratio**: ${input.aspectRatio}\n\n**Voice ID**: ${input.voiceId}\n\n${input.prompt}${imageSection}`;
 }
 
 export async function handleLocalChatRequest(request: NextRequest): Promise<Response> {
@@ -371,10 +369,12 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         : isAspectRatio(session.aspect_ratio)
           ? session.aspect_ratio
           : DEFAULT_ASPECT_RATIO;
+      const voiceId = session.voice_id || DEFAULT_VOICE_ID;
       const prompt = buildPrompt({
         projectDir,
         prompt: promptBody,
         aspectRatio,
+        voiceId,
         images: promptImages,
       });
 
@@ -697,10 +697,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
       });
 
       if (videoChanged) {
-        await Promise.all([
-          clearLocalVoiceoverArtifacts(sessionId),
-          clearLocalHqArtifacts(sessionId),
-        ]);
+        await clearLocalHqArtifacts(sessionId);
       }
 
       const planTitle = planContent ? extractPlanTitle(planContent) : null;
@@ -716,9 +713,6 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         chapters: videoChanged ? serializedChapters : session.chapters,
         video_path: videoChanged && postRunVideo ? postRunVideo.path : session.video_path,
         last_video_url: videoUrl || session.last_video_url,
-        voiceover_status: videoChanged ? null : session.voiceover_status,
-        voiceover_error: videoChanged ? null : session.voiceover_error,
-        voiceover_audio_path: videoChanged ? null : session.voiceover_audio_path,
         hq_render_status: videoChanged ? null : session.hq_render_status,
         hq_render_progress: videoChanged ? null : session.hq_render_progress,
       });
@@ -730,13 +724,6 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         claude_session_id: claudeSessionId || session.claude_session_id,
         video_url: videoUrl,
       });
-
-      if (videoChanged) {
-        await startLocalVoiceoverJob(sessionId, {
-          force: true,
-          silentIfUnavailable: true,
-        });
-      }
 
       await sendEvent({
         type: "complete",

@@ -556,8 +556,6 @@ interface ChatState {
   planContent: string | null;
   scriptContent: string | null;
   model: string;
-  voiceoverStatus: string | null;
-  voiceoverError: string | null;
   hqRenderStatus: string | null;
   hqRenderProgress: HqRenderProgress | null;
 }
@@ -579,7 +577,6 @@ type ChatAction =
   | { type: "SET_PLAN_CONTENT"; content: string | null }
   | { type: "SET_SCRIPT_CONTENT"; content: string | null }
   | { type: "SET_MODEL"; model: string }
-  | { type: "SET_VOICEOVER"; status: string | null; error: string | null; videoUrl?: string | null }
   | { type: "SET_HQ_RENDER"; status: string | null; progress: HqRenderProgress | null };
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -662,26 +659,6 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_MODEL":
       return { ...state, model: action.model };
 
-    case "SET_VOICEOVER": {
-      const next: ChatState = {
-        ...state,
-        voiceoverStatus: action.status,
-        voiceoverError: action.error,
-      };
-      // When voiceover completes with a video URL, update videoUrl + bump nonce.
-      // Voiceover can overwrite the same video path (same base URL) with voiced audio,
-      // so always bump nonce on completed transition to force re-fetch of the file.
-      if (
-        action.status === "completed" &&
-        action.videoUrl &&
-        state.voiceoverStatus !== "completed"
-      ) {
-        next.videoUrl = action.videoUrl;
-        next.videoUpdateNonce = state.videoUpdateNonce + 1;
-      }
-      return next;
-    }
-
     case "SET_HQ_RENDER":
       return {
         ...state,
@@ -708,8 +685,6 @@ const initialState: ChatState = {
   planContent: null,
   scriptContent: null,
   model: DEFAULT_MODEL,
-  voiceoverStatus: null,
-  voiceoverError: null,
   hqRenderStatus: null,
   hqRenderProgress: null,
 };
@@ -725,8 +700,6 @@ interface SessionSnapshot {
   sandbox_id: string | null;
   claude_session_id: string | null;
   last_video_url: string | null;
-  voiceover_status: string | null;
-  voiceover_error: string | null;
   hq_render_status: string | null;
   hq_render_progress: HqRenderProgress | null;
   plan_content: string | null;
@@ -762,9 +735,6 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
   const sandboxIdRef = useRef<string | null>(null);
   const claudeSessionIdRef = useRef<string | null>(null);
 
-  // Kept for PreviewPanel retry hook compatibility.
-  // Local mode does not require explicit sandbox activation gating.
-  const activateSandbox = useCallback(() => {}, []);
   const planContentRef = useRef<string | null>(null);
   const scriptContentRef = useRef<string | null>(null);
   const videoUrlBaseRef = useRef<string | null>(null);
@@ -831,14 +801,6 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
           content: data.session.script_content,
         });
       }
-
-      // Sync voiceover status from DB (covers bootstrap, session restore, and Realtime refetch)
-      dispatch({
-        type: "SET_VOICEOVER",
-        status: data.session.voiceover_status ?? null,
-        error: data.session.voiceover_error ?? null,
-        videoUrl: data.session.last_video_url,
-      });
 
       // Sync HQ render status from DB
       dispatch({
@@ -920,7 +882,6 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
           videoUrlBaseRef.current = newBase;
           // Skip video URL dispatch while SSE stream is active — SSE complete is authoritative.
           // doRefetch only sets video URL as fallback (page reload, reconnection, missed SSE).
-          // Voiced video swaps are handled by SET_VOICEOVER in applyFetchedSessionData.
           if (!abortControllerRef.current) {
             dispatch({
               type: "SET_VIDEO_URL",
@@ -1236,12 +1197,9 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
       videoUrl={state.videoUrl}
       videoUpdateNonce={state.videoUpdateNonce}
       sandboxId={state.sandboxId}
-      onActivateSandbox={activateSandbox}
       sessionId={sessionId}
       planContent={state.planContent}
       scriptContent={state.scriptContent}
-      voiceoverStatus={state.voiceoverStatus}
-      voiceoverError={state.voiceoverError}
       hqRenderStatus={state.hqRenderStatus}
       hqRenderProgress={state.hqRenderProgress}
       sessionModel={state.model}

@@ -284,12 +284,10 @@ async function runHqRenderJob(job: ActiveHqJob): Promise<void> {
       }
     }
 
-    const latestSession = getLocalSession(job.sessionId);
-    const audioPath = latestSession?.voiceover_status === "completed"
-      ? latestSession.voiceover_audio_path
-      : null;
+    // Use voiceover.mp3 produced by tts-generate.py (TTS-first pipeline)
+    const audioPath = path.join(projectDir, "voiceover.mp3");
 
-    if (audioPath && (await fileExists(audioPath))) {
+    if (await fileExists(audioPath)) {
       const mux = await runLocalCommand({
         command: "ffmpeg",
         args: [

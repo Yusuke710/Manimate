@@ -55,10 +55,10 @@ const MANIM_PROMPT_PATH = path.join(
   "CLAUDE.md"
 );
 
-const SUBTITLE_LINTER_PATH = path.join(
+const TTS_GENERATE_PATH = path.join(
   process.cwd(),
   "scripts",
-  "lint-subtitles.py"
+  "tts-generate.py"
 );
 
 export function ensureLocalSessionLayout(sessionId: string): {
@@ -83,14 +83,14 @@ export function ensureLocalSessionLayout(sessionId: string): {
     }
   }
 
-  // Copy subtitle linter into project dir so prompt command works:
-  // `python lint-subtitles.py script.py`
-  const destSubtitleLinter = path.join(paths.projectDir, "lint-subtitles.py");
-  if (!fs.existsSync(destSubtitleLinter)) {
+  // Copy TTS generator into project dir so Claude Code can run:
+  // `python tts-generate.py --plan plan.md`
+  const destTtsGenerate = path.join(paths.projectDir, "tts-generate.py");
+  if (!fs.existsSync(destTtsGenerate)) {
     try {
-      fs.copyFileSync(SUBTITLE_LINTER_PATH, destSubtitleLinter);
+      fs.copyFileSync(TTS_GENERATE_PATH, destTtsGenerate);
     } catch {
-      // Non-fatal: Claude can still render without linter pre-check.
+      // Non-fatal: TTS step will fail gracefully if script is missing.
     }
   }
 

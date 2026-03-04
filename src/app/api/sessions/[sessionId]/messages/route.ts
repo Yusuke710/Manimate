@@ -19,14 +19,8 @@ import {
   listLocalActivityEvents,
   listLocalMessages,
   updateLocalRun,
-  updateLocalSession,
 } from "@/lib/local/db";
 import { getActiveLocalRunBySessionId } from "@/lib/local/runtime";
-import {
-  getLocalVoiceoverJobStartedAt,
-  isLocalVoiceoverJobActive,
-  startLocalVoiceoverJob,
-} from "@/lib/local/voiceover";
 import type { HqRenderProgress } from "@/lib/types";
 
 type MessageMetadata = {
@@ -46,7 +40,6 @@ interface RouteParams {
 }
 
 const RUN_STALE_MS = 2 * 60 * 1000;
-const VOICEOVER_STALE_MS = 2 * 60 * 1000;
 
 function isOlderThan(timestamp: string | null | undefined, thresholdMs: number): boolean {
   if (!timestamp) return false;
@@ -110,31 +103,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     }
   }
 
-  const voiceoverInProgress =
-    session.voiceover_status === "pending" || session.voiceover_status === "generating";
-  const hasLiveVoiceoverJob = isLocalVoiceoverJobActive(sessionId);
-  const liveVoiceoverStartedAt = getLocalVoiceoverJobStartedAt(sessionId);
-  const staleDbVoiceover = !hasLiveVoiceoverJob && isOlderThan(session.updated_at, VOICEOVER_STALE_MS);
-  const staleLiveVoiceover = hasLiveVoiceoverJob && isOlderThan(liveVoiceoverStartedAt, VOICEOVER_STALE_MS);
-  const staleVoiceover = voiceoverInProgress && (staleDbVoiceover || staleLiveVoiceover);
-
-  if (staleVoiceover) {
-    const restart = await startLocalVoiceoverJob(sessionId, {
-      force: true,
-      silentIfUnavailable: true,
-    });
-    if (!restart.started) {
-      updateLocalSession(sessionId, {
-        voiceover_status: "failed",
-        voiceover_error: restart.message || "Voiceover generation stalled. Please retry.",
-      });
-    }
-    const refreshed = getLocalSession(sessionId);
-    if (refreshed) {
-      session = refreshed;
-    }
-  }
-
   backfillLocalActivityTurnIds(sessionId);
   const activityEvents = listLocalActivityEvents(sessionId);
 
@@ -154,8 +122,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
       sandbox_id: session.sandbox_id,
       claude_session_id: session.claude_session_id,
       last_video_url: videoUrl,
-      voiceover_status: session.voiceover_status,
-      voiceover_error: session.voiceover_error,
       hq_render_status: session.hq_render_status,
       hq_render_progress: hqRenderProgress,
       plan_content: session.plan_content,

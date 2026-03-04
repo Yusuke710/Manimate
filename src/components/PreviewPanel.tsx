@@ -1,114 +1,47 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo, memo, useReducer } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 
-import { parseVoiceoverFailure } from "@/lib/voiceover-error";
 import { useIsMobile } from "@/lib/useIsMobile";
 import type { HqRenderProgress } from "@/lib/types";
 
 type Tab = "plan" | "code" | "preview";
-type VoiceoverStatus = 'pending' | 'generating' | 'completed' | 'failed' | null;
 
 interface PreviewPanelProps {
   videoUrl: string | null;
   videoUpdateNonce?: number;
   sandboxId: string | null;
-  /** Callback to activate the sandbox (e.g. when user clicks Retry voiceover). */
-  onActivateSandbox?: () => void;
   sessionId?: string | null;
   planContent?: string | null;
   scriptContent?: string | null;
-  voiceoverStatus?: string | null;
-  voiceoverError?: string | null;
   hqRenderStatus?: string | null;
   hqRenderProgress?: HqRenderProgress | null;
   sessionModel?: string | null;
 }
 
-export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, onActivateSandbox, sessionId, planContent = null, scriptContent = null, voiceoverStatus: voiceoverStatusProp = null, voiceoverError: voiceoverErrorProp = null, hqRenderStatus: hqRenderStatusProp = null, hqRenderProgress: hqRenderProgressProp = null, sessionModel = null }: PreviewPanelProps) {
+export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, hqRenderStatus: hqRenderStatusProp = null, hqRenderProgress: hqRenderProgressProp = null, sessionModel = null }: PreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>("plan");
-  const voiceoverStatus = voiceoverStatusProp as VoiceoverStatus;
-  const voiceoverError = voiceoverErrorProp;
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
   const [isVideoPlayable, setIsVideoPlayable] = useState(false);
-  const voiceoverFailure = useMemo(() => parseVoiceoverFailure(voiceoverError), [voiceoverError]);
   // Track whether user has manually selected a tab (suppresses auto-switch)
   const userSelectedTabRef = useRef(false);
-  // Token that increments when voiceover completes - triggers seamless video swap
-  // Using useReducer for cleaner increment semantics
-  const [voicedSwapToken, bumpVoicedSwapToken] = useReducer((n: number) => n + 1, 0);
 
   // Track previous videoUrl to detect changes
   const prevVideoUrlRef = useRef(videoUrl);
   // Nonce marks intentional same-key silent re-renders (multi-turn updates).
   const prevVideoUpdateNonceRef = useRef(videoUpdateNonce);
-  // True after voiced swap has been triggered for the current turn - prevents redundant swaps
-  // from Realtime cascades. Reset when a new turn starts (sync effect) or on retry.
-  const voicedSwapFiredRef = useRef(false);
 
   // Sync effectiveVideoUrl when videoUrl prop changes.
-  // For same-base URLs, only apply when nonce changed (fresh silent render), otherwise
-  // ignore to avoid hard-reloading while waiting for seamless voiced swap.
   useEffect(() => {
     if (videoUrl !== prevVideoUrlRef.current) {
-      const getBase = (url: string | null) => url?.split('?')[0] || null;
-      const prevBase = getBase(prevVideoUrlRef.current);
-      const currBase = getBase(videoUrl);
-      const nonceChanged = videoUpdateNonce !== prevVideoUpdateNonceRef.current;
-      const shouldApplySync = currBase !== prevBase || nonceChanged;
-
-      if (shouldApplySync) {
-        // videoUrl prop changed - sync it and reset playable state
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing controlled preview state from parent props
-        setIsVideoPlayable(false);
-        setEffectiveVideoUrl(videoUrl);
-        userSelectedTabRef.current = false;
-        voicedSwapFiredRef.current = false;
-      } else {
-        console.log("[VoiceoverFlow] Ignoring same-base URL change without nonce bump");
-      }
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing controlled preview state from parent props
+      setIsVideoPlayable(false);
+      setEffectiveVideoUrl(videoUrl);
+      userSelectedTabRef.current = false;
       prevVideoUrlRef.current = videoUrl;
     }
     prevVideoUpdateNonceRef.current = videoUpdateNonce;
   }, [videoUrl, videoUpdateNonce]);
-
-  // Detect voiceover completion and trigger voiced video swap.
-  // Voiceover can overwrite the same file path, so base URL may not change.
-  // Compare full URLs to detect a refreshed video asset.
-  // The `voicedSwapFiredRef` guard prevents redundant swaps within the same turn.
-  useEffect(() => {
-    if (voiceoverStatus !== 'completed' || voicedSwapFiredRef.current) return;
-    if (!videoUrl || videoUrl === effectiveVideoUrl) return;
-
-    voicedSwapFiredRef.current = true;
-    console.log('[VoiceoverFlow] Voiceover completed, triggering swap', {
-      sessionId,
-      voicedUrl: videoUrl,
-    });
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: syncing prop-driven voiceover completion into local swap state
-    setEffectiveVideoUrl(videoUrl);
-    bumpVoicedSwapToken();
-  }, [voiceoverStatus, videoUrl, effectiveVideoUrl, sessionId]);
-
-  // Retry voiceover generation
-  const retryVoiceover = useCallback(async () => {
-    if (!sessionId || !sandboxId) return;
-
-    // Activate sandbox if not already active (user explicitly requested retry)
-    onActivateSandbox?.();
-    voicedSwapFiredRef.current = false;
-
-    try {
-      await fetch('/api/voiceover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, sandbox_id: sandboxId }),
-      });
-      // Status updates come through Realtime subscription → parent reducer
-    } catch {
-      // Error will surface through Realtime subscription → parent reducer
-    }
-  }, [sessionId, sandboxId, onActivateSandbox]);
 
   const handleTabClick = useCallback((tab: Tab) => {
     userSelectedTabRef.current = true;
@@ -163,50 +96,6 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
               </button>
             ))}
 
-            {/* Voiceover status - next to Preview tab */}
-            {(voiceoverStatus === 'pending' || voiceoverStatus === 'generating') && (
-              <span role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--accent)", marginLeft: 4 }}>
-                <svg aria-hidden="true" style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} viewBox="0 0 24 24" fill="none">
-                  <circle opacity={0.25} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path opacity={0.75} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Generating audio...
-              </span>
-            )}
-            {voiceoverStatus === 'completed' && (
-              <span role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--accent)", marginLeft: 4 }}>
-                <svg aria-hidden="true" style={{ width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                Audio generated
-              </span>
-            )}
-            {voiceoverStatus === 'failed' && (
-              <span role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--red)", marginLeft: 4 }}>
-                <span title={voiceoverFailure.message}>
-                  {voiceoverFailure.kind === "quota_exceeded"
-                    ? "Audio unavailable: ElevenLabs quota exceeded"
-                    : "Audio failed"}
-                </span>
-                <button
-                  type="button"
-                  onClick={retryVoiceover}
-                  disabled={!voiceoverFailure.retryable}
-                  style={{
-                    padding: "2px 6px",
-                    background: "rgba(220,38,38,0.15)",
-                    borderRadius: 4,
-                    border: "none",
-                    fontSize: 10,
-                    color: "var(--red)",
-                    cursor: voiceoverFailure.retryable ? "pointer" : "not-allowed",
-                    opacity: voiceoverFailure.retryable ? 1 : 0.7,
-                  }}
-                >
-                  {voiceoverFailure.retryable ? "Retry" : "Billing required"}
-                </button>
-              </span>
-            )}
           </div>
 
           {/* Spacer */}
@@ -222,7 +111,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
             <CodeTab content={scriptContent} />
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
-            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} voicedSwapToken={voicedSwapToken} hqRenderStatus={hqRenderStatusProp} hqRenderProgress={hqRenderProgressProp} sessionModel={sessionModel} onCanPlay={() => {
+            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} hqRenderStatus={hqRenderStatusProp} hqRenderProgress={hqRenderProgressProp} sessionModel={sessionModel} onCanPlay={() => {
               setIsVideoPlayable(true);
               if (!userSelectedTabRef.current) setActiveTab("preview");
             }} />
@@ -695,7 +584,7 @@ function toFilename(sessionId: string | null, model: string | null, suffix: stri
   return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
 }
 
-function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voicedSwapToken = 0, hqRenderStatus = null, hqRenderProgress = null, sessionModel = null, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; voicedSwapToken?: number; hqRenderStatus?: string | null; hqRenderProgress?: HqRenderProgress | null; sessionModel?: string | null; onCanPlay?: () => void }) {
+function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqRenderStatus = null, hqRenderProgress = null, sessionModel = null, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; hqRenderStatus?: string | null; hqRenderProgress?: HqRenderProgress | null; sessionModel?: string | null; onCanPlay?: () => void }) {
   // Compute full video URL first (before any hooks that use it)
   const fullVideoUrl = videoUrl?.startsWith("http") || videoUrl?.startsWith("/") ? videoUrl : null;
 
@@ -706,14 +595,8 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voi
   // Per-slot sources
   const [srcA, setSrcA] = useState<string | null>(() => fullVideoUrl);
   const [srcB, setSrcB] = useState<string | null>(null);
-  // Track swap request ID to ignore stale callbacks
-  const swapRequestIdRef = useRef(0);
-  // Track if a voiced swap is in progress
-  const swapInProgressRef = useRef(false);
-
-  // Get active and inactive video refs
+  // Get active video ref
   const videoRef = activeVideo === 'A' ? videoARef : videoBRef;
-  const inactiveVideoRef = activeVideo === 'A' ? videoBRef : videoARef;
 
   const progressBarRef = useRef<HTMLDivElement>(null);
   // Refs for throttled scrubbing - reduces Range requests during drag
@@ -767,11 +650,8 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voi
   const lastSubtitleUrlRef = useRef<string | null>(null);
   const lastChaptersUrlRef = useRef<string | null>(null);
 
-  // Track swap token for reset - declared here so session reset can access it
-  const prevSwapTokenRef = useRef(voicedSwapToken);
   // Track URL for sync - declared here so session reset can access it
   const prevFullVideoUrlRef = useRef(fullVideoUrl);
-  const lastReceivedTokenRef = useRef(voicedSwapToken);
 
   // withSwapVersionParam removed: appending ad-hoc query params can break signed URLs.
   // Cache busting is unnecessary because refreshed assets already produce a new URL.
@@ -797,13 +677,9 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voi
     setActiveVideo('A');
     setSrcA(fullVideoUrl);
     setSrcB(null);
-    swapRequestIdRef.current = 0;
-    swapInProgressRef.current = false;
-    // Reset swap token tracking to prevent false swap triggers
-    prevSwapTokenRef.current = voicedSwapToken;
     // Sync URL tracking ref to prevent redundant URL-sync effect run
     prevFullVideoUrlRef.current = fullVideoUrl;
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- fullVideoUrl/voicedSwapToken used for refs only, not effect triggers
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fullVideoUrl used for refs only, not effect triggers
   }, [sessionId]);
 
   // Reset URL tracking refs and clear stale data when videoUrl changes
@@ -824,7 +700,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voi
       setChapters([]);
       setCurrentSubtitle('');
     } else if (videoUrl !== prevVideoUrlRef.current || nonceChanged) {
-      // Same video path but different URL means a refreshed output (new scenes or voiceover)
+      // Same video path but different URL means a refreshed output (new scenes rendered)
       // Clear refs to trigger re-fetch, but keep existing data displayed for smooth transition
       lastSubtitleUrlRef.current = null;
       lastChaptersUrlRef.current = null;
@@ -833,40 +709,11 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voi
     prevVideoRefreshNonceRef.current = videoRefreshNonce;
   }, [videoUrl, videoRefreshNonce]);
 
-  useEffect(() => {
-    if (voicedSwapToken === lastReceivedTokenRef.current) return;
-    console.log('[VideoSwap] PreviewTab received new token', {
-      sessionId,
-      previousToken: lastReceivedTokenRef.current,
-      nextToken: voicedSwapToken,
-      fullVideoUrl,
-      activeVideo,
-    });
-    lastReceivedTokenRef.current = voicedSwapToken;
-  }, [sessionId, voicedSwapToken, fullVideoUrl, activeVideo]);
-
-  useEffect(() => {
-    console.log('[VideoSwap] fullVideoUrl updated in PreviewTab', {
-      sessionId,
-      fullVideoUrl,
-      rawVideoUrl: videoUrl,
-      voicedSwapToken,
-      activeVideo,
-    });
-  }, [sessionId, fullVideoUrl, videoUrl, voicedSwapToken, activeVideo]);
-
   // Note: fullVideoUrl is computed at the top of the function (before hooks)
   // to ensure it's available for state initialization
 
   // Sync srcA/srcB with fullVideoUrl for non-swap updates.
-  // Upstream nonce gating ensures same-base voiced URL refreshes are ignored before reaching here.
   useEffect(() => {
-    // Skip if swap in progress (swap effect handles URL change)
-    if (swapInProgressRef.current) return;
-
-    // Skip if swap token changed - a swap is about to happen, let swap effect handle it
-    if (voicedSwapToken !== prevSwapTokenRef.current) return;
-
     let rafId: number | undefined;
 
     // Update active slot if URL actually changed.
@@ -889,12 +736,10 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voi
       }
       // Explicitly call .load() after React flushes the src change to the DOM.
       // Without this, browsers may not reload an already-loaded video element
-      // when its src attribute changes (e.g., multi-turn: turn 2 silent video
-      // replacing turn 1 voiced video on the same element).
+      // when its src attribute changes (e.g., multi-turn: turn 2 video
+      // replacing turn 1 video on the same element).
       const el = activeVideoEl;
       rafId = requestAnimationFrame(() => {
-        // Skip if a swap started between effect and rAF (avoids redundant load)
-        if (swapInProgressRef.current) return;
         el?.load();
       });
     }
@@ -902,259 +747,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voi
 
     return () => { if (rafId !== undefined) cancelAnimationFrame(rafId); };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo
-  }, [fullVideoUrl, activeVideo, voicedSwapToken]);
-
-  // Seamless video swap effect - preload on inactive element, then swap visibility
-  useEffect(() => {
-    if (voicedSwapToken === prevSwapTokenRef.current) return;
-
-    // Guard against concurrent swaps - if one is in progress, just update the token ref
-    // and let the current swap complete. The next token change will trigger a new swap.
-    if (swapInProgressRef.current) {
-      console.log('[VideoSwap] Swap already in progress, updating token ref only', {
-        sessionId,
-        skippedToken: voicedSwapToken,
-        currentSwapRequestId: swapRequestIdRef.current,
-      });
-      prevSwapTokenRef.current = voicedSwapToken;
-      return;
-    }
-
-    console.log('[VideoSwap] Swap effect triggered', {
-      sessionId,
-      previousToken: prevSwapTokenRef.current,
-      nextToken: voicedSwapToken,
-      fullVideoUrl,
-      activeVideo,
-    });
-
-    if (!fullVideoUrl) {
-      console.warn('[VideoSwap] Swap skipped: no fullVideoUrl');
-      prevSwapTokenRef.current = voicedSwapToken;
-      return;
-    }
-
-    const activeVideoEl = videoRef.current;
-    const inactiveVideoEl = inactiveVideoRef.current;
-
-    if (!activeVideoEl || !inactiveVideoEl) {
-      console.warn('[VideoSwap] Swap skipped: video elements missing');
-      prevSwapTokenRef.current = voicedSwapToken;
-      return;
-    }
-
-    const requestId = ++swapRequestIdRef.current;
-    swapInProgressRef.current = true;
-    let settled = false;
-
-    // Use the full video URL directly for the swap.
-    // Note: Do NOT append cache-busting params to signed URLs - adding query
-    // params invalidates the AWS v4 signature, causing 503 errors.
-    const swapUrl = fullVideoUrl;
-
-    // Update React state for inactive element's src FIRST - before any DOM manipulation
-    // This ensures React doesn't re-render and reload the video after we set currentTime
-    const setInactiveSrc = activeVideo === 'A' ? setSrcB : setSrcA;
-    setInactiveSrc(swapUrl);
-
-    console.log('[VideoSwap] Preloading on inactive element', { requestId, swapUrl });
-
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    const cleanup = () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      inactiveVideoEl.removeEventListener('canplay', onCanPlay);
-      inactiveVideoEl.removeEventListener('error', onError);
-    };
-
-    const finishSwap = (success: boolean, reason: string) => {
-      if (settled || requestId !== swapRequestIdRef.current) return;
-      settled = true;
-      swapInProgressRef.current = false;
-      cleanup();
-      prevSwapTokenRef.current = voicedSwapToken;
-      prevFullVideoUrlRef.current = fullVideoUrl;
-      console.log('[VideoSwap] finishSwap', { success, reason, requestId });
-    };
-
-    // Fallback: update active video directly if seamless swap fails
-    const fallbackToDirectUpdate = (reason: string) => {
-      if (settled) return; // Guard against multiple calls
-      console.log('[VideoSwap] Falling back to direct update:', reason);
-
-      // Capture CURRENT state (not stale) for fallback
-      const currentTime = activeVideoEl.currentTime;
-      const currentRate = activeVideoEl.playbackRate;
-      const wasPaused = activeVideoEl.paused;
-      const currentVolume = activeVideoEl.volume;
-      const currentMuted = activeVideoEl.muted;
-
-      const setActiveSrc = activeVideo === 'A' ? setSrcA : setSrcB;
-      setActiveSrc(swapUrl);
-
-      // Restore state after src change via loadedmetadata
-      const restoreState = () => {
-        activeVideoEl.removeEventListener('loadedmetadata', restoreState);
-        try {
-          setDuration(Number.isFinite(activeVideoEl.duration) ? activeVideoEl.duration : 0);
-          const targetTime = Math.min(currentTime, Math.max(0, (activeVideoEl.duration || 0) - 0.1));
-          if (targetTime > 0 && Number.isFinite(targetTime)) {
-            activeVideoEl.currentTime = targetTime;
-          }
-          activeVideoEl.playbackRate = currentRate;
-          activeVideoEl.volume = currentVolume;
-          activeVideoEl.muted = currentMuted;
-          if (!wasPaused) {
-            activeVideoEl.play().catch(() => {});
-          }
-        } catch { /* ignore */ }
-      };
-      activeVideoEl.addEventListener('loadedmetadata', restoreState);
-
-      finishSwap(false, `fallback-${reason}`);
-    };
-
-    const onCanPlay = async () => {
-      // Guard: check settled AND requestId to prevent re-entry
-      if (settled || requestId !== swapRequestIdRef.current) return;
-      settled = true; // Set immediately to prevent re-entry
-      cleanup(); // Remove listeners immediately
-
-      // Capture FRESH playback state right before swap (not stale from effect start)
-      const freshTime = activeVideoEl.currentTime;
-      const freshRate = activeVideoEl.playbackRate;
-      const freshPaused = activeVideoEl.paused;
-      const freshVolume = activeVideoEl.volume;
-      const freshMuted = activeVideoEl.muted;
-      const inactiveDuration = inactiveVideoEl.duration;
-
-      console.log('[VideoSwap] Inactive video ready, executing swap', {
-        freshTime,
-        freshPaused,
-        freshRate,
-        inactiveDuration,
-        inactiveCurrentTimeBefore: inactiveVideoEl.currentTime,
-      });
-
-      try {
-        // Sync playback state to inactive video
-        const targetTime = Math.min(freshTime, Math.max(0, (inactiveDuration || 0) - 0.1));
-        if (targetTime > 0 && Number.isFinite(targetTime)) {
-          inactiveVideoEl.currentTime = targetTime;
-          console.log('[VideoSwap] Set inactive currentTime', { targetTime, actualTime: inactiveVideoEl.currentTime });
-        } else {
-          console.log('[VideoSwap] Skipped setting currentTime', { targetTime, freshTime, inactiveDuration });
-        }
-        inactiveVideoEl.playbackRate = freshRate;
-        inactiveVideoEl.volume = freshVolume;
-        inactiveVideoEl.muted = freshMuted;
-
-        // Wait for seek to complete before swapping
-        await new Promise<void>((resolve) => {
-          if (inactiveVideoEl.readyState >= 2) {
-            resolve();
-          } else {
-            const onSeeked = () => {
-              inactiveVideoEl.removeEventListener('seeked', onSeeked);
-              resolve();
-            };
-            inactiveVideoEl.addEventListener('seeked', onSeeked);
-            // Timeout for seek in case it never fires
-            setTimeout(resolve, 200);
-          }
-        });
-
-        // If was playing, start playback on inactive before swap
-        if (!freshPaused) {
-          try {
-            await inactiveVideoEl.play();
-          } catch (e) {
-            if ((e as Error).name !== 'AbortError') {
-              console.warn('[VideoSwap] Play on inactive failed, continuing anyway');
-              // Don't fallback - just swap without playing, user can click play
-            }
-          }
-        }
-
-        // Execute the swap - switch active video (src was already updated at effect start)
-        // Swap visibility (only once due to settled guard)
-        setActiveVideo(prev => prev === 'A' ? 'B' : 'A');
-
-        // Pause old video after a brief delay to avoid event handler conflicts
-        setTimeout(() => {
-          activeVideoEl.pause();
-        }, 50);
-
-        // Update refs for consistency
-        desiredTimeRef.current = targetTime;
-        desiredRateRef.current = freshRate;
-        desiredPausedRef.current = freshPaused;
-
-        // Update isPlaying state to match new video
-        setIsPlaying(!freshPaused);
-        setDuration(Number.isFinite(inactiveDuration) ? inactiveDuration : 0);
-
-        swapInProgressRef.current = false;
-        prevSwapTokenRef.current = voicedSwapToken;
-        prevFullVideoUrlRef.current = fullVideoUrl;
-
-        // Log final state after swap
-        const newActiveVideoEl = activeVideo === 'A' ? videoBRef.current : videoARef.current;
-        console.log('[VideoSwap] Seamless swap complete', {
-          requestId,
-          targetTime,
-          newActiveTime: newActiveVideoEl?.currentTime,
-          newActivePaused: newActiveVideoEl?.paused,
-          swappedFrom: activeVideo,
-          swappedTo: activeVideo === 'A' ? 'B' : 'A',
-        });
-      } catch (e) {
-        console.warn('[VideoSwap] Swap execution failed:', e);
-        settled = false; // Allow fallback
-        fallbackToDirectUpdate('execution-error');
-      }
-    };
-
-    const onError = () => {
-      if (settled || requestId !== swapRequestIdRef.current) return;
-      const mediaError = inactiveVideoEl.error;
-      console.warn('[VideoSwap] Preload error on inactive element', {
-        errorCode: mediaError?.code,
-        errorMessage: mediaError?.message,
-        networkState: inactiveVideoEl.networkState,
-        readyState: inactiveVideoEl.readyState,
-        srcBase: inactiveVideoEl.src?.split('?')[0],
-      });
-      fallbackToDirectUpdate('preload-error');
-    };
-
-    // Timeout fallback
-    timeoutId = setTimeout(() => {
-      if (settled || requestId !== swapRequestIdRef.current) return;
-      console.warn('[VideoSwap] Preload timeout');
-      fallbackToDirectUpdate('timeout');
-    }, 8000);
-
-    // Set up listeners and start preload on inactive element
-    inactiveVideoEl.addEventListener('canplay', onCanPlay);
-    inactiveVideoEl.addEventListener('error', onError);
-    // Don't set src directly on the DOM element - React state (setInactiveSrc above)
-    // handles the src update. Calling .load() after React renders via requestAnimationFrame
-    // to avoid a race where direct DOM manipulation + React re-render cause double loads.
-    const rafId = requestAnimationFrame(() => {
-      if (settled || requestId !== swapRequestIdRef.current) return;
-      inactiveVideoEl.load();
-    });
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      cleanup();
-      if (!settled && requestId === swapRequestIdRef.current) {
-        swapInProgressRef.current = false;
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voicedSwapToken, fullVideoUrl, activeVideo, sessionId]);
+  }, [fullVideoUrl, activeVideo]);
 
   // Gate on fullVideoUrl to avoid fetching before video exists.
   const fullSubtitleUrl = fullVideoUrl && sessionId
@@ -1715,7 +1308,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, voi
 
   return (
     <div data-video-container className="flex flex-col h-full bg-black relative">
-      {/* Video slots - active slot is updated directly on voiced swaps */}
+      {/* Video slots */}
       <div className="flex-1 relative flex items-center justify-center min-h-0">
         {/* Video A - active playback slot */}
         <video
