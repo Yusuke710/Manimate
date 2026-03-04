@@ -113,30 +113,25 @@ Write Manim Community Edition code in script.py.
     - `9:16` -> `pixel_width=480`, `pixel_height=854`, `frame_width=9`, `frame_height=16`, `frame_rate=15`
     - `1:1` -> `pixel_width=480`, `pixel_height=480`, `frame_width=8`, `frame_height=8`, `frame_rate=15`
    **Keep proportions matched** — Always keep `pixel_width / pixel_height == frame_width / frame_height`.
-3. **Use `duration_s` from timestamps.json as `run_time`** — Each subtitle entry maps directly to one `add_subcaption` block. Use `duration_s` as the exact total time budget for that segment.
+3. **Use `duration_s` from timestamps.json as `run_time`** — According to `timestamps.json`, inline the values as literals in `script.py`.
    - Set explicit `run_time=` on every `play()` call.
-   - End each segment with `self.wait(remaining)` where `remaining = duration_s - sum_of_play_runtimes`.
+   - End each segment with `self.wait(max(0, remaining))` where `remaining = duration_s - run_time`. Always clamp to avoid negative waits.
 
-Example using timestamps.json:
+Example:
 
 ```python
-import json
 from manim import *
-
-with open("timestamps.json") as f:
-    ts = json.load(f)["subtitles"]
-
-# ts[0] = {"index": 0, "text": "...", "start_s": 0.0, "end_s": 2.8, "duration_s": 2.8}
 
 class Scene1_Introduction(Scene):
     def construct(self):
         title = Text("My Topic", font_size=48, color=BLUE)
 
-        dur = ts[0]["duration_s"]   # e.g. 2.8
+        dur = 2.8                              
+        text = "Introduction to My Topic"    
         anim_rt = 1.5
-        self.add_subcaption(ts[0]["text"], duration=dur)
+        self.add_subcaption(text, duration=dur)
         self.play(Write(title), run_time=anim_rt)
-        self.wait(dur - anim_rt)
+        self.wait(max(0, dur - anim_rt))
 ```
 
 ### Phase 4: Render
