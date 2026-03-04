@@ -88,7 +88,7 @@ def ffprobe_duration(mp3_path: str) -> float:
 def concat_mp3s(parts: list[str], out_path: str) -> None:
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
         for p in parts:
-            f.write(f"file '{p}'\n")
+            f.write(f"file '{os.path.abspath(p)}'\n")
         list_file = f.name
     try:
         subprocess.run(
