@@ -18,6 +18,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -64,13 +65,24 @@ def tts_one(index: int, text: str, voice_id: str, api_key: str) -> tuple[int, st
     if cached.exists():
         return index, str(cached), True  # cache hit
 
-    resp = requests.post(
-        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-        headers={"xi-api-key": api_key, "Content-Type": "application/json"},
-        json={"text": text, "model_id": "eleven_turbo_v2_5"},
-        timeout=60,
-    )
-    resp.raise_for_status()
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+                json={"text": text, "model_id": "eleven_turbo_v2_5"},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            break
+        except requests.HTTPError as e:
+            if attempt == 2 or e.response.status_code < 500 and e.response.status_code != 429:
+                raise
+            time.sleep(2 ** attempt)
+        except (requests.ConnectionError, requests.Timeout):
+            if attempt == 2:
+                raise
+            time.sleep(2 ** attempt)
     CACHE_DIR.mkdir(exist_ok=True)
     cached.write_bytes(resp.content)
     return index, str(cached), False  # cache miss
