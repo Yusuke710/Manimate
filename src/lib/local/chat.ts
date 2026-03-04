@@ -358,7 +358,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
           const requestLine = rawPrompt
             ? rawPrompt
             : "[No text prompt in this turn. Use attached images if provided.]";
-          promptBody = `${recovered.historyPrompt}\n\n${requestLine}`;
+          promptBody = `${recovered.historyPrompt}\n\nCurrent user request:\n${requestLine}`;
         }
       }
 
