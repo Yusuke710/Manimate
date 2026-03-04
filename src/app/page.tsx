@@ -1560,7 +1560,7 @@ function HomeContent() {
               color: "var(--text-primary)",
               display: "flex", alignItems: "center", gap: 5,
             }}>
-              <span style={{ fontSize: 20, fontFamily: "'Computer Modern', 'Latin Modern Math', 'STIX Two Math', serif", color: "#40E0D0" }}>∑</span>
+              <span style={{ fontSize: 20, fontFamily: "'Computer Modern', 'Latin Modern Math', 'STIX Two Math', serif", color: "var(--accent)" }}>∑</span>
               Manimate
             </span>
             <div style={{ flex: 1 }} />

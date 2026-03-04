@@ -96,7 +96,7 @@ export function SessionsSidebar({
             fontSize: 22,
             fontWeight: 400,
             fontFamily: "'Computer Modern', 'Latin Modern Math', 'STIX Two Math', serif",
-            color: "#40E0D0",
+            color: "var(--accent)",
             lineHeight: 1,
             background: "none",
             border: "none",
@@ -194,7 +194,7 @@ export function SessionsSidebar({
           onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
         >
-          <span style={{ fontSize: 22, fontWeight: 400, fontFamily: "'Computer Modern', 'Latin Modern Math', 'STIX Two Math', serif", color: "#40E0D0", lineHeight: 1 }}>∑</span>
+          <span style={{ fontSize: 22, fontWeight: 400, fontFamily: "'Computer Modern', 'Latin Modern Math', 'STIX Two Math', serif", color: "var(--accent)", lineHeight: 1 }}>∑</span>
           <span style={{ fontSize: 19, fontWeight: 400, fontFamily: "var(--font-display)", color: "var(--text-primary)", lineHeight: 1 }}>Manimate</span>
         </button>
         <button

@@ -256,7 +256,7 @@ function MessageRow({ message, onImageClick }: { message: Message; onImageClick:
       {/* Manimate label */}
       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4 }}>
-          <span style={{ fontSize: 20, fontWeight: 400, fontFamily: "'Computer Modern', 'Latin Modern Math', 'STIX Two Math', serif", color: "#40E0D0" }}>∑</span>
+          <span style={{ fontSize: 20, fontWeight: 400, fontFamily: "'Computer Modern', 'Latin Modern Math', 'STIX Two Math', serif", color: "var(--accent)" }}>∑</span>
           <span style={{ fontSize: 17, fontWeight: 400, fontFamily: "var(--font-display)", color: "var(--text-primary)" }}>Manimate</span>
         </span>
       </div>

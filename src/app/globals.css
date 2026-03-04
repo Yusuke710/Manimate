@@ -21,16 +21,16 @@
   --border-light:     rgba(0,0,0,0.04);
   --border-input:     rgba(0,0,0,0.12);
 
-  --accent:           #40E0D0;
-  --accent-hover:     #33b3a6;
-  --accent-muted:     rgba(64,224,208,0.15);
+  --accent:           #2BB5A0;
+  --accent-hover:     #239687;
+  --accent-muted:     rgba(43,181,160,0.15);
 
   --green:            #16a34a;
   --yellow:           #d97706;
   --red:              #dc2626;
   --blue:             #0081f2;
 
-  --font: -apple-system, "system-ui", "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+  --font: var(--font-figtree, sans-serif);
   --font-display: "Computer Modern Serif", Georgia, "Times New Roman", serif;
 }
 
