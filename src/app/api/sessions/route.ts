@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
 import { isAspectRatio, type AspectRatio } from "@/lib/aspect-ratio";
+import { isValidVoiceId } from "@/lib/voices";
 import {
   createLocalSession,
   getLocalSession,
@@ -37,11 +38,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (isAspectRatio(body.aspect_ratio)) {
       aspectRatio = body.aspect_ratio;
     }
-    if (
-      body.voice_id &&
-      typeof body.voice_id === "string" &&
-      /^[a-zA-Z0-9]{8,64}$/.test(body.voice_id)
-    ) {
+    if (body.voice_id && typeof body.voice_id === "string" && isValidVoiceId(body.voice_id)) {
       voiceId = body.voice_id;
     }
   } catch {

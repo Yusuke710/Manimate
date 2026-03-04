@@ -7,6 +7,7 @@ export interface SSEEvent {
   type: "progress" | "complete" | "error" | "tool_use" | "tool_result" | "assistant_text" | "system_init";
   state?: "planning" | "coding" | "rendering" | "complete" | "error";
   message: string;
+  session_id?: string;
   sandbox_id?: string;
   claude_session_id?: string;
   video_url?: string;

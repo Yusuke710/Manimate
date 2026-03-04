@@ -24,6 +24,70 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## URL Launch Params
+
+Welcome-screen deep links support prefill and optional auto-send:
+
+- `prompt` (or alias `q`) pre-fills the welcome composer
+- `send=1` auto-sends immediately into a new session
+- optional: `model`, `voice_id` (or `voice`), `aspect_ratio`
+
+Examples:
+
+- `http://localhost:3000/?prompt=Animate%20Taylor%20series`
+- `http://localhost:3000/?prompt=Animate%20Bayes%20rule&send=1`
+- `http://localhost:3000/?prompt=Animate%20FFT&send=1&model=sonnet&aspect_ratio=16:9`
+
+## Tool API (Agents/CLI)
+
+Use one-step generation endpoint:
+
+- `POST /api/tool/generate`
+
+Request JSON:
+
+```json
+{
+  "prompt": "Animate eigenvectors in 2D",
+  "model": "opus",
+  "aspect_ratio": "16:9",
+  "voice_id": "Lci8YeL6PAFHJjNKvwXq"
+}
+```
+
+Behavior:
+
+- materializes (or reuses) a session,
+- runs the same local generation pipeline as the UI,
+- streams SSE events (same event types as `/api/chat`) with `session_id` included.
+
+## CLI Tool
+
+Run generation from shell/agents:
+
+```bash
+node scripts/manimate-tool.mjs generate --prompt "Animate Laplace transform" --json
+```
+
+Convenience npm script:
+
+```bash
+npm run tool:generate -- --prompt "Animate Laplace transform" --json
+```
+
+Useful flags:
+
+- `--session <id>` reuse session
+- `--model <opus|sonnet|haiku>`
+- `--aspect-ratio <16:9|9:16|1:1>`
+- `--voice <voice_id>`
+- `--base-url <http://localhost:3000>`
+- `--show-events` readable live event stream (stderr), while final JSON remains on stdout
+
+Agent-facing tool spec (OpenClaw style):
+
+- `docs/SKILL.md`
+
 ## Local Data Layout
 
 Default root: `~/.manimate/`

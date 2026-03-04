@@ -23,9 +23,11 @@ interface ChatInputProps {
   compact?: boolean;
   /** localStorage key for persisting draft text across refreshes. Omit to disable. */
   draftKey?: string;
+  /** One-time prompt prefill. Used for URL launch links. */
+  initialPrompt?: string;
 }
 
-export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false, disabled = false, placeholder, extraLeft, compact = false, draftKey }: ChatInputProps) {
+export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false, disabled = false, placeholder, extraLeft, compact = false, draftKey, initialPrompt }: ChatInputProps) {
   const [prompt, setPrompt] = useState("");
   const [images, setImages] = useState<ImagePreview[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -36,6 +38,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
   const scrollToBottomRef = useRef(false);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredRef = useRef(false); // set true after restore to skip one debounced save
+  const appliedInitialPromptRef = useRef<string | null>(null);
 
   // Restore draft from localStorage on mount (client-only to avoid hydration mismatch)
   useEffect(() => {
@@ -45,6 +48,17 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
       if (saved) { setPrompt(saved); restoredRef.current = true; }
     } catch { /* private mode / quota */ }
   }, [draftKey]);
+
+  // URL launch prompt should win over restored draft (applied once per distinct value)
+  useEffect(() => {
+    const normalized = initialPrompt?.trim();
+    if (!normalized) return;
+    if (appliedInitialPromptRef.current === normalized) return;
+    appliedInitialPromptRef.current = normalized;
+    setPrompt(normalized);
+    restoredRef.current = true;
+    scrollToBottomRef.current = true;
+  }, [initialPrompt]);
 
   // Draft persistence: debounce save to localStorage, flush on pagehide
   const promptRef = useRef(prompt);

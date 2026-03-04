@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useEffect, useCallback, useRef, useState, Suspense } from "react";
+import { useReducer, useEffect, useCallback, useRef, useState, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SplitPanel from "@/components/SplitPanel";
 import ChatInput from "@/components/ChatInput";
@@ -22,6 +22,7 @@ import {
   isAspectRatio,
   type AspectRatio,
 } from "@/lib/aspect-ratio";
+import { parseUrlLaunchIntent } from "@/lib/url-launch-intent";
 
 const MODEL_PREF_KEY = "manimate-preferred-model";
 const VOICE_PREF_KEY = "manimate-preferred-voice";
@@ -1344,8 +1345,13 @@ function HomeContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [aspectRatio, setAspectRatio] = usePreferredAspectRatio();
+  const searchParamsString = searchParams.toString();
 
   const activeSessionId = searchParams.get("session");
+  const launchIntent = useMemo(() => {
+    if (activeSessionId) return null;
+    return parseUrlLaunchIntent(searchParamsString);
+  }, [activeSessionId, searchParamsString]);
   useEffect(() => {
     if (isMobile) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional UX behavior: collapse sidebar when entering a session
@@ -1356,6 +1362,8 @@ function HomeContent() {
   const sessionCreationRef = useRef<{ id: string; ready: Promise<boolean> } | null>(null);
   const [pendingSessionReady, setPendingSessionReady] = useState<{ id: string; ready: Promise<boolean> } | null>(null);
   const pendingWelcomePayloadRef = useRef<Map<string, { prompt: string; images?: File[] }>>(new Map());
+  const appliedLaunchAspectRef = useRef<string | null>(null);
+  const consumedLaunchAutoSendRef = useRef<string | null>(null);
 
   const handleNewSession = useCallback(() => { router.push("/"); }, [router]);
 
@@ -1387,7 +1395,7 @@ function HomeContent() {
     return payload;
   }, []);
 
-  const handleWelcomeSend = useCallback((prompt: string, images?: File[], model?: string, voice?: string) => {
+  const handleWelcomeSend = useCallback((prompt: string, images?: File[], model?: string, voice?: string, ratioOverride?: AspectRatio) => {
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt && (!images || images.length === 0)) return;
     if (sessionCreationRef.current) return; // prevent double-submit
@@ -1405,7 +1413,7 @@ function HomeContent() {
       body: JSON.stringify({
         id, model,
         ...(voice ? { voice_id: voice } : {}),
-        aspect_ratio: aspectRatio,
+        aspect_ratio: ratioOverride ?? aspectRatio,
       }),
       signal: abortCtl.signal,
     }).then(r => r.ok).catch(() => false as const).then((ok) => {
@@ -1426,6 +1434,35 @@ function HomeContent() {
 
   // Determine UX stage
   const isWelcome = !activeSessionId;
+
+  useEffect(() => {
+    if (isWelcome) return;
+    appliedLaunchAspectRef.current = null;
+    consumedLaunchAutoSendRef.current = null;
+  }, [isWelcome]);
+
+  // Apply deep-link aspect ratio once per URL in welcome mode.
+  useEffect(() => {
+    if (!isWelcome || !launchIntent?.aspectRatio) return;
+    if (appliedLaunchAspectRef.current === searchParamsString) return;
+    appliedLaunchAspectRef.current = searchParamsString;
+    setAspectRatio(launchIntent.aspectRatio);
+  }, [isWelcome, launchIntent?.aspectRatio, searchParamsString, setAspectRatio]);
+
+  // Optional deep-link auto-send: /?prompt=...&send=1
+  useEffect(() => {
+    if (!isWelcome || !launchIntent || !launchIntent.autoSend) return;
+    const key = `auto:${searchParamsString}`;
+    if (consumedLaunchAutoSendRef.current === key) return;
+    consumedLaunchAutoSendRef.current = key;
+    handleWelcomeSend(
+      launchIntent.prompt,
+      undefined,
+      launchIntent.model,
+      launchIntent.voiceId,
+      launchIntent.aspectRatio,
+    );
+  }, [isWelcome, launchIntent, searchParamsString, handleWelcomeSend]);
 
   // Close mobile sidebar when navigating to a session
   const handleMobileSessionSelect = useCallback((sessionId: string) => {
@@ -1539,6 +1576,9 @@ function HomeContent() {
             aspectRatio={aspectRatio}
             onAspectRatioChange={setAspectRatio}
             isMobile={isMobile}
+            initialPrompt={launchIntent?.prompt}
+            initialModel={launchIntent?.model}
+            initialVoice={launchIntent?.voiceId}
           />
         ) : (
           <ChatPanel
@@ -1568,15 +1608,37 @@ function WelcomeView({
   aspectRatio,
   onAspectRatioChange,
   isMobile = false,
+  initialPrompt,
+  initialModel,
+  initialVoice,
 }: {
-  onSend: (prompt: string, images?: File[], model?: string, voice?: string) => void;
+  onSend: (prompt: string, images?: File[], model?: string, voice?: string, ratioOverride?: AspectRatio) => void;
   onPrewarm?: () => void;
   aspectRatio: AspectRatio;
   onAspectRatioChange: (ratio: AspectRatio) => void;
   isMobile?: boolean;
+  initialPrompt?: string;
+  initialModel?: string;
+  initialVoice?: string;
 }) {
   const [model, setModel] = usePreferredModel();
   const [voice, setVoice] = usePreferredVoice();
+  const appliedInitialModelRef = useRef<string | null>(null);
+  const appliedInitialVoiceRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!initialModel) return;
+    if (appliedInitialModelRef.current === initialModel) return;
+    appliedInitialModelRef.current = initialModel;
+    setModel(initialModel);
+  }, [initialModel, setModel]);
+
+  useEffect(() => {
+    if (!initialVoice) return;
+    if (appliedInitialVoiceRef.current === initialVoice) return;
+    appliedInitialVoiceRef.current = initialVoice;
+    setVoice(initialVoice);
+  }, [initialVoice, setVoice]);
 
   const handleSend = useCallback((prompt: string, images?: File[]) => {
     const trimmedPrompt = prompt.trim();
@@ -1611,6 +1673,7 @@ function WelcomeView({
           onPrewarm={onPrewarm}
           placeholder="Describe a math concept to animate..."
           draftKey="chat-draft:welcome"
+          initialPrompt={initialPrompt}
           extraLeft={
             <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 6, flexWrap: "wrap" }}>
               <ModelSelector model={model} onChange={setModel} />

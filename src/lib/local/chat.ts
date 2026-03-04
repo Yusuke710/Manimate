@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
-import type { NextRequest } from "next/server";
 import { parseNDJSONChunk } from "@/lib/ndjson-parser";
 import { transformCliError } from "@/lib/cli-error";
 import { DEFAULT_MODEL } from "@/lib/models";
@@ -16,7 +15,6 @@ import {
   createLocalRun,
   getLocalSession,
   insertLocalActivityEvent,
-  hasLocalMessages,
   insertLocalMessage,
   listLocalMessages,
   updateLocalRun,
@@ -54,6 +52,7 @@ type LocalSSEEvent = {
   type: "progress" | "complete" | "error" | "tool_use" | "tool_result" | "assistant_text" | "system_init";
   state?: "planning" | "coding" | "rendering" | "complete" | "error";
   message: string;
+  session_id?: string;
   sandbox_id?: string;
   claude_session_id?: string;
   run_id?: string;
@@ -175,12 +174,13 @@ function buildPrompt(input: {
 // In-process startup lock: sessionIds currently initializing a run (between guard check and process registration).
 const startingSessionIds = new Set<string>();
 
-export async function handleLocalChatRequest(request: NextRequest): Promise<Response> {
+export async function handleLocalChatRequest(request: Request): Promise<Response> {
   const encoder = new TextEncoder();
   const stream = new TransformStream();
   const writer = stream.writable.getWriter();
 
   let clientAborted = false;
+  let activeSessionId: string | null = null;
   request.signal.addEventListener("abort", async () => {
     clientAborted = true;
     try {
@@ -193,7 +193,10 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
   const sendEvent = async (event: LocalSSEEvent) => {
     if (clientAborted) return;
     try {
-      await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      const payload = activeSessionId && !event.session_id
+        ? { ...event, session_id: activeSessionId }
+        : event;
+      await writer.write(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
     } catch {
       clientAborted = true;
     }
@@ -235,6 +238,7 @@ export async function handleLocalChatRequest(request: NextRequest): Promise<Resp
         return;
       }
       sessionId = body.session_id;
+      activeSessionId = sessionId;
 
       const promptStr = typeof body.prompt === "string" ? body.prompt : "";
       const rawPrompt = promptStr.trim();
