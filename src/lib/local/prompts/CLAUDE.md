@@ -136,6 +136,13 @@ class Scene1_Introduction(Scene):
 
 ### Phase 4: Render
 
+#### Run subtitle lint first to ensure subtitles and animations match
+
+```
+python lint-subtitles.py script.py
+```
+Proceed to render only if it passes. Otherwise, modify the code.
+
 #### Render with Manim
 
 ```

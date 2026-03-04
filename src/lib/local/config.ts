@@ -61,6 +61,12 @@ const TTS_GENERATE_PATH = path.join(
   "tts-generate.py"
 );
 
+const SUBTITLE_LINTER_PATH = path.join(
+  process.cwd(),
+  "scripts",
+  "lint-subtitles.py"
+);
+
 export function ensureLocalSessionLayout(sessionId: string): {
   sessionRoot: string;
   projectDir: string;
@@ -91,6 +97,17 @@ export function ensureLocalSessionLayout(sessionId: string): {
       fs.copyFileSync(TTS_GENERATE_PATH, destTtsGenerate);
     } catch {
       // Non-fatal: TTS step will fail gracefully if script is missing.
+    }
+  }
+
+  // Copy subtitle linter into project dir so Claude Code can run:
+  // `python lint-subtitles.py script.py`
+  const destSubtitleLinter = path.join(paths.projectDir, "lint-subtitles.py");
+  if (!fs.existsSync(destSubtitleLinter)) {
+    try {
+      fs.copyFileSync(SUBTITLE_LINTER_PATH, destSubtitleLinter);
+    } catch {
+      // Non-fatal: rendering can proceed without this pre-check.
     }
   }
 
