@@ -12,6 +12,8 @@ export interface ActiveLocalRunProcess {
 }
 
 const activeBySandboxId = new Map<string, ActiveLocalRunProcess>();
+const startingSessionIds = new Set<string>();
+const pendingCancelBySessionId = new Set<string>();
 
 const LOCAL_CLAUDE_ENV_KEYS_TO_REMOVE = [
   "ANTHROPIC_API_KEY",
@@ -26,6 +28,71 @@ function cleanupEntry(sandboxId: string, pid: number | undefined): void {
   if (!current) return;
   if (pid && current.process.pid !== pid) return;
   activeBySandboxId.delete(sandboxId);
+}
+
+function isProcessDone(process: ChildProcessWithoutNullStreams): boolean {
+  return process.exitCode !== null || process.signalCode !== null;
+}
+
+function waitForProcessExit(
+  process: ChildProcessWithoutNullStreams,
+  timeoutMs: number
+): Promise<boolean> {
+  if (isProcessDone(process)) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const onExit = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      process.off("exit", onExit);
+      resolve(false);
+    }, timeoutMs);
+    process.once("exit", onExit);
+  });
+}
+
+async function terminateLocalRunProcess(target: ActiveLocalRunProcess): Promise<void> {
+  target.canceled = true;
+
+  try {
+    target.process.kill("SIGTERM");
+  } catch {
+    // Process may already be gone.
+  }
+
+  const exitedAfterTerm = await waitForProcessExit(target.process, 500);
+  if (exitedAfterTerm) return;
+
+  try {
+    target.process.kill("SIGKILL");
+  } catch {
+    // Ignore final kill failure.
+  }
+  await waitForProcessExit(target.process, 500);
+}
+
+export function beginLocalRunStart(sessionId: string): boolean {
+  if (startingSessionIds.has(sessionId) || getActiveLocalRunBySessionId(sessionId)) {
+    return false;
+  }
+  startingSessionIds.add(sessionId);
+  return true;
+}
+
+export function endLocalRunStart(sessionId: string): void {
+  startingSessionIds.delete(sessionId);
+  pendingCancelBySessionId.delete(sessionId);
+}
+
+function isLocalRunStarting(sessionId: string): boolean {
+  return startingSessionIds.has(sessionId);
 }
 
 export function registerLocalRunProcess(input: {
@@ -50,6 +117,10 @@ export function registerLocalRunProcess(input: {
   input.process.once("error", () => {
     cleanupEntry(input.sandboxId, input.process.pid);
   });
+
+  if (pendingCancelBySessionId.delete(input.sessionId)) {
+    void terminateLocalRunProcess(entry);
+  }
 }
 
 export function getActiveLocalRunBySandboxId(
@@ -76,12 +147,17 @@ export async function cancelLocalRunProcess(input: {
   sessionId?: string | null;
   pid?: number | null;
 }): Promise<{ success: boolean; message: string; runId?: string | null }> {
+  const requestedSessionId = input.sessionId || input.sandboxId || null;
   const target =
     (input.sandboxId && getActiveLocalRunBySandboxId(input.sandboxId)) ||
     (input.sessionId && getActiveLocalRunBySessionId(input.sessionId)) ||
     null;
 
   if (!target) {
+    if (requestedSessionId && isLocalRunStarting(requestedSessionId)) {
+      pendingCancelBySessionId.add(requestedSessionId);
+      return { success: true, message: "Local run is starting; cancellation queued" };
+    }
     return { success: true, message: "No active local process" };
   }
 
@@ -89,23 +165,7 @@ export async function cancelLocalRunProcess(input: {
     return { success: true, message: "Requested process already exited", runId: target.runId };
   }
 
-  target.canceled = true;
-
-  try {
-    target.process.kill("SIGTERM");
-  } catch {
-    // Process may already be gone.
-  }
-
-  await new Promise((resolve) => setTimeout(resolve, 300));
-
-  if (!target.process.killed) {
-    try {
-      target.process.kill("SIGKILL");
-    } catch {
-      // Ignore final kill failure.
-    }
-  }
+  await terminateLocalRunProcess(target);
 
   return { success: true, message: "Local Claude process canceled", runId: target.runId };
 }

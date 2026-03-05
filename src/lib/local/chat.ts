@@ -21,8 +21,9 @@ import {
   updateLocalSession,
 } from "@/lib/local/db";
 import {
+  beginLocalRunStart,
+  endLocalRunStart,
   getActiveLocalRunBySandboxId,
-  getActiveLocalRunBySessionId,
   registerLocalRunProcess,
   spawnLocalClaudeProcess,
 } from "@/lib/local/runtime";
@@ -171,9 +172,6 @@ function buildPrompt(input: {
   return `**Project Directory**: \`${input.projectDir}\` (cwd is already set)\n\n**Aspect Ratio**: ${input.aspectRatio}\n\n**Voice ID**: ${input.voiceId}\n\n${input.prompt}${imageSection}`;
 }
 
-// In-process startup lock: sessionIds currently initializing a run (between guard check and process registration).
-const startingSessionIds = new Set<string>();
-
 export async function handleLocalChatRequest(request: Request): Promise<Response> {
   const encoder = new TextEncoder();
   const stream = new TransformStream();
@@ -272,8 +270,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       const { projectDir, sessionRoot } = ensureLocalSessionLayout(sessionId);
 
       // Prevent double-spawn: reject if a process is running OR we're mid-initialization.
-      // startingSessionIds closes the race window between this check and process registration.
-      if (startingSessionIds.has(sessionId) || getActiveLocalRunBySessionId(sessionId)) {
+      if (!beginLocalRunStart(sessionId)) {
         await sendEvent({
           type: "error",
           state: "error",
@@ -281,7 +278,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         });
         return;
       }
-      startingSessionIds.add(sessionId);
 
       if (rawPrompt) {
         if (session.title === "Untitled Animation") {
@@ -789,7 +785,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         });
       }
     } finally {
-      if (sessionId) startingSessionIds.delete(sessionId);
+      if (sessionId) endLocalRunStart(sessionId);
       try {
         await writer.close();
       } catch {

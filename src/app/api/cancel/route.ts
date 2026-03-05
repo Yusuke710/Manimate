@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionIdFromSandboxId } from "@/lib/local/config";
 import {
-  getLocalLatestRunBySandboxId,
+  getLocalRun,
   updateLocalRun,
 } from "@/lib/local/db";
 import { cancelLocalRunProcess } from "@/lib/local/runtime";
@@ -31,20 +31,21 @@ export async function POST(request: NextRequest): Promise<Response> {
       pid: Number.isInteger(body.command_pid) ? body.command_pid : null,
     });
 
-    const latestRun = sandboxId ? getLocalLatestRunBySandboxId(sandboxId) : null;
-    const runToUpdate = result.runId || latestRun?.id || null;
-    const candidateRun = runToUpdate ? (latestRun && latestRun.id === runToUpdate ? latestRun : null) : null;
-    if (runToUpdate && (!candidateRun || candidateRun.status === "queued" || candidateRun.status === "running")) {
-      updateLocalRun(runToUpdate, {
-        status: "canceled",
-        finished_at: new Date().toISOString(),
-        error_message: "Stopped by user",
-      });
+    if (result.runId) {
+      const run = getLocalRun(result.runId);
+      if (run && (run.status === "queued" || run.status === "running")) {
+        updateLocalRun(result.runId, {
+          status: "canceled",
+          finished_at: new Date().toISOString(),
+          error_message: "Stopped by user",
+        });
+      }
     }
 
     return NextResponse.json({
       success: result.success,
       message: result.message,
+      run_id: result.runId ?? null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to cancel run";

@@ -1160,21 +1160,30 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
       dispatch({ type: "UPDATE_ASSISTANT_MESSAGE", id: assistantMessageId, content: "Cancelled by user" });
     }
 
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-
+    const currentSessionId = sessionId;
     const currentSandboxId = sandboxIdRef.current;
-    if (currentSandboxId) {
+    if (currentSandboxId || currentSessionId) {
       try {
-        await fetch("/api/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sandbox_id: currentSandboxId }) });
+        await fetch("/api/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...(currentSandboxId ? { sandbox_id: currentSandboxId } : {}),
+            ...(currentSessionId ? { session_id: currentSessionId } : {}),
+          }),
+        });
       } catch { /* Ignore cancel API errors */ }
     }
+    addActivity({ type: "complete", message: "Stopped by user" });
+
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
 
     reconnectedRunIdRef.current = null;
     dispatch({ type: "SET_LOADING", isLoading: false });
     dispatch({ type: "SET_CANCELLING", isCancelling: false });
     dispatch({ type: "SET_STATUS", statusMessage: null });
-  }, [state.isLoading, state.isCancelling]);
+  }, [addActivity, sessionId, state.isLoading, state.isCancelling]);
 
   const hasArtifacts = !!(state.planContent || state.scriptContent || state.videoUrl);
   const [mobileArtifactOpen, setMobileArtifactOpen] = useState(false);
