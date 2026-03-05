@@ -12,7 +12,7 @@
   "type": "object",
   "properties": {
     "prompt": { "type": "string", "description": "Natural-language animation request." },
-    "base_url": { "type": "string", "description": "Manimate server URL. Example: http://localhost:3003" },
+    "base_url": { "type": "string", "description": "Manimate server URL. Example: http://localhost:3000" },
     "session_id": { "type": "string", "description": "Optional existing session ID to continue." },
     "model": { "type": "string", "enum": ["opus", "sonnet", "haiku"] },
     "aspect_ratio": { "type": "string", "enum": ["16:9", "9:16", "1:1"] },
@@ -54,7 +54,7 @@ Single command pattern (recommended; remove flags you do not need):
 node scripts/manimate-tool.mjs generate \
   --prompt "Animate Laplace transform" \
   --json \
-  --base-url "http://localhost:3003" \
+  --base-url "http://localhost:3000" \
   --show-events \
   --model "sonnet" \
   --aspect-ratio "16:9" \
@@ -67,7 +67,7 @@ Continue an existing session (only when needed):
 node scripts/manimate-tool.mjs generate \
   --prompt "Now add a real-world signal example" \
   --json \
-  --base-url "http://localhost:3003" \
+  --base-url "http://localhost:3000" \
   --session "b92794d1-2279-477b-b818-064d78d272b1"
 ```
 
@@ -82,7 +82,7 @@ Final JSON object (`stdout`):
   "session_id": "b92794d1-2279-477b-b818-064d78d272b1",
   "run_id": "6fea0020-7f6a-4d97-bcb9-44327b3fdee9",
   "video_url": "/api/files?session_id=...&path=.../video.mp4&_v=...",
-  "review_url": "http://localhost:3003/?session=b92794d1-2279-477b-b818-064d78d272b1",
+  "review_url": "http://localhost:3000/?session=b92794d1-2279-477b-b818-064d78d272b1",
   "message": "Complete"
 }
 ```
@@ -105,7 +105,7 @@ Field semantics:
 [manimate] tool_use Bash manim script.py Scene1
 [manimate] tool_result ok Rendered Scene1 to media/videos/...
 [manimate] complete run=...
-Review in browser: http://localhost:3003/?session=...
+Review in browser: http://localhost:3000/?session=...
 ```
 
 ## Artifact Retrieval
