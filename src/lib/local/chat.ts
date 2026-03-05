@@ -39,6 +39,7 @@ import {
 } from "@/lib/aspect-ratio";
 import { DEFAULT_VOICE_ID } from "@/lib/voices";
 import { buildConversationRecoveryContext } from "@/lib/conversation-recovery";
+import type { TerminalStatus } from "@/lib/types";
 
 type LocalChatRequest = {
   prompt: string;
@@ -65,6 +66,7 @@ type LocalSSEEvent = {
   is_error?: boolean;
   model?: string;
   tools?: string[];
+  terminal_status?: TerminalStatus;
 };
 
 type ExecutionState = "planning" | "coding" | "rendering";
@@ -664,11 +666,14 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           type: "complete",
           state: "complete",
           message: "Stopped by user",
+          terminal_status: "canceled",
           sandbox_id: sandboxId,
           claude_session_id: claudeSessionId || undefined,
           run_id: runId,
         });
-        await persistActivity("complete", "Stopped by user");
+        await persistActivity("complete", "Stopped by user", {
+          terminal_status: "canceled",
+        });
         return;
       }
 
@@ -744,12 +749,16 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         type: "complete",
         state: "complete",
         message: "Complete",
+        terminal_status: "completed",
         sandbox_id: sandboxId,
         claude_session_id: claudeSessionId || undefined,
         run_id: runId,
         video_url: videoUrl || undefined,
       });
-      await persistActivity("complete", "Complete", videoUrl ? { video_url: videoUrl } : undefined);
+      await persistActivity("complete", "Complete", {
+        ...(videoUrl ? { video_url: videoUrl } : {}),
+        terminal_status: "completed",
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "An unexpected local-mode error occurred";
       if (runId) {

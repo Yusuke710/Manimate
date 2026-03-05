@@ -355,7 +355,10 @@ async function streamGenerate(options) {
           sawTerminal = true;
         } else if (event.type === "complete") {
           const completeMsg = typeof event.message === "string" ? event.message : "Complete";
-          status = completeMsg === "Stopped by user" ? "canceled" : "completed";
+          const terminalStatus = event.terminal_status === "canceled" || event.terminal_status === "completed"
+            ? event.terminal_status
+            : null;
+          status = terminalStatus || (completeMsg === "Stopped by user" ? "canceled" : "completed");
           message = completeMsg;
           sawTerminal = true;
         }

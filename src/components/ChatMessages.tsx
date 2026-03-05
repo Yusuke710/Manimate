@@ -40,7 +40,10 @@ function buildTimeline(messages: Message[], activities: ActivityEvent[]): Timeli
 
   const filteredActivities = activities.filter(a => {
     if (a.type === "progress") return false;
-    if (a.type === "complete") return a.message.trim().toLowerCase() === "stopped by user";
+    if (a.type === "complete") {
+      if (a.terminalStatus) return a.terminalStatus === "canceled";
+      return a.message.trim().toLowerCase() === "stopped by user";
+    }
     if (a.type === "assistant_text") {
       const normalized = a.message.trim().slice(0, 200);
       if (assistantMessageContents.has(normalized)) return false;

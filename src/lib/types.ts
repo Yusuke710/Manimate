@@ -2,6 +2,8 @@
  * Shared types used across client and server
  */
 
+export type TerminalStatus = "completed" | "canceled";
+
 // SSE event types from /api/chat
 export interface SSEEvent {
   type: "progress" | "complete" | "error" | "tool_use" | "tool_result" | "assistant_text" | "system_init";
@@ -31,6 +33,7 @@ export interface SSEEvent {
   elapsed_ms?: number;
   command_started_at?: string;
   command_deadline_at?: string;
+  terminal_status?: TerminalStatus;
 }
 
 // Activity event for tracking Claude's actions
@@ -53,6 +56,7 @@ export interface ActivityEvent {
   elapsedMs?: number;
   commandStartedAt?: string;
   commandDeadlineAt?: string;
+  terminalStatus?: TerminalStatus;
 }
 
 // Activity event from database (Manus Pattern: Persisted Activity Stream)
@@ -77,6 +81,7 @@ export interface DBActivityEvent {
     elapsed_ms?: number;
     command_started_at?: string;
     command_deadline_at?: string;
+    terminal_status?: TerminalStatus;
   } | null;
   created_at: string;
 }
@@ -113,6 +118,7 @@ export function dbActivityEventToUI(dbEvent: DBActivityEvent): ActivityEvent {
     elapsedMs: dbEvent.payload?.elapsed_ms,
     commandStartedAt: dbEvent.payload?.command_started_at,
     commandDeadlineAt: dbEvent.payload?.command_deadline_at,
+    terminalStatus: dbEvent.payload?.terminal_status,
     turnId: dbEvent.turn_id || undefined,
   };
 }

@@ -1099,7 +1099,11 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
               lastState = event.state || lastState;
             } else if (event.type === "complete") {
               dispatch({ type: "SET_STATUS", statusMessage: null });
-              addActivity({ type: "complete", message: event.message || "Complete" }, turnId);
+              addActivity({
+                type: "complete",
+                message: event.message || "Complete",
+                terminalStatus: event.terminal_status,
+              }, turnId);
               if (event.video_url) {
                 videoUrlRef.current = event.video_url;
                 videoUrlBaseRef.current = event.video_url.split('?')[0];
@@ -1174,7 +1178,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
         });
       } catch { /* Ignore cancel API errors */ }
     }
-    addActivity({ type: "complete", message: "Stopped by user" });
+    addActivity({ type: "complete", message: "Stopped by user", terminalStatus: "canceled" });
 
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
