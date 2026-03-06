@@ -23,11 +23,6 @@ export interface LocalSession {
   script_content: string | null;
   subtitles_content: string | null;
   chapters: string | null;
-  voiceover_status: string | null;
-  voiceover_error: string | null;
-  voiceover_audio_path: string | null;
-  hq_render_status: string | null;
-  hq_render_progress: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -81,11 +76,6 @@ type SessionUpdateInput = Partial<{
   script_content: string | null;
   subtitles_content: string | null;
   chapters: string | null;
-  voiceover_status: string | null;
-  voiceover_error: string | null;
-  voiceover_audio_path: string | null;
-  hq_render_status: string | null;
-  hq_render_progress: string | null;
 }>;
 
 type RunUpdateInput = Partial<{
@@ -115,11 +105,6 @@ function getTableColumns(database: DatabaseSync, tableName: string): Set<string>
 function ensureSessionColumns(database: DatabaseSync): void {
   const existing = getTableColumns(database, "sessions");
   const required: Array<{ name: string; ddl: string }> = [
-    { name: "voiceover_status", ddl: "voiceover_status TEXT" },
-    { name: "voiceover_error", ddl: "voiceover_error TEXT" },
-    { name: "voiceover_audio_path", ddl: "voiceover_audio_path TEXT" },
-    { name: "hq_render_status", ddl: "hq_render_status TEXT" },
-    { name: "hq_render_progress", ddl: "hq_render_progress TEXT" },
     { name: "voice_id", ddl: "voice_id TEXT" },
     { name: "chapters", ddl: "chapters TEXT" },
     {
@@ -160,15 +145,6 @@ function mapSession(row: Record<string, unknown>): LocalSession {
     script_content: row.script_content ? String(row.script_content) : null,
     subtitles_content: row.subtitles_content ? String(row.subtitles_content) : null,
     chapters: row.chapters ? String(row.chapters) : null,
-    voiceover_status: row.voiceover_status ? String(row.voiceover_status) : null,
-    voiceover_error: row.voiceover_error ? String(row.voiceover_error) : null,
-    voiceover_audio_path: row.voiceover_audio_path
-      ? String(row.voiceover_audio_path)
-      : null,
-    hq_render_status: row.hq_render_status ? String(row.hq_render_status) : null,
-    hq_render_progress: row.hq_render_progress
-      ? String(row.hq_render_progress)
-      : null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -240,11 +216,6 @@ function openDb(): DatabaseSync {
       script_content TEXT,
       subtitles_content TEXT,
       chapters TEXT,
-      voiceover_status TEXT,
-      voiceover_error TEXT,
-      voiceover_audio_path TEXT,
-      hq_render_status TEXT,
-      hq_render_progress TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       last_user_activity_at TEXT NOT NULL DEFAULT ''
@@ -338,17 +309,12 @@ export function createLocalSession(input: {
         script_content,
         subtitles_content,
         chapters,
-        voiceover_status,
-        voiceover_error,
-        voiceover_audio_path,
-        hq_render_status,
-        hq_render_progress,
         created_at,
         updated_at,
         last_user_activity_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `)
     .run(
@@ -360,11 +326,6 @@ export function createLocalSession(input: {
       input.model,
       input.aspect_ratio ?? null,
       input.voice_id ?? null,
-      null,
-      null,
-      null,
-      null,
-      null,
       null,
       null,
       null,
@@ -405,11 +366,6 @@ export function updateLocalSession(sessionId: string, updates: SessionUpdateInpu
     "script_content",
     "subtitles_content",
     "chapters",
-    "voiceover_status",
-    "voiceover_error",
-    "voiceover_audio_path",
-    "hq_render_status",
-    "hq_render_progress",
   ]);
 
   const keys = Object.keys(updates).filter((k) =>

@@ -32,7 +32,6 @@ import {
   serializeLocalChapters,
 } from "@/lib/local/chapters";
 import { readLocalProjectSubtitles } from "@/lib/local/subtitles";
-import { clearLocalHqArtifacts } from "@/lib/local/hq-render";
 import {
   DEFAULT_ASPECT_RATIO,
   isAspectRatio,
@@ -716,10 +715,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         metadata: videoUrl ? { video_url: videoUrl } : null,
       });
 
-      if (videoChanged) {
-        await clearLocalHqArtifacts(sessionId);
-      }
-
       const planTitle = planContent ? extractPlanTitle(planContent) : null;
       updateLocalSession(sessionId, {
         status: "active",
@@ -733,8 +728,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         chapters: videoChanged ? serializedChapters : session.chapters,
         video_path: videoChanged && postRunVideo ? postRunVideo.path : session.video_path,
         last_video_url: videoUrl || session.last_video_url,
-        hq_render_status: videoChanged ? null : session.hq_render_status,
-        hq_render_progress: videoChanged ? null : session.hq_render_progress,
       });
 
       updateLocalRun(runId, {

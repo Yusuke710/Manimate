@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 
 import { useIsMobile } from "@/lib/useIsMobile";
-import type { HqRenderProgress } from "@/lib/types";
 
 type Tab = "plan" | "code" | "preview";
 
@@ -14,13 +13,11 @@ interface PreviewPanelProps {
   sessionId?: string | null;
   planContent?: string | null;
   scriptContent?: string | null;
-  hqRenderStatus?: string | null;
-  hqRenderProgress?: HqRenderProgress | null;
   sessionModel?: string | null;
   onRequestHqRender?: () => void;
 }
 
-export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, hqRenderStatus: hqRenderStatusProp = null, hqRenderProgress: hqRenderProgressProp = null, sessionModel = null, onRequestHqRender }: PreviewPanelProps) {
+export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, onRequestHqRender }: PreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>("plan");
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
   const [isVideoPlayable, setIsVideoPlayable] = useState(false);
@@ -112,7 +109,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
             <CodeTab content={scriptContent} />
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
-            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} hqRenderStatus={hqRenderStatusProp} hqRenderProgress={hqRenderProgressProp} sessionModel={sessionModel} onRequestHqRender={onRequestHqRender} onCanPlay={() => {
+            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} sessionModel={sessionModel} onRequestHqRender={onRequestHqRender} onCanPlay={() => {
               setIsVideoPlayable(true);
               if (!userSelectedTabRef.current) setActiveTab("preview");
             }} />
@@ -585,7 +582,7 @@ function toFilename(sessionId: string | null, model: string | null, suffix: stri
   return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
 }
 
-function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqRenderStatus = null, hqRenderProgress = null, sessionModel = null, onRequestHqRender, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; hqRenderStatus?: string | null; hqRenderProgress?: HqRenderProgress | null; sessionModel?: string | null; onRequestHqRender?: () => void; onCanPlay?: () => void }) {
+function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, sessionModel = null, onRequestHqRender, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; sessionModel?: string | null; onRequestHqRender?: () => void; onCanPlay?: () => void }) {
   // Compute full video URL first (before any hooks that use it)
   const fullVideoUrl = videoUrl?.startsWith("http") || videoUrl?.startsWith("/") ? videoUrl : null;
 
@@ -1107,51 +1104,13 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqR
         await downloadVideoBlob(fullVideoUrl, toFilename(sessionId ?? null, sessionModel, ""));
         setShowDownloadModal(false);
       } else {
-        // HQ download
-        if (hqRenderStatus === 'completed' && hqRenderProgress?.hq_video_url) {
-          await downloadVideoBlob(hqRenderProgress.hq_video_url, toFilename(sessionId ?? null, sessionModel, "_hq"));
-          setShowDownloadModal(false);
-        } else if (hqRenderStatus !== 'rendering') {
-          triggerHqRenderInChat();
-        }
+        // HQ uses chat intent only (legacy API/progress tracking removed).
+        triggerHqRenderInChat();
       }
     } finally {
       downloadLockRef.current = false;
     }
   };
-
-  const handleCancelHqRender = async () => {
-    if (!sessionId) return;
-    try {
-      await fetch('/api/render-hq', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-    } catch {}
-  };
-
-  const handleRetryHqRender = () => {
-    triggerHqRenderInChat();
-  };
-
-  // Auto-download when HQ render completes
-  const prevHqStatusRef = useRef(hqRenderStatus);
-  useEffect(() => {
-    if (
-      prevHqStatusRef.current === 'rendering' &&
-      hqRenderStatus === 'completed' &&
-      hqRenderProgress?.hq_video_url &&
-      showDownloadModal &&
-      downloadQuality === 'hq'
-    ) {
-      downloadVideoBlob(hqRenderProgress.hq_video_url, toFilename(sessionId ?? null, sessionModel, "_hq")).then(() => {
-        setShowDownloadModal(false);
-      });
-    }
-    prevHqStatusRef.current = hqRenderStatus;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hqRenderStatus]);
 
   // Keyboard shortcuts - document-level listener (works regardless of focus)
   useEffect(() => {
@@ -1713,77 +1672,9 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqR
           <div className="bg-zinc-800 rounded-xl p-6 min-w-[320px] max-w-[400px] shadow-2xl">
             <h3 className="text-lg font-semibold text-white mb-4">Download video</h3>
 
-            {/* Rendering progress view */}
-            {hqRenderStatus === 'rendering' && hqRenderProgress && downloadQuality === 'hq' ? (
-              <div className="mb-5">
-                {/* Segmented progress bar */}
-                <div style={{ display: "flex", gap: 2, height: 6, marginBottom: 12 }}>
-                  {Array.from({ length: Math.max(hqRenderProgress.total, 1) }).map((_, i) => {
-                    const isCompleted = i < hqRenderProgress.completed;
-                    const isCurrent = i === hqRenderProgress.completed;
-                    return (
-                      <div
-                        key={i}
-                        style={{
-                          flex: 1,
-                          borderRadius: 3,
-                          background: isCompleted
-                            ? "var(--accent)"
-                            : isCurrent
-                              ? "var(--accent)"
-                              : "rgba(255,255,255,0.1)",
-                          opacity: isCurrent ? undefined : 1,
-                          animation: isCurrent ? "pulse 1.5s ease-in-out infinite" : undefined,
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-                <div className="text-sm text-zinc-300 mb-1">
-                  Rendering scene {hqRenderProgress.completed + 1} of {hqRenderProgress.total}
-                  {hqRenderProgress.current_scene && `: ${hqRenderProgress.current_scene}`}
-                </div>
-                <div className="text-xs text-zinc-500">
-                  {hqRenderProgress.total > 0
-                    ? `${Math.round((hqRenderProgress.completed / hqRenderProgress.total) * 100)}%`
-                    : "Starting..."}
-                </div>
-                <div className="flex gap-3 justify-end mt-4">
-                  <button
-                    className="px-5 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
-                    onClick={handleCancelHqRender}
-                  >
-                    Cancel
-                  </button>
-                </div>
-                <style>{`@keyframes pulse { 0%,100% { opacity: 0.4 } 50% { opacity: 1 } }`}</style>
-              </div>
-            ) : hqRenderStatus === 'failed' && downloadQuality === 'hq' ? (
-              /* Failed state */
-              <div className="mb-5">
-                <div className="text-sm text-red-400 mb-3">
-                  {hqRenderProgress?.error || "Render failed"}
-                </div>
-                <div className="flex gap-3 justify-end">
-                  <button
-                    className="px-5 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
-                    onClick={() => setShowDownloadModal(false)}
-                  >
-                    Close
-                  </button>
-                  <button
-                    className="px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
-                    style={{ background: "var(--accent)", color: "var(--text-primary)" }}
-                    onClick={handleRetryHqRender}
-                  >
-                    Retry
-                  </button>
-                </div>
-              </div>
-            ) : (
-              /* Quality selector */
-              <>
-                <div className="space-y-2 mb-5">
+            {/* Quality selector */}
+            <>
+              <div className="space-y-2 mb-5">
                   {/* Current quality option */}
                   <div
                     className="flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer"
@@ -1816,37 +1707,34 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqR
                     <div className="flex-1">
                       <div className="text-sm font-medium text-white">High quality (1080p, 30fps)</div>
                       <div className="text-xs text-zinc-400">
-                        {hqRenderStatus === 'completed' && hqRenderProgress?.hq_video_url
-                          ? "Ready to download"
-                          : "Requires rendering in chat"}
+                        Requires rendering in chat
                       </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex gap-3 justify-end">
-                  <button
-                    className="px-5 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
-                    onClick={() => setShowDownloadModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="px-5 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
-                    style={{ background: "var(--accent)", color: "var(--text-primary)" }}
-                    onMouseEnter={(e) => { if (!isDownloading) e.currentTarget.style.background = "var(--accent-hover)"; }}
-                    onMouseLeave={(e) => e.currentTarget.style.background = "var(--accent)"}
-                    onClick={handleDownload}
-                    disabled={isDownloading}
-                  >
-                    {isDownloading
-                      ? "Downloading..."
-                      : downloadQuality === 'hq' && hqRenderStatus !== 'completed'
-                        ? "Render in Chat"
-                        : "Download"}
-                  </button>
-                </div>
-              </>
-            )}
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  className="px-5 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
+                  onClick={() => setShowDownloadModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-5 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
+                  style={{ background: "var(--accent)", color: "var(--text-primary)" }}
+                  onMouseEnter={(e) => { if (!isDownloading) e.currentTarget.style.background = "var(--accent-hover)"; }}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "var(--accent)"}
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                >
+                  {isDownloading
+                    ? "Downloading..."
+                    : downloadQuality === 'hq'
+                      ? "Render in Chat"
+                      : "Download"}
+                </button>
+              </div>
+            </>
           </div>
         </div>
       )}

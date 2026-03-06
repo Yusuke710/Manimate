@@ -7,7 +7,7 @@ import ChatInput from "@/components/ChatInput";
 import ChatMessages from "@/components/ChatMessages";
 import PreviewPanel from "@/components/PreviewPanel";
 import { SessionsSidebar } from "@/components/SessionsSidebar";
-import { SSEEvent, ActivityEvent, Message, DBActivityEvent, ActiveRun, dbActivityEventToUI, ImageAttachment, HqRenderProgress } from "@/lib/types";
+import { SSEEvent, ActivityEvent, Message, DBActivityEvent, ActiveRun, dbActivityEventToUI, ImageAttachment } from "@/lib/types";
 import { useIsMobile } from "@/lib/useIsMobile";
 import {
   AVAILABLE_MODELS,
@@ -557,8 +557,6 @@ interface ChatState {
   planContent: string | null;
   scriptContent: string | null;
   model: string;
-  hqRenderStatus: string | null;
-  hqRenderProgress: HqRenderProgress | null;
 }
 
 type ChatAction =
@@ -577,8 +575,7 @@ type ChatAction =
   | { type: "SET_LOADING_MESSAGES"; isLoadingMessages: boolean }
   | { type: "SET_PLAN_CONTENT"; content: string | null }
   | { type: "SET_SCRIPT_CONTENT"; content: string | null }
-  | { type: "SET_MODEL"; model: string }
-  | { type: "SET_HQ_RENDER"; status: string | null; progress: HqRenderProgress | null };
+  | { type: "SET_MODEL"; model: string };
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -660,13 +657,6 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_MODEL":
       return { ...state, model: action.model };
 
-    case "SET_HQ_RENDER":
-      return {
-        ...state,
-        hqRenderStatus: action.status,
-        hqRenderProgress: action.progress,
-      };
-
     default:
       return state;
   }
@@ -686,8 +676,6 @@ const initialState: ChatState = {
   planContent: null,
   scriptContent: null,
   model: DEFAULT_MODEL,
-  hqRenderStatus: null,
-  hqRenderProgress: null,
 };
 
 interface SessionMessagePayload {
@@ -701,8 +689,6 @@ interface SessionSnapshot {
   sandbox_id: string | null;
   claude_session_id: string | null;
   last_video_url: string | null;
-  hq_render_status: string | null;
-  hq_render_progress: HqRenderProgress | null;
   plan_content: string | null;
   script_content: string | null;
   model: string | null;
@@ -802,13 +788,6 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
           content: data.session.script_content,
         });
       }
-
-      // Sync HQ render status from DB
-      dispatch({
-        type: "SET_HQ_RENDER",
-        status: data.session.hq_render_status ?? null,
-        progress: data.session.hq_render_progress ?? null,
-      });
 
     },
     [onSessionAspectRatio],
@@ -1219,8 +1198,6 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
       sessionId={sessionId}
       planContent={state.planContent}
       scriptContent={state.scriptContent}
-      hqRenderStatus={state.hqRenderStatus}
-      hqRenderProgress={state.hqRenderProgress}
       sessionModel={state.model}
       onRequestHqRender={handleRequestHqRender}
     />

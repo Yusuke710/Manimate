@@ -142,16 +142,6 @@ export interface Message {
   images?: ImageAttachment[];
 }
 
-// HQ render progress tracking
-export interface HqRenderProgress {
-  completed: number;
-  total: number;
-  current_scene: string;
-  error?: string;
-  /** Local file URL exposed by `/api/files` */
-  hq_video_url?: string;
-}
-
 // Session data stored in sessionStorage (per-tab isolation)
 export interface SessionData {
   sandboxId: string;

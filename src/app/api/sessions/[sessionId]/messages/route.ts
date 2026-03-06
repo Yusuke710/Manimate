@@ -21,7 +21,6 @@ import {
   updateLocalRun,
 } from "@/lib/local/db";
 import { getActiveLocalRunBySessionId } from "@/lib/local/runtime";
-import type { HqRenderProgress } from "@/lib/types";
 
 type MessageMetadata = {
   images?: Array<{
@@ -46,17 +45,6 @@ function isOlderThan(timestamp: string | null | undefined, thresholdMs: number):
   const parsed = Date.parse(timestamp);
   if (!Number.isFinite(parsed)) return false;
   return Date.now() - parsed > thresholdMs;
-}
-
-function parseHqRenderProgress(raw: string | null): HqRenderProgress | null {
-  if (!raw?.trim()) return null;
-  try {
-    const parsed = JSON.parse(raw) as HqRenderProgress;
-    if (!parsed || typeof parsed !== "object") return null;
-    return parsed;
-  } catch {
-    return null;
-  }
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams): Promise<Response> {
@@ -113,8 +101,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     videoUrl = localFileToApiUrl(sessionId, session.video_path, version);
   }
 
-  const hqRenderProgress = parseHqRenderProgress(session.hq_render_progress);
-
   return NextResponse.json({
     messages,
     activityEvents,
@@ -122,8 +108,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
       sandbox_id: session.sandbox_id,
       claude_session_id: session.claude_session_id,
       last_video_url: videoUrl,
-      hq_render_status: session.hq_render_status,
-      hq_render_progress: hqRenderProgress,
       plan_content: session.plan_content,
       script_content: session.script_content,
       subtitles_content: session.subtitles_content,

@@ -103,4 +103,4 @@ Override root with `MANIMATE_LOCAL_ROOT`.
 
 - This repo is intentionally local-only.
 - Voiceover works when `ELEVENLABS_API_KEY` is set.
-- HQ render is local and keeps generated voiceover audio when available.
+- Advanced actions are chat-driven (for example, ask for `render in hq`) rather than dedicated API routes.
