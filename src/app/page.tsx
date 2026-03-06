@@ -1189,6 +1189,11 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
     dispatch({ type: "SET_STATUS", statusMessage: null });
   }, [addActivity, sessionId, state.isLoading, state.isCancelling]);
 
+  const handleRequestHqRender = useCallback(() => {
+    if (state.isLoading) return;
+    void handleSend("render in hq");
+  }, [handleSend, state.isLoading]);
+
   const hasArtifacts = !!(state.planContent || state.scriptContent || state.videoUrl);
   const [mobileArtifactOpen, setMobileArtifactOpen] = useState(false);
 
@@ -1217,6 +1222,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
       hqRenderStatus={state.hqRenderStatus}
       hqRenderProgress={state.hqRenderProgress}
       sessionModel={state.model}
+      onRequestHqRender={handleRequestHqRender}
     />
   );
 

@@ -17,9 +17,10 @@ interface PreviewPanelProps {
   hqRenderStatus?: string | null;
   hqRenderProgress?: HqRenderProgress | null;
   sessionModel?: string | null;
+  onRequestHqRender?: () => void;
 }
 
-export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, hqRenderStatus: hqRenderStatusProp = null, hqRenderProgress: hqRenderProgressProp = null, sessionModel = null }: PreviewPanelProps) {
+export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, hqRenderStatus: hqRenderStatusProp = null, hqRenderProgress: hqRenderProgressProp = null, sessionModel = null, onRequestHqRender }: PreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>("plan");
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
   const [isVideoPlayable, setIsVideoPlayable] = useState(false);
@@ -111,7 +112,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
             <CodeTab content={scriptContent} />
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
-            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} hqRenderStatus={hqRenderStatusProp} hqRenderProgress={hqRenderProgressProp} sessionModel={sessionModel} onCanPlay={() => {
+            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} hqRenderStatus={hqRenderStatusProp} hqRenderProgress={hqRenderProgressProp} sessionModel={sessionModel} onRequestHqRender={onRequestHqRender} onCanPlay={() => {
               setIsVideoPlayable(true);
               if (!userSelectedTabRef.current) setActiveTab("preview");
             }} />
@@ -584,7 +585,7 @@ function toFilename(sessionId: string | null, model: string | null, suffix: stri
   return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
 }
 
-function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqRenderStatus = null, hqRenderProgress = null, sessionModel = null, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; hqRenderStatus?: string | null; hqRenderProgress?: HqRenderProgress | null; sessionModel?: string | null; onCanPlay?: () => void }) {
+function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqRenderStatus = null, hqRenderProgress = null, sessionModel = null, onRequestHqRender, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; hqRenderStatus?: string | null; hqRenderProgress?: HqRenderProgress | null; sessionModel?: string | null; onRequestHqRender?: () => void; onCanPlay?: () => void }) {
   // Compute full video URL first (before any hooks that use it)
   const fullVideoUrl = videoUrl?.startsWith("http") || videoUrl?.startsWith("/") ? videoUrl : null;
 
@@ -1091,6 +1092,12 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqR
   };
 
   const downloadLockRef = useRef(false);
+  const triggerHqRenderInChat = useCallback(() => {
+    if (!onRequestHqRender) return;
+    onRequestHqRender();
+    setShowDownloadModal(false);
+  }, [onRequestHqRender]);
+
   const handleDownload = async () => {
     if (downloadLockRef.current) return;
     downloadLockRef.current = true;
@@ -1105,19 +1112,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqR
           await downloadVideoBlob(hqRenderProgress.hq_video_url, toFilename(sessionId ?? null, sessionModel, "_hq"));
           setShowDownloadModal(false);
         } else if (hqRenderStatus !== 'rendering') {
-          // Trigger HQ render
-          if (!sessionId) return;
-          setIsDownloading(true);
-          try {
-            await fetch('/api/render-hq', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ session_id: sessionId }),
-            });
-          } catch {
-          } finally {
-            setIsDownloading(false);
-          }
+          triggerHqRenderInChat();
         }
       }
     } finally {
@@ -1136,15 +1131,8 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqR
     } catch {}
   };
 
-  const handleRetryHqRender = async () => {
-    if (!sessionId) return;
-    try {
-      await fetch('/api/render-hq', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-    } catch {}
+  const handleRetryHqRender = () => {
+    triggerHqRenderInChat();
   };
 
   // Auto-download when HQ render completes
@@ -1830,7 +1818,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqR
                       <div className="text-xs text-zinc-400">
                         {hqRenderStatus === 'completed' && hqRenderProgress?.hq_video_url
                           ? "Ready to download"
-                          : "Requires rendering"}
+                          : "Requires rendering in chat"}
                       </div>
                     </div>
                   </div>
@@ -1853,7 +1841,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqR
                     {isDownloading
                       ? "Downloading..."
                       : downloadQuality === 'hq' && hqRenderStatus !== 'completed'
-                        ? "Render & Download"
+                        ? "Render in Chat"
                         : "Download"}
                   </button>
                 </div>
