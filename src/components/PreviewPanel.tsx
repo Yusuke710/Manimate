@@ -817,7 +817,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, hqR
     if (chapters.length <= 1) return false;
     if (!Number.isFinite(duration) || duration <= 0) return false;
     if (!Number.isFinite(chapterTotalDuration) || chapterTotalDuration <= 0) return false;
-    return Math.abs(chapterTotalDuration - duration) <= 0.5;
+    return Math.abs(chapterTotalDuration - duration) <= 1.0;
   }, [chapters.length, duration, chapterTotalDuration]);
 
   // Update current subtitle based on time
