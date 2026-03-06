@@ -180,7 +180,7 @@ ffmpeg -y -i video_silent.mp4 -i voiceover.mp3 \
   -movflags +faststart video.mp4
 ```
 
-**Result**: `video.mp4` is the final deliverable.
+**Result**: `video.mp4` is the final deliverable. The final muxed file MUST always be named exactly `video.mp4`. Never use any other name (`final.mp4`, `video_shorts.mp4`, `output.mp4`, etc.).
 
 ### Phase 6: Output & Feedback
 
