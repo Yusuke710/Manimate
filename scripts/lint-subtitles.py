@@ -124,7 +124,7 @@ class SubtitleCollector:
         if self.verbose:
             print(f'  [{sub.index}] {sub.start:.2f}s-{sub.end:.2f}s: "{sub.text}"')
 
-    def advance_time(self, duration: float, line_number: int, check_overflow: bool = False) -> None:
+    def advance_time(self, duration: float, line_number: int, event: str = "timeline") -> None:
         try:
             step = max(0.0, float(duration))
         except (TypeError, ValueError):
@@ -132,22 +132,26 @@ class SubtitleCollector:
 
         end_time = self.current_time + step
 
-        if check_overflow and self._active_end > self.current_time:
-            if end_time > self._active_end + OVERFLOW_TOLERANCE:
-                self.overflows.append(
-                    {
-                        "scene": self.scene_name,
-                        "line": line_number,
-                        "subtitle_line": self._active_line,
-                        "subtitle_end": self._active_end,
-                        "animation_end": end_time,
-                        "overflow": end_time - self._active_end,
-                    }
-                )
+        if (
+            self._active_end > 0
+            and self.current_time <= self._active_end + OVERFLOW_TOLERANCE
+            and end_time > self._active_end + OVERFLOW_TOLERANCE
+        ):
+            self.overflows.append(
+                {
+                    "scene": self.scene_name,
+                    "line": line_number,
+                    "subtitle_line": self._active_line,
+                    "subtitle_end": self._active_end,
+                    "event": event,
+                    "event_end": end_time,
+                    "overflow": end_time - self._active_end,
+                }
+            )
 
         self.current_time = end_time
 
-        if self._active_end > 0 and self.current_time >= self._active_end:
+        if self._active_end > 0 and self.current_time > self._active_end + OVERFLOW_TOLERANCE:
             self._active_end = 0.0
             self._active_line = 0
 
@@ -306,10 +310,10 @@ def create_stub_module(collector: SubtitleCollector, exported_names: set[str]):
                 sub_dur = subcaption_duration if subcaption_duration is not None else duration
                 collector.add_subtitle(subcaption, sub_dur, line)
 
-            collector.advance_time(duration, line, check_overflow=True)
+            collector.advance_time(duration, line, event="play")
 
         def wait(self, duration: float = 1.0, **kwargs):
-            collector.advance_time(duration, caller_line())
+            collector.advance_time(duration, caller_line(), event="wait")
 
         def move_camera(self, *args, run_time: float = None, **kwargs):
             line = caller_line()
@@ -318,7 +322,7 @@ def create_stub_module(collector: SubtitleCollector, exported_names: set[str]):
             if subcaption:
                 sub_dur = kwargs.get("subcaption_duration")
                 collector.add_subtitle(subcaption, duration if sub_dur is None else sub_dur, line)
-            collector.advance_time(duration, line, check_overflow=True)
+            collector.advance_time(duration, line, event="move_camera")
 
         def add(self, *mobjects):
             self._mobjects.extend(mobjects)
@@ -508,14 +512,15 @@ def lint_file(filepath: str, verbose: bool = False) -> int:
             print(f"  Overlap: {issue['overlap']:.2f}s\n")
 
     if all_overflows:
-        print(f"Found {len(all_overflows)} animation overflow(s):\n")
+        print(f"Found {len(all_overflows)} subtitle timeline overflow(s):\n")
         for overflow in all_overflows:
+            event = overflow.get("event", "timeline")
             print(f"  Scene: {overflow['scene']}")
             print(f"  Line {overflow['subtitle_line']}: subtitle ends at {overflow['subtitle_end']:.2f}s")
-            print(f"  Line {overflow['line']}: animation ends at {overflow['animation_end']:.2f}s")
+            print(f"  Line {overflow['line']}: {event} ends at {overflow['event_end']:.2f}s")
             print(f"  Overflow: {overflow['overflow']:.2f}s\n")
 
-    print("Fix: adjust subtitle durations or waits so each animation stays covered.")
+    print("Fix: adjust subtitle durations, play run_times, or waits so each segment stays covered.")
     return 1
 
 
