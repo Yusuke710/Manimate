@@ -115,9 +115,10 @@ Write Manim Community Edition code in script.py.
     - `9:16` -> `pixel_width=480`, `pixel_height=854`, `frame_width=9`, `frame_height=16`, `frame_rate=15`
     - `1:1` -> `pixel_width=480`, `pixel_height=480`, `frame_width=8`, `frame_height=8`, `frame_rate=15`
    **Keep proportions matched** — Always keep `pixel_width / pixel_height == frame_width / frame_height`.
-3. **Use `duration_s` from timestamps.json as `run_time`** — According to `timestamps.json`, inline the values as literals in `script.py`.
+3. **Use `duration_s` from timestamps.json as the total segment budget** — According to `timestamps.json`, inline the values as literals in `script.py`.
    - Set explicit `run_time=` on every `play()` call.
-   - End each segment with `self.wait(max(0, remaining))` where `remaining = duration_s - run_time`. Always clamp to avoid negative waits.
+   - Keep total scheduled time within `duration_s`, including `wait()`, `move_camera()`, and any later `play()` such as `FadeOut`.
+   - End each segment with `self.wait(max(0, duration_s - used_time))`. Always clamp to avoid negative waits.
 
 Example:
 
