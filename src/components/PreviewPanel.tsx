@@ -16,14 +16,16 @@ interface PreviewPanelProps {
   scriptContent?: string | null;
   sessionModel?: string | null;
   onRequestHqRender?: () => void;
+  onPreviewReady?: (previewNonce: number) => void;
 }
 
-export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, onRequestHqRender }: PreviewPanelProps) {
+export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, onRequestHqRender, onPreviewReady }: PreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>("plan");
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
   const [isVideoPlayable, setIsVideoPlayable] = useState(false);
   // Track whether user has manually selected a tab (suppresses auto-switch)
   const userSelectedTabRef = useRef(false);
+  const lastPreviewReadyKeyRef = useRef<string | null>(null);
 
   // Track previous videoUrl to detect changes
   const prevVideoUrlRef = useRef(videoUrl);
@@ -111,7 +113,12 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
             <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} sessionModel={sessionModel} onRequestHqRender={onRequestHqRender} onCanPlay={() => {
+              const readyKey = effectiveVideoUrl ? `${videoUpdateNonce}:${effectiveVideoUrl}` : null;
               setIsVideoPlayable(true);
+              if (readyKey && lastPreviewReadyKeyRef.current !== readyKey) {
+                lastPreviewReadyKeyRef.current = readyKey;
+                onPreviewReady?.(videoUpdateNonce);
+              }
               if (!userSelectedTabRef.current) setActiveTab("preview");
             }} />
           </div>

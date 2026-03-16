@@ -8,6 +8,7 @@ import ChatMessages from "@/components/ChatMessages";
 import PreviewPanel from "@/components/PreviewPanel";
 import { SessionsSidebar } from "@/components/SessionsSidebar";
 import { SSEEvent, ActivityEvent, Message, DBActivityEvent, ActiveRun, dbActivityEventToUI, ImageAttachment } from "@/lib/types";
+import { useBrowserPreviewBadge } from "@/lib/useBrowserPreviewBadge";
 import { useIsMobile } from "@/lib/useIsMobile";
 import {
   AVAILABLE_MODELS,
@@ -726,7 +727,10 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
   const scriptContentRef = useRef<string | null>(null);
   const videoUrlBaseRef = useRef<string | null>(null);
   const videoUrlRef = useRef<string | null>(null);
+  const videoUpdateNonceRef = useRef(0);
   const reconnectedRunIdRef = useRef<string | null>(null);
+  const expectedPreviewNonceRef = useRef<number | null>(null);
+  const [showPreviewReadyBadge, setShowPreviewReadyBadge] = useState(false);
   const resolveArtifactType = useCallback((filePath?: string): "plan" | "script" | null => {
     if (!filePath) return null;
     const normalized = filePath.replace(/\\/g, "/").trim().toLowerCase();
@@ -743,6 +747,14 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
   useEffect(() => { planContentRef.current = state.planContent; }, [state.planContent]);
   useEffect(() => { scriptContentRef.current = state.scriptContent; }, [state.scriptContent]);
   useEffect(() => { videoUrlRef.current = state.videoUrl; }, [state.videoUrl]);
+  useEffect(() => { videoUpdateNonceRef.current = state.videoUpdateNonce; }, [state.videoUpdateNonce]);
+  useBrowserPreviewBadge(showPreviewReadyBadge);
+
+  const handlePreviewReady = useCallback((previewNonce: number) => {
+    if (expectedPreviewNonceRef.current !== previewNonce) return;
+    expectedPreviewNonceRef.current = null;
+    setShowPreviewReadyBadge(true);
+  }, []);
 
   const applyFetchedSessionData = useCallback(
     (
@@ -827,6 +839,8 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
           const activeRun = data.activeRun as ActiveRun;
           if (activeRun.status === "running" || activeRun.status === "queued") {
             reconnectedRunIdRef.current = activeRun.id;
+            expectedPreviewNonceRef.current = videoUpdateNonceRef.current + 1;
+            setShowPreviewReadyBadge(false);
             dispatch({ type: "SET_LOADING", isLoading: true });
             const lastProgressEvent = data.activityEvents
               ? [...data.activityEvents].reverse().find((e: DBActivityEvent) => e.type === "progress" || e.type === "tool_use")
@@ -879,6 +893,8 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
 
         // Activate sandbox if an active run is detected (sandbox is already in use)
         if (data.activeRun && (data.activeRun.status === "running" || data.activeRun.status === "queued")) {
+          expectedPreviewNonceRef.current = videoUpdateNonceRef.current + 1;
+          setShowPreviewReadyBadge(false);
         }
 
         const trackedRunId = reconnectedRunIdRef.current;
@@ -923,6 +939,8 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
       dispatch({ type: "ADD_USER_MESSAGE", message: { id: turnId, role: "user", content: prompt, images: imagePreviewAttachments } });
     }
 
+    expectedPreviewNonceRef.current = videoUpdateNonceRef.current + 1;
+    setShowPreviewReadyBadge(false);
     dispatch({ type: "SET_LOADING", isLoading: true });
     dispatch({ type: "SET_CANCELLING", isCancelling: false });
     dispatch({ type: "SET_STATUS", statusMessage: "Connecting..." });
@@ -935,6 +953,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
 
     const activeSessionId = sessionId;
     if (!activeSessionId) {
+      expectedPreviewNonceRef.current = null;
       dispatch({ type: "SET_LOADING", isLoading: false });
       dispatch({ type: "SET_STATUS", statusMessage: null });
       dispatch({ type: "UPDATE_ASSISTANT_MESSAGE", id: assistantMessageId, content: "No active session.", isError: true });
@@ -958,6 +977,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
           uploadedImages = uploadData.images;
         } catch (uploadError) {
           console.error("Failed to upload images:", uploadError);
+          expectedPreviewNonceRef.current = null;
           dispatch({ type: "UPDATE_ASSISTANT_MESSAGE", id: assistantMessageId, content: `Image upload failed: ${uploadError instanceof Error ? uploadError.message : "Unknown error"}`, isError: true });
           dispatch({ type: "SET_LOADING", isLoading: false });
           dispatch({ type: "SET_STATUS", statusMessage: null });
@@ -975,6 +995,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
 
       // Wait for optimistic session creation (already has 15s abort timeout).
       if (sessionReady && !(await sessionReady)) {
+        expectedPreviewNonceRef.current = null;
         dispatch({ type: "UPDATE_ASSISTANT_MESSAGE", id: assistantMessageId, content: "Failed to create session. Please try again.", isError: true });
         dispatch({ type: "SET_LOADING", isLoading: false });
         dispatch({ type: "SET_STATUS", statusMessage: null });
@@ -1087,9 +1108,12 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
                 videoUrlRef.current = event.video_url;
                 videoUrlBaseRef.current = event.video_url.split('?')[0];
                 dispatch({ type: "SET_VIDEO_URL", url: event.video_url, bumpNonce: true });
+              } else {
+                expectedPreviewNonceRef.current = null;
               }
               await reader.cancel();
             } else if (event.type === "error") {
+              expectedPreviewNonceRef.current = null;
               dispatch({ type: "SET_STATUS", statusMessage: null });
               addActivity({
                 type: "error",
@@ -1112,6 +1136,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
       }
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
+      expectedPreviewNonceRef.current = null;
       const errorMessage = error instanceof Error ? error.message : "An error occurred";
       dispatch({ type: "UPDATE_ASSISTANT_MESSAGE", id: assistantMessageId, content: errorMessage, isError: true });
     } finally {
@@ -1159,6 +1184,8 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
     }
     addActivity({ type: "complete", message: "Stopped by user", terminalStatus: "canceled" });
 
+    expectedPreviewNonceRef.current = null;
+    setShowPreviewReadyBadge(false);
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
 
@@ -1200,6 +1227,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
       scriptContent={state.scriptContent}
       sessionModel={state.model}
       onRequestHqRender={handleRequestHqRender}
+      onPreviewReady={handlePreviewReady}
     />
   );
 
