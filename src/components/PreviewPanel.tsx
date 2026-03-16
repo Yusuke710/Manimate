@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 
+import { normalizeChaptersToVideoDuration } from "@/lib/timeline";
 import { useIsMobile } from "@/lib/useIsMobile";
 
 type Tab = "plan" | "code" | "preview";
@@ -800,23 +801,22 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
     });
   }, [fullChaptersUrl, videoUrl, videoRefreshNonce]);
 
+  const normalizedTimeline = useMemo(
+    () => normalizeChaptersToVideoDuration(chapters, duration),
+    [chapters, duration]
+  );
+  const timelineChapters = useMemo(
+    () => normalizedTimeline?.chapters ?? [],
+    [normalizedTimeline]
+  );
+  const useSegmentedTimeline = timelineChapters.length > 1;
   // Compute current chapter based on time (derived state)
   const currentChapter = useMemo(() => {
-    if (chapters.length === 0) return null;
+    if (timelineChapters.length === 0) return null;
     // Find the chapter that contains the current time
-    const chapter = [...chapters].reverse().find(c => currentTime >= c.start);
-    return chapter || chapters[0];
-  }, [currentTime, chapters]);
-  const chapterTotalDuration = useMemo(
-    () => chapters.reduce((sum, chapter) => sum + chapter.duration, 0),
-    [chapters]
-  );
-  const useSegmentedTimeline = useMemo(() => {
-    if (chapters.length <= 1) return false;
-    if (!Number.isFinite(duration) || duration <= 0) return false;
-    if (!Number.isFinite(chapterTotalDuration) || chapterTotalDuration <= 0) return false;
-    return Math.abs(chapterTotalDuration - duration) <= 1.0;
-  }, [chapters.length, duration, chapterTotalDuration]);
+    const chapter = [...timelineChapters].reverse().find(c => currentTime >= c.start);
+    return chapter || timelineChapters[0];
+  }, [currentTime, timelineChapters]);
 
   // Update current subtitle based on time
   useEffect(() => {
@@ -1248,7 +1248,9 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
     );
   }
 
-  const progressDuration = useSegmentedTimeline ? chapterTotalDuration : duration;
+  const progressDuration = useSegmentedTimeline
+    ? normalizedTimeline?.totalDuration ?? duration
+    : duration;
   const progress = progressDuration > 0
     ? Math.max(0, Math.min(100, (currentTime / progressDuration) * 100))
     : 0;
@@ -1344,7 +1346,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
           {useSegmentedTimeline ? (
             // Segmented progress bar with chapters
             <div className={`w-full flex gap-[3px] ${isTouchScrubbing ? 'h-1.5' : 'h-1 group-hover:h-1.5'} transition-[height]`}>
-              {chapters.map((chapter, index) => {
+              {timelineChapters.map((chapter, index) => {
                 const chapterEnd = chapter.start + chapter.duration;
                 // Calculate fill percentage for this segment
                 let fillPercent = 0;
