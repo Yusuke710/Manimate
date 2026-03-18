@@ -5,9 +5,9 @@ export type AspectRatio = (typeof ASPECT_RATIO_VALUES)[number];
 export const DEFAULT_ASPECT_RATIO: AspectRatio = "16:9";
 
 export const ASPECT_RATIO_OPTIONS = [
-  { id: "16:9", label: "16:9" },
-  { id: "9:16", label: "9:16" },
-  { id: "1:1", label: "1:1" },
+  { id: "16:9", label: "Landscape" },
+  { id: "9:16", label: "Reel" },
+  { id: "1:1", label: "Square" },
 ] as const satisfies ReadonlyArray<{ id: AspectRatio; label: string }>;
 
 export function getHqResolution(ratio: AspectRatio): { width: number; height: number } {
