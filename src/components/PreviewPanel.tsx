@@ -16,10 +16,11 @@ interface PreviewPanelProps {
   scriptContent?: string | null;
   sessionModel?: string | null;
   onRequestHqRender?: () => void;
+  onRequest4kRender?: () => void;
   onPreviewReady?: (previewNonce: number) => void;
 }
 
-export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, onRequestHqRender, onPreviewReady }: PreviewPanelProps) {
+export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, onRequestHqRender, onRequest4kRender, onPreviewReady }: PreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>("plan");
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
   const [isVideoPlayable, setIsVideoPlayable] = useState(false);
@@ -112,7 +113,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
             <CodeTab content={scriptContent} />
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
-            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} sessionModel={sessionModel} onRequestHqRender={onRequestHqRender} onCanPlay={() => {
+            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} sessionModel={sessionModel} onRequestHqRender={onRequestHqRender} onRequest4kRender={onRequest4kRender} onCanPlay={() => {
               const readyKey = effectiveVideoUrl ? `${videoUpdateNonce}:${effectiveVideoUrl}` : null;
               setIsVideoPlayable(true);
               if (readyKey && lastPreviewReadyKeyRef.current !== readyKey) {
@@ -590,7 +591,7 @@ function toFilename(sessionId: string | null, model: string | null, suffix: stri
   return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
 }
 
-function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, sessionModel = null, onRequestHqRender, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; sessionModel?: string | null; onRequestHqRender?: () => void; onCanPlay?: () => void }) {
+function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, sessionModel = null, onRequestHqRender, onRequest4kRender, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; sessionModel?: string | null; onRequestHqRender?: () => void; onRequest4kRender?: () => void; onCanPlay?: () => void }) {
   // Compute full video URL first (before any hooks that use it)
   const fullVideoUrl = videoUrl?.startsWith("http") || videoUrl?.startsWith("/") ? videoUrl : null;
 
@@ -1071,7 +1072,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
   }, [seekBy]);
 
   const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadQuality, setDownloadQuality] = useState<'current' | 'hq'>('current');
+  const [downloadQuality, setDownloadQuality] = useState<'current' | 'hq' | '4k'>('current');
 
   const downloadVideoBlob = async (url: string, filename: string) => {
     setIsDownloading(true);
@@ -1102,6 +1103,12 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
     setShowDownloadModal(false);
   }, [onRequestHqRender]);
 
+  const trigger4kRenderInChat = useCallback(() => {
+    if (!onRequest4kRender) return;
+    onRequest4kRender();
+    setShowDownloadModal(false);
+  }, [onRequest4kRender]);
+
   const handleDownload = async () => {
     if (downloadLockRef.current) return;
     downloadLockRef.current = true;
@@ -1110,8 +1117,10 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
         if (!fullVideoUrl) return;
         await downloadVideoBlob(fullVideoUrl, toFilename(sessionId ?? null, sessionModel, ""));
         setShowDownloadModal(false);
+      } else if (downloadQuality === '4k') {
+        trigger4kRenderInChat();
       } else {
-        // HQ uses chat intent only (legacy API/progress tracking removed).
+        // HQ uses chat intent only.
         triggerHqRenderInChat();
       }
     } finally {
@@ -1715,9 +1724,22 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
                     </div>
                     <div className="flex-1">
                       <div className="text-sm font-medium text-white">High quality (1080p, 30fps)</div>
-                      <div className="text-xs text-zinc-400">
-                        Requires rendering in chat
-                      </div>
+                    </div>
+                  </div>
+                  {/* 4K option */}
+                  <div
+                    className="flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer"
+                    style={{
+                      background: downloadQuality === '4k' ? "rgba(255,255,255,0.08)" : "transparent",
+                      borderColor: downloadQuality === '4k' ? "var(--accent)" : "rgba(255,255,255,0.1)",
+                    }}
+                    onClick={() => setDownloadQuality('4k')}
+                  >
+                    <div className="w-5 h-5 border-2 rounded-full flex items-center justify-center" style={{ borderColor: downloadQuality === '4k' ? "var(--accent)" : "rgba(255,255,255,0.3)" }}>
+                      {downloadQuality === '4k' && <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--accent)" }} />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-white">4K (2160p, 30fps)</div>
                     </div>
                   </div>
               </div>
@@ -1738,9 +1760,9 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
                 >
                   {isDownloading
                     ? "Downloading..."
-                    : downloadQuality === 'hq'
-                      ? "Render in Chat"
-                      : "Download"}
+                    : downloadQuality === 'current'
+                      ? "Download"
+                      : "Render in Chat"}
                 </button>
               </div>
             </>

@@ -1200,6 +1200,11 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
     void handleSend("render in hq");
   }, [handleSend, state.isLoading]);
 
+  const handleRequest4kRender = useCallback(() => {
+    if (state.isLoading) return;
+    void handleSend("render in 4k");
+  }, [handleSend, state.isLoading]);
+
   const hasArtifacts = !!(state.planContent || state.scriptContent || state.videoUrl);
   const [mobileArtifactOpen, setMobileArtifactOpen] = useState(false);
 
@@ -1227,6 +1232,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
       scriptContent={state.scriptContent}
       sessionModel={state.model}
       onRequestHqRender={handleRequestHqRender}
+      onRequest4kRender={handleRequest4kRender}
       onPreviewReady={handlePreviewReady}
     />
   );
