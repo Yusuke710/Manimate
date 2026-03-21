@@ -201,6 +201,13 @@ export function buildLocalClaudeEnv(
     }
   }
 
+  // Raise Claude CLI output token limit (default 32k is too low for Manim scripts).
+  // 64000 is the effective upper limit for claude-4 model families in the CLI.
+  // Only set if not already configured by the caller.
+  if (!env.CLAUDE_CODE_MAX_OUTPUT_TOKENS) {
+    env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = "64000";
+  }
+
   return env;
 }
 

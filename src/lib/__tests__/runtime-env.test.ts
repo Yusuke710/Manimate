@@ -30,6 +30,12 @@ describe("buildLocalClaudeEnv", () => {
     expect(env.HOME).toBe("/tmp/home");
     expect(env.CI).toBe("1");
     expect(env.NODE_ENV).toBe("test");
+    expect(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBe("64000");
+  });
+
+  it("does not override a caller-provided CLAUDE_CODE_MAX_OUTPUT_TOKENS", () => {
+    const env = buildLocalClaudeEnv({ CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000" });
+    expect(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBe("32000");
   });
 });
 
