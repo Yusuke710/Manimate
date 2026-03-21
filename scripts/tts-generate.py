@@ -29,8 +29,12 @@ MAX_WORKERS = 5
 CACHE_DIR = Path(".tts-cache")
 
 
-def cache_path(text: str, voice_id: str) -> Path:
-    key = hashlib.sha256(f"{voice_id}:{text}".encode()).hexdigest()
+def cache_path(text: str, voice_id: str, speed: float | None = None) -> Path:
+    obj: dict = {"model_id": "eleven_turbo_v2_5", "text": text, "voice_id": voice_id}
+    if speed is not None:
+        obj["speed"] = speed
+    canonical = json.dumps(obj, sort_keys=True, separators=(",", ":"))
+    key = hashlib.sha256(canonical.encode()).hexdigest()
     return CACHE_DIR / f"{key}.mp3"
 
 
@@ -60,17 +64,20 @@ def parse_subtitles(plan_path: str) -> list[str]:
     return items
 
 
-def tts_one(index: int, text: str, voice_id: str, api_key: str) -> tuple[int, str, bool]:
-    cached = cache_path(text, voice_id)
+def tts_one(index: int, text: str, voice_id: str, api_key: str, speed: float | None = None) -> tuple[int, str, bool]:
+    cached = cache_path(text, voice_id, speed)
     if cached.exists():
         return index, str(cached), True  # cache hit
 
+    body: dict = {"text": text, "model_id": "eleven_turbo_v2_5"}
+    if speed is not None:
+        body["voice_settings"] = {"speed": speed}
     for attempt in range(3):
         try:
             resp = requests.post(
                 f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
                 headers={"xi-api-key": api_key, "Content-Type": "application/json"},
-                json={"text": text, "model_id": "eleven_turbo_v2_5"},
+                json=body,
                 timeout=60,
             )
             resp.raise_for_status()
@@ -115,6 +122,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate TTS voiceover from plan.md SubtitleSpec")
     parser.add_argument("--plan", default="plan.md")
     parser.add_argument("--voice-id", default=None, help="ElevenLabs voice ID (overrides env)")
+    parser.add_argument("--speed", type=float, default=None, help="TTS speed (0.7–1.2); omit to use voice's saved settings")
     parser.add_argument("--out-audio", default="voiceover.mp3")
     parser.add_argument("--out-timestamps", default="timestamps.json")
     parser.add_argument(
@@ -127,6 +135,8 @@ def main() -> None:
     if not api_key:
         sys.exit("Error: ELEVENLABS_API_KEY must be set")
     voice_id = args.voice_id or os.environ.get("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID)
+    if args.speed is not None and not (0.7 <= args.speed <= 1.2):
+        sys.exit("Error: --speed must be between 0.7 and 1.2")
 
     subtitles = parse_subtitles(args.plan)
 
@@ -140,19 +150,20 @@ def main() -> None:
             if not matches:
                 sys.exit(f"Error: no subtitle matching {args.bust!r}")
             target = matches[0]
-        cp = cache_path(target, voice_id)
+        cp = cache_path(target, voice_id, args.speed)
         if cp.exists():
             cp.unlink()
             print(f"Busted cache for: {target!r}")
         else:
             print(f"No cache entry for: {target!r}")
         return
-    print(f"Found {len(subtitles)} subtitle(s). Voice: {voice_id}. Generating TTS...")
+    speed_label = str(args.speed) if args.speed is not None else "default"
+    print(f"Found {len(subtitles)} subtitle(s). Voice: {voice_id}. Speed: {speed_label}. Generating TTS...")
 
     parts: list[str] = [""] * len(subtitles)
     hits = misses = 0
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {pool.submit(tts_one, i, t, voice_id, api_key): i for i, t in enumerate(subtitles)}
+        futures = {pool.submit(tts_one, i, t, voice_id, api_key, args.speed): i for i, t in enumerate(subtitles)}
         for future in as_completed(futures):
             idx, path, from_cache = future.result()
             parts[idx] = path

@@ -91,10 +91,14 @@ subtitles:
 
 ### Phase 2: TTS
 
-The prompt includes `**Voice ID**` — use it when calling `tts-generate.py`:
+The prompt includes `**Voice ID**` — use it when calling `tts-generate.py`.
+
+**Speed inference**: If the user's prompt implies a pace (e.g. "fast", "Instagram-style", "energetic", "slow", "relaxed", "calm"), infer an appropriate 
 
 ```
 python tts-generate.py --plan plan.md --voice-id <Voice ID from prompt>
+# or with speed:
+python tts-generate.py --plan plan.md --voice-id <Voice ID from prompt> --speed 1.2
 ```
 
 This produces:
@@ -194,7 +198,7 @@ User will see the video preview on the dedicated UI. When user provides feedback
 1. Identify which scenes need changes
 2. Modify plan.md SubtitleSpec if voiceover lines changed, then re-run Phase 2 (TTS)
    - Subtitles are cached by content — unchanged lines are free (cache hit).
-   - To force-regenerate one clip: `python tts-generate.py --bust <index or text fragment>` then re-run TTS.
+   - To force-regenerate one clip: `python tts-generate.py --bust <index or text fragment> --voice-id <id> [--speed <value>]` (must match original `--voice-id` and `--speed` to hit the right cache entry) then re-run TTS.
 3. Modify script.py using updated timestamps.json
 4. Re-render only affected scenes (Phase 4)
 5. Re-mux the final video (Phase 5)
