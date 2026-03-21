@@ -12,6 +12,32 @@ export interface NormalizedChapterTimeline {
 const MAX_CHAPTER_TIMELINE_DRIFT_SECONDS = 2;
 const MAX_CHAPTER_TIMELINE_DRIFT_RATIO = 0.02;
 
+function scaleChaptersToVideoDuration(
+  chapters: TimelineChapter[],
+  chapterTotalDuration: number,
+  videoDuration: number
+): NormalizedChapterTimeline {
+  const scale = videoDuration / chapterTotalDuration;
+  const lastIndex = chapters.length - 1;
+  let offset = 0;
+
+  return {
+    chapters: chapters.map((chapter, index) => {
+      const duration = index === lastIndex
+        ? videoDuration - offset
+        : chapter.duration * scale;
+      const normalizedChapter = {
+        ...chapter,
+        start: offset,
+        duration,
+      };
+      offset += duration;
+      return normalizedChapter;
+    }),
+    totalDuration: videoDuration,
+  };
+}
+
 export function normalizeChaptersToVideoDuration(
   chapters: TimelineChapter[],
   videoDuration: number
@@ -33,7 +59,11 @@ export function normalizeChaptersToVideoDuration(
     videoDuration * MAX_CHAPTER_TIMELINE_DRIFT_RATIO
   );
   if (Math.abs(drift) > maxAllowedDrift) {
-    return null;
+    return scaleChaptersToVideoDuration(
+      chapters,
+      chapterTotalDuration,
+      videoDuration
+    );
   }
 
   const lastIndex = chapters.length - 1;

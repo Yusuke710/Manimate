@@ -34,13 +34,26 @@ describe("normalizeChaptersToVideoDuration", () => {
     expect(result?.chapters[1]?.duration).toBeCloseTo(10, 5);
   });
 
-  it("rejects timelines when the drift is too large", () => {
+  it("scales chapter boundaries when the drift is too large", () => {
     const chapters: TimelineChapter[] = [
       { name: "Part 1", start: 0, duration: 12 },
       { name: "Part 2", start: 12, duration: 12 },
     ];
 
-    expect(normalizeChaptersToVideoDuration(chapters, 18)).toBeNull();
+    const result = normalizeChaptersToVideoDuration(chapters, 18);
+
+    expect(result).not.toBeNull();
+    expect(result?.totalDuration).toBe(18);
+    expect(result?.chapters[0]).toEqual({
+      name: "Part 1",
+      start: 0,
+      duration: 9,
+    });
+    expect(result?.chapters[1]).toEqual({
+      name: "Part 2",
+      start: 9,
+      duration: 9,
+    });
   });
 
   it("rejects single-chapter timelines", () => {
