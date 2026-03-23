@@ -80,6 +80,9 @@ Before writing any Manim code, write plan.md with this structure:
 
 ## SubtitleSpec
 
+**Only include this section if a `**Voice ID**` is present in the prompt.**
+If no Voice ID, omit SubtitleSpec entirely and do not use `add_subcaption()` in code.
+
 List all voiceover lines in order. One line per subtitle, prefixed with `- `.
 
 ```
@@ -90,6 +93,8 @@ subtitles:
 ```
 
 ### Phase 2: TTS
+
+**If no `**Voice ID**` in the prompt**: Skip this phase entirely. Proceed to Phase 3.
 
 The prompt includes `**Voice ID**` — use it when calling `tts-generate.py`.
 

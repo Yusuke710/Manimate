@@ -16,7 +16,7 @@ import {
   getModelDisplayLabel,
   isRegisteredModelId,
 } from "@/lib/models";
-import { AVAILABLE_VOICES, DEFAULT_VOICE_ID, getVoicePageUrl } from "@/lib/voices";
+import { AVAILABLE_VOICES, DEFAULT_VOICE_ID, NONE_VOICE_ID, getVoicePageUrl } from "@/lib/voices";
 import {
   ASPECT_RATIO_OPTIONS,
   DEFAULT_ASPECT_RATIO,
@@ -393,10 +393,18 @@ function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange:
           transition: "border-color 0.12s",
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-        </svg>
+        {voice === NONE_VOICE_ID ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <line x1="23" y1="9" x2="17" y2="15" />
+            <line x1="17" y1="9" x2="23" y2="15" />
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+          </svg>
+        )}
         <svg width="11" height="11" viewBox="0 0 20 20" fill="var(--text-tertiary)" style={{ transition: "transform 0.15s", transform: isOpen ? "rotate(180deg)" : "none" }}>
           <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
         </svg>
@@ -412,6 +420,37 @@ function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange:
           zIndex: 50, overflow: "hidden",
           minWidth: 180,
         }}>
+          {/* None option */}
+          <div
+            style={{
+              display: "flex", alignItems: "center",
+              background: voice === NONE_VOICE_ID ? "var(--bg-active)" : "transparent",
+              transition: "background 0.12s",
+            }}
+            onMouseEnter={(e) => { if (voice !== NONE_VOICE_ID) e.currentTarget.style.background = "var(--bg-hover)"; }}
+            onMouseLeave={(e) => { if (voice !== NONE_VOICE_ID) e.currentTarget.style.background = "transparent"; }}
+          >
+            <button
+              onClick={() => { onChange(NONE_VOICE_ID); setIsOpen(false); }}
+              style={{
+                display: "flex", flexDirection: "column", gap: 1,
+                flex: 1, padding: "8px 0 8px 14px",
+                border: "none", background: "transparent",
+                cursor: "pointer", fontFamily: "var(--font)",
+                textAlign: "left",
+              }}
+            >
+              <span style={{ fontSize: 13, fontWeight: voice === NONE_VOICE_ID ? 600 : 400, color: voice === NONE_VOICE_ID ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                No Voice
+              </span>
+              <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                Silent video, saves credits
+              </span>
+            </button>
+          </div>
+
+          <div style={{ height: 1, background: "var(--border-main)", margin: "4px 0" }} />
+
           {AVAILABLE_VOICES.map((v) => (
             <div
               key={v.id}

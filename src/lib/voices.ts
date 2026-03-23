@@ -22,6 +22,8 @@ export const VOICE_REGISTRY: Record<string, VoiceEntry> = {
 
 export const DEFAULT_VOICE_ID = "Lci8YeL6PAFHJjNKvwXq";
 
+export const NONE_VOICE_ID = "none";
+
 export const VOICE_ID_PATTERN = /^[a-zA-Z0-9]{8,64}$/;
 
 export const AVAILABLE_VOICES = Object.entries(VOICE_REGISTRY).map(
@@ -43,5 +45,5 @@ export function getVoiceLabel(voiceId: string): string | null {
 }
 
 export function isValidVoiceId(voiceId: string): boolean {
-  return VOICE_ID_PATTERN.test(voiceId);
+  return voiceId === NONE_VOICE_ID || VOICE_ID_PATTERN.test(voiceId);
 }
