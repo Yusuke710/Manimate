@@ -1016,9 +1016,9 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
           const uploadData = await uploadResponse.json();
           uploadedImages = uploadData.images;
         } catch (uploadError) {
-          console.error("Failed to upload images:", uploadError);
+          console.error("Failed to upload attachments:", uploadError);
           expectedPreviewNonceRef.current = null;
-          dispatch({ type: "UPDATE_ASSISTANT_MESSAGE", id: assistantMessageId, content: `Image upload failed: ${uploadError instanceof Error ? uploadError.message : "Unknown error"}`, isError: true });
+          dispatch({ type: "UPDATE_ASSISTANT_MESSAGE", id: assistantMessageId, content: `Attachment upload failed: ${uploadError instanceof Error ? uploadError.message : "Unknown error"}`, isError: true });
           dispatch({ type: "SET_LOADING", isLoading: false });
           dispatch({ type: "SET_STATUS", statusMessage: null });
           abortControllerRef.current = null;

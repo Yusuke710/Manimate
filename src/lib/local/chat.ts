@@ -170,7 +170,7 @@ function buildPrompt(input: {
   images: Array<{ path: string; originalName: string }>;
 }): string {
   const imageSection = input.images.length
-    ? `\n\nAttached images (use Read tool to view):\n${input.images.map((image) => `- ${image.path} (${image.originalName})`).join("\n")}`
+    ? `\n\nAttached files (use Read tool to inspect images or PDFs):\n${input.images.map((image) => `- ${image.path} (${image.originalName})`).join("\n")}`
     : "";
   const voiceSection = input.voiceId === NONE_VOICE_ID ? "" : `\n\n**Voice ID**: ${input.voiceId}`;
   return `**Project Directory**: \`${input.projectDir}\` (cwd is already set)\n\n**Aspect Ratio**: ${input.aspectRatio}${voiceSection}\n\n${input.prompt}${imageSection}`;
@@ -374,13 +374,13 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         if (recovered.historyPrompt) {
           const requestLine = rawPrompt
             ? rawPrompt
-            : "[No text prompt in this turn. Use attached images if provided.]";
+            : "[No text prompt in this turn. Use attached files if provided.]";
           promptBody = `${recovered.historyPrompt}\n\nCurrent user request:\n${requestLine}`;
         }
       }
 
       if (requestedImageCount > 0 && preparedRequestImageCount === 0) {
-        throw new Error("Attached images could not be prepared for local Claude access");
+        throw new Error("Attached files could not be prepared for local Claude access");
       }
 
       const aspectRatio = isAspectRatio(body.aspect_ratio)

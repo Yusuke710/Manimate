@@ -3,11 +3,17 @@
 import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import ImageLightbox from "@/components/ImageLightbox";
 
-const MAX_IMAGES = 12;
+const MAX_ATTACHMENTS = 12;
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const ALLOWED_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+];
 
-interface ImagePreview {
+interface AttachmentPreview {
   file: File;
   url: string;
 }
@@ -29,7 +35,7 @@ interface ChatInputProps {
 
 export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false, disabled = false, placeholder, extraLeft, compact = false, draftKey, initialPrompt }: ChatInputProps) {
   const [prompt, setPrompt] = useState("");
-  const [images, setImages] = useState<ImagePreview[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentPreview[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -112,31 +118,32 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
     onPrewarm();
   }, [onPrewarm]);
 
-  const canSend = (prompt.trim().length > 0 || images.length > 0) && !disabled && !isLoading;
-  const dense = images.length > 6;
+  const canSend = (prompt.trim().length > 0 || attachments.length > 0) && !disabled && !isLoading;
+  const dense = attachments.length > 6;
   const thumbSize = dense ? 44 : 64;
   const thumbGap = dense ? 4 : 8;
+  const imageAttachments = attachments.filter((attachment) => attachment.file.type.startsWith("image/"));
 
   // Cleanup blob URLs on unmount
   useEffect(() => {
     return () => {
-      images.forEach((img) => URL.revokeObjectURL(img.url));
+      attachments.forEach((attachment) => URL.revokeObjectURL(attachment.url));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (lightboxIndex === null) return;
-    if (images.length === 0) {
+    if (imageAttachments.length === 0) {
       setLightboxIndex(null);
       return;
     }
-    if (lightboxIndex >= images.length) {
-      setLightboxIndex(images.length - 1);
+    if (lightboxIndex >= imageAttachments.length) {
+      setLightboxIndex(imageAttachments.length - 1);
     }
-  }, [images.length, lightboxIndex]);
+  }, [imageAttachments.length, lightboxIndex]);
 
-  const addImages = useCallback((files: File[]) => {
+  const addAttachments = useCallback((files: File[]) => {
     const validFiles = files.filter((f) => {
       if (!ALLOWED_TYPES.includes(f.type)) return false;
       if (f.size > MAX_SIZE_BYTES) return false;
@@ -145,8 +152,8 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
 
     if (validFiles.length > 0) triggerPrewarm();
 
-    setImages((prev) => {
-      const remaining = MAX_IMAGES - prev.length;
+    setAttachments((prev) => {
+      const remaining = MAX_ATTACHMENTS - prev.length;
       const toAdd = validFiles.slice(0, remaining);
       const newPreviews = toAdd.map((file) => ({
         file,
@@ -156,8 +163,8 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
     });
   }, [triggerPrewarm]);
 
-  const removeImage = useCallback((index: number) => {
-    setImages((prev) => {
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => {
       const removed = prev[index];
       if (removed) URL.revokeObjectURL(removed.url);
       return prev.filter((_, i) => i !== index);
@@ -166,10 +173,10 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
-    const imageFiles = images.length > 0 ? images.map((img) => img.file) : undefined;
-    onSend(prompt.trim(), imageFiles);
+    const files = attachments.length > 0 ? attachments.map((attachment) => attachment.file) : undefined;
+    onSend(prompt.trim(), files);
     setPrompt("");
-    setImages([]);
+    setAttachments([]);
     setLightboxIndex(null);
     // Clear draft immediately on send — update ref so unmount flush won't re-save
     promptRef.current = "";
@@ -177,7 +184,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
       try { localStorage.removeItem(draftKey); } catch { /* noop */ }
     }
-  }, [canSend, prompt, images, onSend, draftKey]);
+  }, [canSend, prompt, attachments, onSend, draftKey]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -190,8 +197,8 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
   );
 
   // Auto-resize textarea based on content
-  // In compact mode with images, keep textarea at 1 line to prevent layout shift
-  const maxTextareaHeight = compact ? (images.length > 0 ? 24 : 80) : 200;
+  // In compact mode with attachments, keep textarea at 1 line to prevent layout shift
+  const maxTextareaHeight = compact ? (attachments.length > 0 ? 24 : 80) : 200;
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -224,12 +231,12 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
   // Listen for image addition events from external sources (e.g. video frame capture)
   useEffect(() => {
     const handleAddImage = (e: CustomEvent<File>) => {
-      addImages([e.detail]);
+      addAttachments([e.detail]);
     };
 
     window.addEventListener("chat-add-image", handleAddImage as EventListener);
     return () => window.removeEventListener("chat-add-image", handleAddImage as EventListener);
-  }, [addImages]);
+  }, [addAttachments]);
 
   // Paste support for images
   const handlePaste = useCallback(
@@ -248,10 +255,10 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
 
       if (imageFiles.length > 0) {
         e.preventDefault();
-        addImages(imageFiles);
+        addAttachments(imageFiles);
       }
     },
-    [addImages]
+    [addAttachments]
   );
 
   // Drag and drop
@@ -271,40 +278,65 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
       setDragOver(false);
 
       const files = Array.from(e.dataTransfer.files).filter((f) =>
-        f.type.startsWith("image/")
+        ALLOWED_TYPES.includes(f.type)
       );
       if (files.length > 0) {
-        addImages(files);
+        addAttachments(files);
       }
     },
-    [addImages]
+    [addAttachments]
   );
 
   return (
     <div style={{ padding: compact ? "0 10px 8px" : "0 16px 16px" }}>
-      {/* Image thumbnail strip — shrinks when many images */}
-      {images.length > 0 && (
+      {/* Attachment preview strip — shrinks when many attachments */}
+      {attachments.length > 0 && (
         <div style={{
           display: "flex", flexWrap: compact ? "nowrap" : "wrap", gap: thumbGap,
           marginBottom: 8, alignItems: "center",
           overflowX: compact ? "auto" : undefined,
         }}>
-          {images.map((img, index) => (
-            <div key={img.url} style={{ position: "relative", flexShrink: 0 }}>
-              <img
-                src={img.url}
-                alt={img.file.name}
-                onClick={() => setLightboxIndex(index)}
-                style={{
-                  height: thumbSize, width: thumbSize,
-                  borderRadius: 6, objectFit: "cover",
-                  border: "1px solid var(--border-main)",
-                  cursor: "zoom-in",
-                }}
-              />
+          {attachments.map((attachment, index) => (
+            <div key={attachment.url} style={{ position: "relative", flexShrink: 0 }}>
+              {attachment.file.type.startsWith("image/") ? (
+                <img
+                  src={attachment.url}
+                  alt={attachment.file.name}
+                  onClick={() => {
+                    const imageIndex = imageAttachments.findIndex((candidate) => candidate.url === attachment.url);
+                    if (imageIndex >= 0) setLightboxIndex(imageIndex);
+                  }}
+                  style={{
+                    height: thumbSize, width: thumbSize,
+                    borderRadius: 6, objectFit: "cover",
+                    border: "1px solid var(--border-main)",
+                    cursor: "zoom-in",
+                  }}
+                />
+              ) : (
+                <div
+                  title={attachment.file.name}
+                  style={{
+                    height: thumbSize,
+                    width: thumbSize,
+                    borderRadius: 6,
+                    border: "1px solid var(--border-main)",
+                    background: "var(--bg-card)",
+                    color: "var(--text-secondary)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: dense ? 11 : 12,
+                    fontWeight: 700,
+                    letterSpacing: 0.4,
+                  }}
+                >
+                  PDF
+                </div>
+              )}
               <button
                 type="button"
-                onClick={() => removeImage(index)}
+                onClick={() => removeAttachment(index)}
                 style={{
                   position: "absolute", top: -5, right: -5,
                   width: 18, height: 18,
@@ -314,15 +346,15 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 10,
                 }}
-                aria-label={`Remove ${img.file.name}`}
+                aria-label={`Remove ${attachment.file.name}`}
               >
                 x
               </button>
             </div>
           ))}
-          {images.length > 4 && (
+          {attachments.length > 4 && (
             <span style={{ fontSize: 12, color: "var(--text-tertiary)", marginLeft: 2 }}>
-              {images.length}/{MAX_IMAGES}
+              {attachments.length}/{MAX_ATTACHMENTS}
             </span>
           )}
         </div>
@@ -376,18 +408,18 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/png,image/jpeg,image/webp,image/gif"
+            accept="image/png,image/jpeg,image/webp,image/gif,application/pdf"
             style={{ display: "none" }}
             onChange={(e) => {
               const files = Array.from(e.target.files || []);
-              if (files.length > 0) addImages(files);
+              if (files.length > 0) addAttachments(files);
               e.target.value = "";
             }}
           />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={disabled || images.length >= MAX_IMAGES}
+            disabled={disabled || attachments.length >= MAX_ATTACHMENTS}
             style={{
               width: 32, height: 32,
               borderRadius: "50%",
@@ -398,9 +430,9 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 14,
               transition: "all 0.12s",
-              opacity: disabled || images.length >= MAX_IMAGES ? 0.5 : 1,
+              opacity: disabled || attachments.length >= MAX_ATTACHMENTS ? 0.5 : 1,
             }}
-            title="Attach images"
+            title="Attach images or PDFs"
           >
             <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M15.621 4.379a3 3 0 0 0-4.242 0l-7 7a3 3 0 0 0 4.241 4.243h.001l.497-.5a.75.75 0 0 1 1.064 1.057l-.498.501a4.5 4.5 0 0 1-6.364-6.364l7-7a4.5 4.5 0 0 1 6.368 6.36l-3.455 3.553A2.625 2.625 0 1 1 9.52 9.52l3.45-3.451a.75.75 0 1 1 1.061 1.06l-3.45 3.451a1.125 1.125 0 0 0 1.587 1.595l3.454-3.553a3 3 0 0 0 0-4.242Z" clipRule="evenodd" />
@@ -471,14 +503,14 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
           borderRadius: 22,
           pointerEvents: "none",
         }}>
-          <span style={{ fontSize: 14, fontWeight: 500, color: "var(--accent)" }}>Drop images here</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: "var(--accent)" }}>Drop images or PDFs here</span>
         </div>
       )}
 
       {/* Image lightbox */}
-      {lightboxIndex !== null && images.length > 0 && (
+      {lightboxIndex !== null && imageAttachments.length > 0 && (
         <ImageLightbox
-          images={images.map((img) => ({ url: img.url, name: img.file.name }))}
+          images={imageAttachments.map((attachment) => ({ url: attachment.url, name: attachment.file.name }))}
           index={lightboxIndex}
           onIndexChange={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}

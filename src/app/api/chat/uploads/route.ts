@@ -12,6 +12,7 @@ const ALLOWED_TYPES = new Set([
   "image/jpeg",
   "image/webp",
   "image/gif",
+  "application/pdf",
 ]);
 
 function getImageExtension(name: string, type: string): string {
@@ -21,6 +22,7 @@ function getImageExtension(name: string, type: string): string {
   if (type === "image/png") return "png";
   if (type === "image/webp") return "webp";
   if (type === "image/gif") return "gif";
+  if (type === "application/pdf") return "pdf";
   return "png";
 }
 
@@ -42,12 +44,12 @@ export async function POST(request: NextRequest): Promise<Response> {
     .filter((entry): entry is File => entry instanceof File);
 
   if (imageFiles.length === 0) {
-    return NextResponse.json({ error: "At least one image is required" }, { status: 400 });
+    return NextResponse.json({ error: "At least one attachment is required" }, { status: 400 });
   }
 
   if (imageFiles.length > MAX_IMAGES) {
     return NextResponse.json(
-      { error: `Maximum ${MAX_IMAGES} images per request` },
+      { error: `Maximum ${MAX_IMAGES} attachments per request` },
       { status: 400 }
     );
   }
@@ -55,7 +57,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   for (const file of imageFiles) {
     if (!ALLOWED_TYPES.has(file.type)) {
       return NextResponse.json(
-        { error: `Invalid file type: ${file.type}. Allowed: png, jpeg, webp, gif` },
+        { error: `Invalid file type: ${file.type}. Allowed: png, jpeg, webp, gif, pdf` },
         { status: 400 }
       );
     }

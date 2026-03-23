@@ -20,6 +20,7 @@ const MIME_BY_EXT: Record<string, { mime: string; binary: boolean }> = {
   ".jpeg": { mime: "image/jpeg", binary: true },
   ".webp": { mime: "image/webp", binary: true },
   ".gif": { mime: "image/gif", binary: true },
+  ".pdf": { mime: "application/pdf", binary: true },
   ".mp4": { mime: "video/mp4", binary: true },
 };
 

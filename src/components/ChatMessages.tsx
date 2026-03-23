@@ -236,7 +236,7 @@ function MessageRow({ message, onImageClick }: { message: Message; onImageClick:
       >
         {/* Image thumbnails */}
         {message.images && message.images.length > 0 && (
-          <ImageGrid images={message.images} onImageClick={onImageClick} />
+          <AttachmentGrid attachments={message.images} onImageClick={onImageClick} />
         )}
         {/* User bubble */}
         <div style={{
@@ -592,36 +592,79 @@ function ToolInputDetail({ input, toolName }: { input?: Record<string, unknown>;
   );
 }
 
-/** Collapsible image grid — shows up to 6 inline, rest behind "+N" toggle */
-function ImageGrid({
-  images,
+/** Collapsible attachment strip — images get thumbnails, PDFs show file tiles. */
+function AttachmentGrid({
+  attachments,
   onImageClick,
 }: {
-  images: { id: string; url?: string; name: string }[];
+  attachments: { id: string; url?: string; name: string; type?: string }[];
   onImageClick: (images: LightboxImage[], index: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const visible = images.filter((img): img is typeof img & { url: string } => !!img.url);
+  const visible = attachments.filter(
+    (attachment): attachment is typeof attachment & { url: string } =>
+      typeof attachment.url === "string" && attachment.url.length > 0
+  );
   if (visible.length === 0) return null;
-  const lightboxImages = visible.map((img) => ({ url: img.url, name: img.name }));
+
+  const imageAttachments = visible.filter((attachment): attachment is typeof attachment & { url: string } =>
+    attachment.type?.startsWith("image/") === true
+  );
+  const lightboxImages = imageAttachments.map((attachment) => ({
+    url: attachment.url,
+    name: attachment.name,
+  }));
 
   const hasOverflow = visible.length > 6;
   const shown = hasOverflow && !expanded ? visible.slice(0, 5) : visible;
-  const hidden = visible.length - shown.length;
   const sz = hasOverflow ? 48 : 64;
 
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8, justifyContent: "flex-end" }}>
-      {shown.map((img) => (
-        <button
-          key={img.id}
-          onClick={() => onImageClick(lightboxImages, visible.findIndex((candidate) => candidate.id === img.id))}
-          style={{ padding: 0, border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}
-          aria-label={`View ${img.name}`}
-        >
-          <img src={img.url} alt={img.name} style={{ height: sz, width: sz, borderRadius: 4, objectFit: "cover", border: "1px solid var(--border-light)" }} />
-        </button>
-      ))}
+      {shown.map((attachment) => {
+        const isImage = attachment.type?.startsWith("image/");
+        if (isImage) {
+          const imageIndex = imageAttachments.findIndex((candidate) => candidate.id === attachment.id);
+          return (
+            <button
+              key={attachment.id}
+              onClick={() => onImageClick(lightboxImages, imageIndex)}
+              style={{ padding: 0, border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}
+              aria-label={`View ${attachment.name}`}
+            >
+              <img src={attachment.url} alt={attachment.name} style={{ height: sz, width: sz, borderRadius: 4, objectFit: "cover", border: "1px solid var(--border-light)" }} />
+            </button>
+          );
+        }
+
+        return (
+          <a
+            key={attachment.id}
+            href={attachment.url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open ${attachment.name}`}
+            title={attachment.name}
+            style={{
+              width: sz,
+              height: sz,
+              borderRadius: 4,
+              border: "1px solid var(--border-light)",
+              background: "var(--bg-card)",
+              color: "var(--text-secondary)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 11,
+              fontWeight: 700,
+              textDecoration: "none",
+              letterSpacing: 0.4,
+            }}
+          >
+            PDF
+          </a>
+        );
+      })}
       {hasOverflow && (
         <button
           onClick={() => setExpanded(!expanded)}
@@ -633,7 +676,7 @@ function ImageGrid({
             fontFamily: "var(--font)",
           }}
         >
-          {expanded ? "less" : `+${hidden}`}
+          {expanded ? "less" : `+${visible.length - shown.length}`}
         </button>
       )}
     </div>

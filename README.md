@@ -94,7 +94,7 @@ Default root: `~/.manimate/`
 
 - `db/app.db`
 - `sessions/<session_id>/project/`
-- `sessions/<session_id>/project/inputs/` (chat image attachments)
+- `sessions/<session_id>/project/inputs/` (chat attachments, including images and PDFs)
 - `sessions/<session_id>/artifacts/`
 
 Override root with `MANIMATE_LOCAL_ROOT`.
