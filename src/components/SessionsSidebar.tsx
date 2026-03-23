@@ -14,6 +14,8 @@ interface SessionsSidebarProps {
   onNewSession: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  isLibraryActive?: boolean;
+  onLibraryClick?: () => void;
 }
 
 interface SessionsState {
@@ -42,6 +44,8 @@ export function SessionsSidebar({
   onNewSession,
   isCollapsed,
   onToggleCollapse,
+  isLibraryActive = false,
+  onLibraryClick,
 }: SessionsSidebarProps) {
   const [state, dispatch] = useReducer(sessionsReducer, {
     sessions: [],
@@ -123,17 +127,46 @@ export function SessionsSidebar({
             color: "var(--icon-secondary)",
             cursor: "pointer",
             border: "none",
-            background: !activeSessionId ? "var(--bg-active)" : "transparent",
+            background: !activeSessionId && !isLibraryActive ? "var(--bg-active)" : "transparent",
             transition: "background 0.12s",
           }}
           title="New session"
-          onMouseEnter={(e) => { if (activeSessionId) e.currentTarget.style.background = "var(--bg-hover)"; }}
-          onMouseLeave={(e) => { if (activeSessionId) e.currentTarget.style.background = "transparent"; }}
+          onMouseEnter={(e) => { if (activeSessionId || isLibraryActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
+          onMouseLeave={(e) => { if (activeSessionId || isLibraryActive) e.currentTarget.style.background = "transparent"; }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
         </button>
+
+        {onLibraryClick && (
+          <button
+            onClick={onLibraryClick}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: isLibraryActive ? "var(--accent)" : "var(--icon-secondary)",
+              cursor: "pointer",
+              border: "none",
+              background: isLibraryActive ? "var(--bg-active)" : "transparent",
+              transition: "background 0.12s",
+            }}
+            title="Library"
+            onMouseEnter={(e) => { if (!isLibraryActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
+            onMouseLeave={(e) => { if (!isLibraryActive) e.currentTarget.style.background = "transparent"; }}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            </svg>
+          </button>
+        )}
 
         <button
           onClick={onToggleCollapse}
@@ -229,23 +262,55 @@ export function SessionsSidebar({
           padding: "8px 8px",
           borderRadius: 8,
           fontSize: 14,
-          color: !activeSessionId ? "var(--text-primary)" : "var(--text-secondary)",
+          color: !activeSessionId && !isLibraryActive ? "var(--text-primary)" : "var(--text-secondary)",
           cursor: "pointer",
-          background: !activeSessionId ? "var(--bg-active)" : "transparent",
+          background: !activeSessionId && !isLibraryActive ? "var(--bg-active)" : "transparent",
           border: "none",
           width: "100%",
           textAlign: "left",
           fontFamily: "var(--font)",
           transition: "background 0.12s",
         }}
-        onMouseEnter={(e) => { if (activeSessionId) e.currentTarget.style.background = "var(--bg-hover)"; }}
-        onMouseLeave={(e) => { if (activeSessionId) e.currentTarget.style.background = "transparent"; }}
+        onMouseEnter={(e) => { if (activeSessionId || isLibraryActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
+        onMouseLeave={(e) => { if (activeSessionId || isLibraryActive) e.currentTarget.style.background = "transparent"; }}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
         New session
       </button>
+
+      {onLibraryClick && (
+        <button
+          onClick={onLibraryClick}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "8px 8px",
+            borderRadius: 8,
+            fontSize: 14,
+            color: isLibraryActive ? "var(--text-primary)" : "var(--text-secondary)",
+            cursor: "pointer",
+            background: isLibraryActive ? "var(--bg-active)" : "transparent",
+            border: "none",
+            width: "100%",
+            textAlign: "left",
+            fontFamily: "var(--font)",
+            transition: "background 0.12s",
+          }}
+          onMouseEnter={(e) => { if (!isLibraryActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
+          onMouseLeave={(e) => { if (!isLibraryActive) e.currentTarget.style.background = "transparent"; }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
+            <rect x="3" y="3" width="7" height="7" rx="1.5" />
+            <rect x="14" y="3" width="7" height="7" rx="1.5" />
+            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1.5" />
+          </svg>
+          Library
+        </button>
+      )}
 
       <div
         style={{

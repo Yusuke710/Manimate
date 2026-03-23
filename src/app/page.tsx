@@ -7,6 +7,7 @@ import ChatInput from "@/components/ChatInput";
 import ChatMessages from "@/components/ChatMessages";
 import PreviewPanel from "@/components/PreviewPanel";
 import { SessionsSidebar } from "@/components/SessionsSidebar";
+import { LibraryView } from "@/components/LibraryView";
 import { SSEEvent, ActivityEvent, Message, DBActivityEvent, ActiveRun, dbActivityEventToUI, ImageAttachment } from "@/lib/types";
 import { useBrowserPreviewBadge } from "@/lib/useBrowserPreviewBadge";
 import { useIsMobile } from "@/lib/useIsMobile";
@@ -1417,6 +1418,8 @@ function HomeContent() {
   const searchParamsString = searchParams.toString();
 
   const activeSessionId = searchParams.get("session");
+  const activeView = searchParams.get("view");
+  const isLibraryActive = !activeSessionId && activeView === "library";
   const launchIntent = useMemo(() => {
     if (activeSessionId) return null;
     return parseUrlLaunchIntent(searchParamsString);
@@ -1438,6 +1441,10 @@ function HomeContent() {
 
   const handleSessionSelect = useCallback((sessionId: string) => {
     router.push(`/?session=${sessionId}`);
+  }, [router]);
+
+  const handleLibraryClick = useCallback(() => {
+    router.push("/?view=library");
   }, [router]);
 
   const handleToggleSidebar = useCallback(() => {
@@ -1502,7 +1509,7 @@ function HomeContent() {
   }, [router, aspectRatio]);
 
   // Determine UX stage
-  const isWelcome = !activeSessionId;
+  const isWelcome = !activeSessionId && !isLibraryActive;
 
   useEffect(() => {
     if (isWelcome) return;
@@ -1544,6 +1551,11 @@ function HomeContent() {
     handleNewSession();
   }, [handleNewSession]);
 
+  const handleMobileLibraryClick = useCallback(() => {
+    setMobileSidebarOpen(false);
+    handleLibraryClick();
+  }, [handleLibraryClick]);
+
   return (
     <div style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
       {/* Sidebar - overlay on mobile, inline on desktop */}
@@ -1574,6 +1586,8 @@ function HomeContent() {
               onNewSession={handleMobileNewSession}
               isCollapsed={false}
               onToggleCollapse={() => setMobileSidebarOpen(false)}
+              isLibraryActive={isLibraryActive}
+              onLibraryClick={handleMobileLibraryClick}
             />
           </div>
         </>
@@ -1589,6 +1603,8 @@ function HomeContent() {
             onNewSession={handleNewSession}
             isCollapsed={sidebarCollapsed}
             onToggleCollapse={handleToggleSidebar}
+            isLibraryActive={isLibraryActive}
+            onLibraryClick={handleLibraryClick}
           />
         </div>
       )}
@@ -1638,7 +1654,9 @@ function HomeContent() {
           </div>
         )}
 
-        {isWelcome ? (
+        {isLibraryActive ? (
+          <LibraryView onSessionSelect={handleSessionSelect} />
+        ) : isWelcome ? (
           <WelcomeView
             onSend={handleWelcomeSend}
             onPrewarm={handlePrewarm}

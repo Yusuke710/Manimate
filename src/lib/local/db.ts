@@ -274,11 +274,14 @@ function openDb(): DatabaseSync {
   return db;
 }
 
+const SESSION_SUMMARY_COLS =
+  "id, title, status, sandbox_id, claude_session_id, model, aspect_ratio, voice_id, video_path, last_video_url, created_at, updated_at";
+
 export function listLocalSessions(): LocalSession[] {
   const rows = openDb()
-    .prepare("SELECT * FROM sessions ORDER BY updated_at DESC")
+    .prepare(`SELECT ${SESSION_SUMMARY_COLS} FROM sessions ORDER BY updated_at DESC`)
     .all() as Record<string, unknown>[];
-  return rows.map(mapSession);
+  return rows.map((r) => ({ ...mapSession(r), plan_content: null, script_content: null, subtitles_content: null, chapters: null }));
 }
 
 export function createLocalSession(input: {

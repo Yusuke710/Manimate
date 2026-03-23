@@ -7,9 +7,11 @@ import { DEFAULT_MODEL } from "@/lib/models";
 import {
   ensureLocalSessionLayout,
   getLocalSandboxId,
+  getLocalSessionPaths,
   localFileToApiUrl,
   resolveSessionFilePath,
 } from "@/lib/local/config";
+import { generateThumbnailAsync } from "@/lib/local/thumbnail";
 import {
   createLocalSession,
   createLocalRun,
@@ -633,6 +635,9 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           postRunVideo.path,
           Math.round(postRunVideo.stats.mtimeMs)
         );
+        // Generate thumbnail fire-and-forget — picks most-content frame via ffmpeg thumbnail filter
+        const { sessionRoot } = getLocalSessionPaths(sessionId);
+        generateThumbnailAsync(postRunVideo.path, sessionRoot);
       }
 
       const finishedAt = new Date().toISOString();
