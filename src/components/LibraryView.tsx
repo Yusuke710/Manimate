@@ -6,6 +6,7 @@ type LibrarySession = {
   id: string;
   title: string;
   status: string;
+  has_video: boolean;
   last_video_url: string | null;
   aspect_ratio: string | null;
   updated_at: string;
@@ -53,6 +54,7 @@ function VideoCard({
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const isRunning = session.status === "running" || session.status === "queued";
   const aspectPadding = ASPECT_PADDING_BY_RATIO[session.aspect_ratio ?? ""] ?? "56.25%";
 
@@ -79,7 +81,7 @@ function VideoCard({
     >
       {/* Thumbnail */}
       <div style={{ position: "relative", width: "100%", paddingBottom: aspectPadding, background: "var(--bg-muted, #f5f4f2)", flexShrink: 0 }}>
-        {session.last_video_url ? (
+        {session.has_video && !thumbnailFailed ? (
           <img
             src={`/api/thumbnail?session_id=${encodeURIComponent(session.id)}&_v=${encodeURIComponent(session.updated_at)}`}
             alt={session.title}
@@ -91,8 +93,8 @@ function VideoCard({
               objectFit: "cover",
             }}
             onError={(e) => {
-              // Fallback: hide broken image, show placeholder icon
-              (e.currentTarget as HTMLImageElement).style.display = "none";
+              e.currentTarget.style.display = "none";
+              setThumbnailFailed(true);
             }}
           />
         ) : (
@@ -177,7 +179,7 @@ export function LibraryView({ onSessionSelect }: { onSessionSelect: (id: string)
       const res = await fetch("/api/sessions");
       if (!res.ok) return;
       const data = (await res.json()) as LibrarySession[];
-      setSessions(data || []);
+      setSessions((data || []).filter((session) => session.has_video));
     } catch {
       // Network error — keep existing data, don't blank the grid
     } finally {
@@ -235,8 +237,8 @@ export function LibraryView({ onSessionSelect }: { onSessionSelect: (id: string)
             <rect x="2" y="2" width="20" height="20" rx="2.5" />
             <path d="M10 8l6 4-6 4V8z" />
           </svg>
-          <div style={{ fontSize: 15, fontWeight: 500 }}>No sessions yet</div>
-          <div style={{ fontSize: 13 }}>Create an animation to see it here</div>
+          <div style={{ fontSize: 15, fontWeight: 500 }}>No videos yet</div>
+          <div style={{ fontSize: 13 }}>Generate an animation to see it here</div>
         </div>
       ) : (
         <div
@@ -246,7 +248,7 @@ export function LibraryView({ onSessionSelect }: { onSessionSelect: (id: string)
           }}
         >
           {sessions.map((session) => (
-            <div key={session.id} style={{ breakInside: "avoid", marginBottom: 14 }}>
+            <div key={`${session.id}:${session.updated_at}`} style={{ breakInside: "avoid", marginBottom: 14 }}>
               <VideoCard
                 session={session}
                 onClick={() => onSessionSelect(session.id)}

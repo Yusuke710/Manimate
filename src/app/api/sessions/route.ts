@@ -5,6 +5,7 @@
  * POST /api/sessions - Create session
  */
 
+import fsp from "node:fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
 import { isAspectRatio, type AspectRatio } from "@/lib/aspect-ratio";
@@ -16,9 +17,25 @@ import {
 } from "@/lib/local/db";
 import { ensureLocalSessionLayout } from "@/lib/local/config";
 
+async function hasExistingVideo(videoPath: string | null): Promise<boolean> {
+  if (!videoPath) return false;
+  try {
+    const stat = await fsp.stat(videoPath);
+    return stat.isFile();
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(): Promise<Response> {
   const sessions = listLocalSessions();
-  return NextResponse.json(sessions);
+  const sessionsWithVideo = await Promise.all(
+    sessions.map(async (session) => ({
+      ...session,
+      has_video: await hasExistingVideo(session.video_path),
+    }))
+  );
+  return NextResponse.json(sessionsWithVideo);
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
