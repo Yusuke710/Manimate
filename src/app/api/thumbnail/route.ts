@@ -10,14 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { existsSync, readFileSync } from "node:fs";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import path from "node:path";
+import { readFileSync } from "node:fs";
 import { getLocalSession } from "@/lib/local/db";
 import { getLocalSessionPaths } from "@/lib/local/config";
-
-const execFileAsync = promisify(execFile);
+import { ensureThumbnail } from "@/lib/local/thumbnail";
 
 export async function GET(request: NextRequest): Promise<Response> {
   const sessionId = request.nextUrl.searchParams.get("session_id");
@@ -27,26 +23,8 @@ export async function GET(request: NextRequest): Promise<Response> {
   if (!session) return new Response(null, { status: 404 });
 
   const { sessionRoot } = getLocalSessionPaths(sessionId);
-  const thumbPath = path.join(sessionRoot, "thumbnail.jpg");
-
-  // Serve cached thumbnail immediately if available
-  if (!existsSync(thumbPath)) {
-    // Fallback: lazily generate for sessions predating push-based generation
-    const videoPath = session.video_path;
-    if (!videoPath || !existsSync(videoPath)) return new Response(null, { status: 404 });
-
-    try {
-      await execFileAsync("ffmpeg", [
-        "-y", "-i", videoPath,
-        "-vf", "fps=1,thumbnail=300",
-        "-frames:v", "1",
-        "-q:v", "3",
-        thumbPath,
-      ]);
-    } catch {
-      return new Response(null, { status: 404 });
-    }
-  }
+  const thumbPath = await ensureThumbnail(sessionRoot, session.video_path);
+  if (!thumbPath) return new Response(null, { status: 404 });
 
   try {
     const data = readFileSync(thumbPath);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useCallback } from "react";
+import { useEffect, useReducer, useCallback, type MouseEvent, type ReactNode } from "react";
 
 type Session = {
   id: string;
@@ -27,6 +27,87 @@ type SessionsAction =
   | { type: "SET_SESSIONS"; sessions: Session[] }
   | { type: "SET_LOADING"; loading: boolean };
 
+interface SidebarNavButtonProps {
+  active: boolean;
+  activeColor?: string;
+  compact?: boolean;
+  icon: ReactNode;
+  inactiveColor: string;
+  label: string;
+  onClick: () => void;
+}
+
+function PlusIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+  );
+}
+
+function LibraryIcon({ size = 16, strokeWidth = 1.75 }: { size?: number; strokeWidth?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
+function handleNavHover(event: MouseEvent<HTMLButtonElement>, active: boolean, hovered: boolean) {
+  if (active) return;
+  event.currentTarget.style.background = hovered ? "var(--bg-hover)" : "transparent";
+}
+
+function SidebarNavButton({
+  active,
+  activeColor,
+  compact = false,
+  icon,
+  inactiveColor,
+  label,
+  onClick,
+}: SidebarNavButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        ...(compact
+          ? {
+              width: 36,
+              height: 36,
+              justifyContent: "center",
+            }
+          : {
+              gap: 10,
+              padding: "8px 8px",
+              width: "100%",
+              textAlign: "left" as const,
+              fontSize: 14,
+            }),
+        borderRadius: 8,
+        color: active ? (activeColor ?? inactiveColor) : inactiveColor,
+        cursor: "pointer",
+        background: active ? "var(--bg-active)" : "transparent",
+        border: "none",
+        fontFamily: "var(--font)",
+        transition: "background 0.12s",
+      }}
+      onMouseEnter={(event) => handleNavHover(event, active, true)}
+      onMouseLeave={(event) => handleNavHover(event, active, false)}
+    >
+      {icon}
+      {!compact && label}
+    </button>
+  );
+}
+
 function sessionsReducer(state: SessionsState, action: SessionsAction): SessionsState {
   switch (action.type) {
     case "SET_SESSIONS":
@@ -51,6 +132,7 @@ export function SessionsSidebar({
     sessions: [],
     loading: true,
   });
+  const isHomeActive = !activeSessionId && !isLibraryActive;
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -115,57 +197,25 @@ export function SessionsSidebar({
           ∑
         </button>
 
-        <button
+        <SidebarNavButton
+          active={isHomeActive}
+          compact
+          icon={<PlusIcon size={18} />}
+          inactiveColor="var(--icon-secondary)"
+          label="New session"
           onClick={onNewSession}
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--icon-secondary)",
-            cursor: "pointer",
-            border: "none",
-            background: !activeSessionId && !isLibraryActive ? "var(--bg-active)" : "transparent",
-            transition: "background 0.12s",
-          }}
-          title="New session"
-          onMouseEnter={(e) => { if (activeSessionId || isLibraryActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
-          onMouseLeave={(e) => { if (activeSessionId || isLibraryActive) e.currentTarget.style.background = "transparent"; }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-        </button>
+        />
 
         {onLibraryClick && (
-          <button
+          <SidebarNavButton
+            active={isLibraryActive}
+            activeColor="var(--accent)"
+            compact
+            icon={<LibraryIcon size={17} />}
+            inactiveColor="var(--icon-secondary)"
+            label="Library"
             onClick={onLibraryClick}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: isLibraryActive ? "var(--accent)" : "var(--icon-secondary)",
-              cursor: "pointer",
-              border: "none",
-              background: isLibraryActive ? "var(--bg-active)" : "transparent",
-              transition: "background 0.12s",
-            }}
-            title="Library"
-            onMouseEnter={(e) => { if (!isLibraryActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
-            onMouseLeave={(e) => { if (!isLibraryActive) e.currentTarget.style.background = "transparent"; }}
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
-              <rect x="3" y="3" width="7" height="7" rx="1.5" />
-              <rect x="14" y="3" width="7" height="7" rx="1.5" />
-              <rect x="3" y="14" width="7" height="7" rx="1.5" />
-              <rect x="14" y="14" width="7" height="7" rx="1.5" />
-            </svg>
-          </button>
+          />
         )}
 
         <button
@@ -253,63 +303,24 @@ export function SessionsSidebar({
         </button>
       </div>
 
-      <button
+      <SidebarNavButton
+        active={isHomeActive}
+        activeColor="var(--text-primary)"
+        icon={<PlusIcon />}
+        inactiveColor="var(--text-secondary)"
+        label="New session"
         onClick={onNewSession}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "8px 8px",
-          borderRadius: 8,
-          fontSize: 14,
-          color: !activeSessionId && !isLibraryActive ? "var(--text-primary)" : "var(--text-secondary)",
-          cursor: "pointer",
-          background: !activeSessionId && !isLibraryActive ? "var(--bg-active)" : "transparent",
-          border: "none",
-          width: "100%",
-          textAlign: "left",
-          fontFamily: "var(--font)",
-          transition: "background 0.12s",
-        }}
-        onMouseEnter={(e) => { if (activeSessionId || isLibraryActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
-        onMouseLeave={(e) => { if (activeSessionId || isLibraryActive) e.currentTarget.style.background = "transparent"; }}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-        </svg>
-        New session
-      </button>
+      />
 
       {onLibraryClick && (
-        <button
+        <SidebarNavButton
+          active={isLibraryActive}
+          activeColor="var(--text-primary)"
+          icon={<LibraryIcon />}
+          inactiveColor="var(--text-secondary)"
+          label="Library"
           onClick={onLibraryClick}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "8px 8px",
-            borderRadius: 8,
-            fontSize: 14,
-            color: isLibraryActive ? "var(--text-primary)" : "var(--text-secondary)",
-            cursor: "pointer",
-            background: isLibraryActive ? "var(--bg-active)" : "transparent",
-            border: "none",
-            width: "100%",
-            textAlign: "left",
-            fontFamily: "var(--font)",
-            transition: "background 0.12s",
-          }}
-          onMouseEnter={(e) => { if (!isLibraryActive) e.currentTarget.style.background = "var(--bg-hover)"; }}
-          onMouseLeave={(e) => { if (!isLibraryActive) e.currentTarget.style.background = "transparent"; }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
-            <rect x="3" y="3" width="7" height="7" rx="1.5" />
-            <rect x="14" y="3" width="7" height="7" rx="1.5" />
-            <rect x="3" y="14" width="7" height="7" rx="1.5" />
-            <rect x="14" y="14" width="7" height="7" rx="1.5" />
-          </svg>
-          Library
-        </button>
+        />
       )}
 
       <div

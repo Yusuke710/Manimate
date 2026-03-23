@@ -11,6 +11,12 @@ type LibrarySession = {
   updated_at: string;
 };
 
+const ASPECT_PADDING_BY_RATIO: Record<string, string> = {
+  "9:16": "177.78%",
+  "1:1": "100%",
+  "4:3": "75%",
+};
+
 function formatDate(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
@@ -24,6 +30,21 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 }
 
+function Spinner({ size = 28, borderWidth = 2.5 }: { size?: number; borderWidth?: number }) {
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        border: `${borderWidth}px solid var(--border-input)`,
+        borderTopColor: "var(--accent)",
+        animation: "spin 1s linear infinite",
+      }}
+    />
+  );
+}
+
 function VideoCard({
   session,
   onClick,
@@ -33,16 +54,7 @@ function VideoCard({
 }) {
   const [hovered, setHovered] = useState(false);
   const isRunning = session.status === "running" || session.status === "queued";
-
-  // Aspect ratio → padding-bottom % for the thumbnail
-  const aspectPadding =
-    session.aspect_ratio === "9:16"
-      ? "177.78%"
-      : session.aspect_ratio === "1:1"
-      ? "100%"
-      : session.aspect_ratio === "4:3"
-      ? "75%"
-      : "56.25%"; // 16:9 default
+  const aspectPadding = ASPECT_PADDING_BY_RATIO[session.aspect_ratio ?? ""] ?? "56.25%";
 
   return (
     <button
@@ -94,16 +106,7 @@ function VideoCard({
             }}
           >
             {isRunning ? (
-              <div
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: "50%",
-                  border: "2.5px solid var(--border-input)",
-                  borderTopColor: "var(--accent)",
-                  animation: "spin 1s linear infinite",
-                }}
-              />
+              <Spinner />
             ) : (
               <svg
                 width="32"
@@ -213,16 +216,7 @@ export function LibraryView({ onSessionSelect }: { onSessionSelect: (id: string)
 
       {loading ? (
         <div style={{ display: "flex", justifyContent: "center", paddingTop: 64 }}>
-          <div
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: "50%",
-              border: "2.5px solid var(--border-input)",
-              borderTopColor: "var(--accent)",
-              animation: "spin 1s linear infinite",
-            }}
-          />
+          <Spinner />
         </div>
       ) : sessions.length === 0 ? (
         <div

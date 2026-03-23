@@ -11,38 +11,58 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+const THUMBNAIL_FILENAME = "thumbnail.jpg";
+const THUMBNAIL_FILTER = "fps=1,thumbnail=300";
+
+function getThumbnailPath(sessionRoot: string): string {
+  return path.join(sessionRoot, THUMBNAIL_FILENAME);
+}
+
+function getThumbnailArgs(videoPath: string, thumbPath: string): string[] {
+  return [
+    "-y",
+    "-i", videoPath,
+    "-vf", THUMBNAIL_FILTER,
+    "-frames:v", "1",
+    "-q:v", "3",
+    thumbPath,
+  ];
+}
+
+export async function generateThumbnail(videoPath: string, sessionRoot: string): Promise<boolean> {
+  try {
+    await execFileAsync("ffmpeg", getThumbnailArgs(videoPath, getThumbnailPath(sessionRoot)));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Generates thumbnail.jpg in sessionRoot from videoPath.
- * Safe to call multiple times — regenerates only if video is newer.
+ * Safe to call multiple times.
  * Errors are swallowed (ffmpeg may not be installed, that's OK).
  */
 export function generateThumbnailAsync(videoPath: string, sessionRoot: string): void {
-  const thumbPath = path.join(sessionRoot, "thumbnail.jpg");
-
-  // Always regenerate on new video (caller already verified video changed).
-  //
-  // Filter chain: fps=1 downsamples to 1 frame/sec so thumbnail=300 covers
-  // the full video (up to 300 seconds). The thumbnail filter then picks the
-  // single most-representative frame across the entire downsampled sequence.
-  execFile(
-    "ffmpeg",
-    [
-      "-y",
-      "-i", videoPath,
-      "-vf", "fps=1,thumbnail=300",
-      "-frames:v", "1",
-      "-q:v", "3",
-      thumbPath,
-    ],
-    // Fire-and-forget: ignore errors (ffmpeg missing, corrupt file, etc.)
-    () => {},
-  );
+  void generateThumbnail(videoPath, sessionRoot);
 }
 
 /**
  * Returns true if a cached thumbnail exists for the session.
  */
 export function thumbnailExists(sessionRoot: string): boolean {
-  return existsSync(path.join(sessionRoot, "thumbnail.jpg"));
+  return existsSync(getThumbnailPath(sessionRoot));
+}
+
+/**
+ * Returns an existing thumbnail path, or lazily generates one for older sessions.
+ */
+export async function ensureThumbnail(sessionRoot: string, videoPath: string | null): Promise<string | null> {
+  const thumbPath = getThumbnailPath(sessionRoot);
+  if (existsSync(thumbPath)) return thumbPath;
+  if (!videoPath || !existsSync(videoPath)) return null;
+  return (await generateThumbnail(videoPath, sessionRoot)) ? thumbPath : null;
 }
