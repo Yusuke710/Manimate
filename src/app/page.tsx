@@ -1237,12 +1237,12 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
 
   const handleRequestHqRender = useCallback(() => {
     if (state.isLoading) return;
-    void handleSend("render in hq");
+    void handleSend("render in 1080@30fps");
   }, [handleSend, state.isLoading]);
 
   const handleRequest4kRender = useCallback(() => {
     if (state.isLoading) return;
-    void handleSend("render in 4k");
+    void handleSend("render in 4k@30fps");
   }, [handleSend, state.isLoading]);
 
   const hasArtifacts = !!(state.planContent || state.scriptContent || state.videoUrl);
