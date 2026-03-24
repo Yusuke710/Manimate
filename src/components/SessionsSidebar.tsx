@@ -37,10 +37,10 @@ interface SidebarNavButtonProps {
   onClick: () => void;
 }
 
-function PlusIcon({ size = 16 }: { size?: number }) {
+function NewSessionIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
     </svg>
   );
 }
@@ -200,7 +200,7 @@ export function SessionsSidebar({
         <SidebarNavButton
           active={isHomeActive}
           compact
-          icon={<PlusIcon size={18} />}
+          icon={<NewSessionIcon size={18} />}
           inactiveColor="var(--icon-secondary)"
           label="New session"
           onClick={onNewSession}
@@ -306,7 +306,7 @@ export function SessionsSidebar({
       <SidebarNavButton
         active={isHomeActive}
         activeColor="var(--text-primary)"
-        icon={<PlusIcon />}
+        icon={<NewSessionIcon />}
         inactiveColor="var(--text-secondary)"
         label="New session"
         onClick={onNewSession}
