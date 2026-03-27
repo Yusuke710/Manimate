@@ -643,12 +643,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       const finishedAt = new Date().toISOString();
 
       if (wasCanceled) {
-        insertLocalMessage({
-          session_id: sessionId,
-          role: "assistant",
-          content: "Stopped by user",
-        });
-
         updateLocalRun(runId, {
           status: "canceled",
           finished_at: finishedAt,
@@ -666,6 +660,13 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           plan_content: planContent,
           script_content: scriptContent,
           subtitles_content: subtitlesContent,
+          ...(videoChanged && postRunVideo
+            ? {
+                video_path: postRunVideo.path,
+                last_video_url: videoUrl,
+                chapters: serializedChapters,
+              }
+            : {}),
         });
         await sendEvent({
           type: "complete",
@@ -675,6 +676,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           sandbox_id: sandboxId,
           claude_session_id: claudeSessionId || undefined,
           run_id: runId,
+          video_url: videoUrl || undefined,
         });
         await persistActivity("complete", "Stopped by user", {
           terminal_status: "canceled",

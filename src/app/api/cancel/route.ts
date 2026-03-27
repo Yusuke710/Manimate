@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionIdFromSandboxId } from "@/lib/local/config";
 import {
   getLocalRun,
+  insertLocalMessage,
   updateLocalRun,
 } from "@/lib/local/db";
 import { cancelLocalRunProcess } from "@/lib/local/runtime";
@@ -38,6 +39,11 @@ export async function POST(request: NextRequest): Promise<Response> {
           status: "canceled",
           finished_at: new Date().toISOString(),
           error_message: "Stopped by user",
+        });
+        insertLocalMessage({
+          session_id: run.session_id,
+          role: "assistant",
+          content: "Stopped by user",
         });
       }
     }

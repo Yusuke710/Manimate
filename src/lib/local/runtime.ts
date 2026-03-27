@@ -58,22 +58,32 @@ function waitForProcessExit(
   });
 }
 
+function killProcessGroup(pid: number, signal: "SIGTERM" | "SIGKILL"): void {
+  try {
+    // Negative pid targets the entire process group (all children including manim)
+    process.kill(-pid, signal);
+  } catch {
+    // Process group may already be gone.
+  }
+}
+
 async function terminateLocalRunProcess(target: ActiveLocalRunProcess): Promise<void> {
   target.canceled = true;
+  const pid = target.process.pid;
 
-  try {
-    target.process.kill("SIGTERM");
-  } catch {
-    // Process may already be gone.
+  if (pid) {
+    killProcessGroup(pid, "SIGTERM");
+  } else {
+    try { target.process.kill("SIGTERM"); } catch { /* gone */ }
   }
 
-  const exitedAfterTerm = await waitForProcessExit(target.process, 500);
+  const exitedAfterTerm = await waitForProcessExit(target.process, 3000);
   if (exitedAfterTerm) return;
 
-  try {
-    target.process.kill("SIGKILL");
-  } catch {
-    // Ignore final kill failure.
+  if (pid) {
+    killProcessGroup(pid, "SIGKILL");
+  } else {
+    try { target.process.kill("SIGKILL"); } catch { /* gone */ }
   }
   await waitForProcessExit(target.process, 500);
 }
@@ -242,6 +252,7 @@ export function spawnLocalClaudeProcess(input: {
     cwd: input.cwd,
     env: buildLocalClaudeEnv(),
     stdio: ["pipe", "pipe", "pipe"],
+    detached: true, // Own process group so kill(-pid) terminates the whole tree
   });
 
   // Keep stdin closed for print mode to avoid waiting on a never-ending pipe.
