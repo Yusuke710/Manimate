@@ -121,6 +121,10 @@ function compactJson(value, maxChars = 160) {
   }
 }
 
+function baseUrlHint(baseUrl) {
+  return `Check that Manimate is running at ${baseUrl} or pass --base-url / set MANIMATE_BASE_URL.`;
+}
+
 function summarizeToolInput(toolInput) {
   if (!toolInput || typeof toolInput !== "object") return "";
   if (typeof toolInput.command === "string" && toolInput.command.trim()) {
@@ -284,12 +288,18 @@ async function streamGenerate(options) {
 
   const endpoint = `${options.baseUrl}/api/tool/generate`;
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: abortController.signal,
-    });
+    let response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Could not reach Manimate at ${options.baseUrl}. ${baseUrlHint(options.baseUrl)} ${message}`);
+    }
 
     if (!response.ok) {
       const text = await response.text();
@@ -297,6 +307,9 @@ async function streamGenerate(options) {
       const message =
         (parsed && typeof parsed.error === "string" && parsed.error) ||
         `HTTP ${response.status}: ${text || "request failed"}`;
+      if (response.status === 401) {
+        throw new Error(`${message}. ${baseUrlHint(options.baseUrl)}`);
+      }
       throw new Error(message);
     }
 
