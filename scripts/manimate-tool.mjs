@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -10,13 +9,21 @@ const DEFAULT_APP_HOST = process.env.MANIMATE_APP_HOST || "127.0.0.1";
 const DEFAULT_APP_PORT = parsePositiveInteger(process.env.MANIMATE_APP_PORT, 3000);
 const DEFAULT_BASE_URL = process.env.MANIMATE_BASE_URL || `http://${DEFAULT_APP_HOST}:${DEFAULT_APP_PORT}`;
 const DEFAULT_CLOUD_BASE_URL = process.env.MANIMATE_CLOUD_SYNC_URL || "https://manimate.ai";
-const DEFAULT_LOCAL_ROOT = process.env.MANIMATE_LOCAL_ROOT || path.join(os.homedir(), ".manimate");
-const LOCAL_CONFIG_PATH = path.join(DEFAULT_LOCAL_ROOT, "config.json");
 const DEFAULT_OPEN_TIMEOUT_SECONDS = 45;
+const NONE_VOICE_ID = "none";
 const STATUS_ENDPOINT_PATH = "/api/cloud-sync/status";
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const NEXT_CLI_PATH = path.join(PROJECT_ROOT, "node_modules", "next", "dist", "bin", "next");
 const NEXT_BUILD_ID_PATH = path.join(PROJECT_ROOT, ".next", "BUILD_ID");
+const NEXT_STATIC_PATH = path.join(PROJECT_ROOT, ".next", "static");
+const NEXT_STANDALONE_ROOT = path.join(PROJECT_ROOT, ".next", "standalone");
+const NEXT_STANDALONE_SERVER_PATH = path.join(PROJECT_ROOT, ".next", "standalone", "server.js");
+const NEXT_STANDALONE_STATIC_PATH = path.join(NEXT_STANDALONE_ROOT, ".next", "static");
+const REMOVED_SUBCOMMANDS = new Map([
+  ["connect", "Open `manimate` with no prompt to reconnect through the browser flow."],
+  ["generate", "Pass the prompt directly: `manimate \"your prompt\"`."],
+  ["open", "Run `manimate` with no prompt to launch the app."],
+]);
 
 function parsePositiveInteger(value, fallback) {
   const parsed = Number.parseInt(value || "", 10);
@@ -28,20 +35,18 @@ function usage(code = 0) {
   out(`Manimate tool CLI
 
 Usage:
-  node scripts/manimate-tool.mjs
-  node scripts/manimate-tool.mjs open [options]
-  node scripts/manimate-tool.mjs generate --prompt "<text>" [options]
-  node scripts/manimate-tool.mjs connect [options]
+  manimate
+  manimate "<prompt>" [options]
 
-Options:
-  --prompt <text>          Prompt text (required)
-  --session <id>           Reuse a specific session ID
-  --model <id>             Model override (opus|sonnet|haiku)
-  --aspect-ratio <value>   Aspect ratio (16:9|9:16|1:1)
-  --voice <id>             Voice ID override
+Generate Options:
+  -p, --prompt <text>      Prompt text
+  -s, --session <id>       Reuse a specific session ID
+  -m, --model <id>         Model override (opus|sonnet|haiku)
+  -a, --aspect <value>     Aspect ratio (16:9|9:16|1:1)
+  -v, --voice <id>         Voice ID override
+  --no-voice               Disable voiceover (default)
   --base-url <url>         API base URL (default: ${DEFAULT_BASE_URL})
   --show-events            Print readable live SSE events to stderr
-  --json                   Print final result as JSON
   --quiet                  Suppress progress logs
   Ctrl-C behavior          First press requests server cancel; second press force-exits
   --help                   Show this help
@@ -51,23 +56,17 @@ Open Options:
   --cloud-base-url <url>   Hosted site URL for autosync auth (default: ${DEFAULT_CLOUD_BASE_URL})
   --port <number>          Local app port override (otherwise picked automatically)
   --host <hostname>        Local app host override (default: ${DEFAULT_APP_HOST})
-  --mode <auto|dev|start>  Launch mode (default: auto)
+  --mode <auto|standalone|dev|start>  Launch mode (default: auto)
   --timeout <seconds>      Wait time for local app startup (default: ${DEFAULT_OPEN_TIMEOUT_SECONDS})
   --restart                Restart an existing local Manimate server on this port
   --no-open                Start local app without opening the browser
-
-Connect Options:
-  --base-url <url>         Hosted site URL (default: ${DEFAULT_CLOUD_BASE_URL})
-  --device-name <name>     Label shown during browser approval
-  --no-open                Do not attempt to open the browser automatically
-  --timeout <seconds>      Approval timeout (default: 600)
 `);
   process.exit(code);
 }
 
 function nextValue(argv, index, flag) {
   const value = argv[index + 1];
-  if (!value || value.startsWith("--")) {
+  if (!value || value.startsWith("-")) {
     throw new Error(`${flag} requires a value`);
   }
   return value;
@@ -79,10 +78,11 @@ function parseGenerateArgs(argv) {
     sessionId: "",
     model: "",
     aspectRatio: "",
-    voiceId: "",
+    voiceId: NONE_VOICE_ID,
     baseUrl: DEFAULT_BASE_URL,
+    baseUrlExplicit: false,
     showEvents: false,
-    json: false,
+    json: true,
     quiet: false,
   };
 
@@ -90,32 +90,39 @@ function parseGenerateArgs(argv) {
     const arg = argv[i];
     switch (arg) {
       case "--prompt":
+      case "-p":
         options.prompt = nextValue(argv, i, "--prompt");
         i += 1;
         break;
       case "--session":
+      case "-s":
         options.sessionId = nextValue(argv, i, "--session");
         i += 1;
         break;
       case "--model":
+      case "-m":
         options.model = nextValue(argv, i, "--model");
         i += 1;
         break;
       case "--aspect-ratio":
+      case "--aspect":
+      case "-a":
         options.aspectRatio = nextValue(argv, i, "--aspect-ratio");
         i += 1;
         break;
       case "--voice":
       case "--voice-id":
+      case "-v":
         options.voiceId = nextValue(argv, i, arg);
         i += 1;
         break;
+      case "--no-voice":
+        options.voiceId = NONE_VOICE_ID;
+        break;
       case "--base-url":
         options.baseUrl = nextValue(argv, i, "--base-url");
+        options.baseUrlExplicit = true;
         i += 1;
-        break;
-      case "--json":
-        options.json = true;
         break;
       case "--show-events":
         options.showEvents = true;
@@ -127,61 +134,27 @@ function parseGenerateArgs(argv) {
         usage(0);
         break;
       default:
-        throw new Error(`Unknown flag: ${arg}`);
+        if (arg.startsWith("-")) {
+          throw new Error(`Unknown flag: ${arg}`);
+        }
+        if (options.prompt) {
+          throw new Error(`Unexpected argument: ${arg}`);
+        }
+        const promptParts = [arg];
+        while (i + 1 < argv.length && !argv[i + 1].startsWith("-")) {
+          promptParts.push(argv[i + 1]);
+          i += 1;
+        }
+        options.prompt = promptParts.join(" ");
+        break;
     }
   }
 
   options.prompt = options.prompt.trim();
   if (!options.prompt) {
-    throw new Error("--prompt is required");
+    throw new Error("prompt is required");
   }
   options.baseUrl = options.baseUrl.replace(/\/+$/, "");
-  return options;
-}
-
-function parseConnectArgs(argv) {
-  const options = {
-    baseUrl: DEFAULT_CLOUD_BASE_URL,
-    deviceName: os.hostname(),
-    noOpen: false,
-    json: false,
-    timeoutSeconds: 600,
-  };
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    switch (arg) {
-      case "--base-url":
-        options.baseUrl = nextValue(argv, i, "--base-url");
-        i += 1;
-        break;
-      case "--device-name":
-        options.deviceName = nextValue(argv, i, "--device-name");
-        i += 1;
-        break;
-      case "--timeout":
-        options.timeoutSeconds = Number.parseInt(nextValue(argv, i, "--timeout"), 10);
-        i += 1;
-        break;
-      case "--no-open":
-        options.noOpen = true;
-        break;
-      case "--json":
-        options.json = true;
-        break;
-      case "--help":
-        usage(0);
-        break;
-      default:
-        throw new Error(`Unknown flag: ${arg}`);
-    }
-  }
-
-  options.baseUrl = options.baseUrl.replace(/\/+$/, "");
-  if (!Number.isFinite(options.timeoutSeconds) || options.timeoutSeconds <= 0) {
-    throw new Error("--timeout must be a positive integer");
-  }
-
   return options;
 }
 
@@ -199,6 +172,11 @@ function parseUrlOrNull(value) {
   } catch {
     return null;
   }
+}
+
+function isLoopbackBaseUrl(value) {
+  const parsed = parseUrlOrNull(value);
+  return Boolean(parsed && normalizeLoopbackHost(parsed.hostname) === "loopback");
 }
 
 function getUrlPort(url) {
@@ -226,7 +204,6 @@ function parseOpenArgs(argv) {
     mode: "auto",
     noOpen: false,
     restart: false,
-    json: false,
     timeoutSeconds: DEFAULT_OPEN_TIMEOUT_SECONDS,
     portAdjusted: false,
     portAdjustedReason: null,
@@ -270,9 +247,6 @@ function parseOpenArgs(argv) {
       case "--no-open":
         options.noOpen = true;
         break;
-      case "--json":
-        options.json = true;
-        break;
       case "--help":
         usage(0);
         break;
@@ -288,8 +262,8 @@ function parseOpenArgs(argv) {
   options.baseUrl = options.baseUrl.replace(/\/+$/, "");
   options.cloudBaseUrl = options.cloudBaseUrl.replace(/\/+$/, "");
   options.mode = options.mode.trim().toLowerCase();
-  if (!["auto", "dev", "start"].includes(options.mode)) {
-    throw new Error("--mode must be one of: auto, dev, start");
+  if (!["auto", "standalone", "dev", "start"].includes(options.mode)) {
+    throw new Error("--mode must be one of: auto, standalone, dev, start");
   }
   if (!Number.isFinite(options.port) || options.port <= 0) {
     throw new Error("--port must be a positive integer");
@@ -327,10 +301,6 @@ function baseUrlHint(baseUrl) {
   return `Check that Manimate is running at ${baseUrl} or pass --base-url / set MANIMATE_BASE_URL.`;
 }
 
-function cloudBaseUrlHint(baseUrl) {
-  return `Check that the hosted site is reachable at ${baseUrl} or pass --base-url / set MANIMATE_CLOUD_SYNC_URL.`;
-}
-
 function summarizeToolInput(toolInput) {
   if (!toolInput || typeof toolInput !== "object") return "";
   if (typeof toolInput.command === "string" && toolInput.command.trim()) {
@@ -340,6 +310,61 @@ function summarizeToolInput(toolInput) {
     return `file=${truncateText(toolInput.file_path.trim())}`;
   }
   return compactJson(toolInput);
+}
+
+function inferImplicitCommand(argv) {
+  if (argv.length === 0) return "open";
+
+  const generateFlags = new Set([
+    "--prompt",
+    "-p",
+    "--session",
+    "-s",
+    "--model",
+    "-m",
+    "--aspect-ratio",
+    "--aspect",
+    "-a",
+    "--voice",
+    "--voice-id",
+    "-v",
+    "--no-voice",
+    "--show-events",
+    "--quiet",
+  ]);
+
+  if (argv.some((arg) => generateFlags.has(arg))) {
+    return "generate";
+  }
+
+  if (!argv[0].startsWith("-")) {
+    return "generate";
+  }
+
+  return "open";
+}
+
+function rejectRemovedSubcommand(argv) {
+  const candidate = argv[0]?.trim().toLowerCase();
+  if (!candidate) return;
+
+  const guidance = REMOVED_SUBCOMMANDS.get(candidate);
+  if (!guidance) return;
+
+  throw new Error(`\`${candidate}\` is no longer a subcommand. ${guidance}`);
+}
+
+function printHumanResult(result) {
+  console.log(`status: ${result.status}`);
+  if (result.app_url) console.log(`app_url: ${result.app_url}`);
+  if (result.cloud_base_url) console.log(`cloud_base_url: ${result.cloud_base_url}`);
+  if (result.session_id) console.log(`session_id: ${result.session_id}`);
+  if (result.run_id) console.log(`run_id: ${result.run_id}`);
+  if (result.video_url) console.log(`video_url: ${result.video_url}`);
+  if (result.review_url) console.log(`review_url: ${result.review_url}`);
+  if (typeof result.server_started === "boolean") console.log(`server_started: ${result.server_started}`);
+  if (typeof result.server_restarted === "boolean") console.log(`server_restarted: ${result.server_restarted}`);
+  if (result.server_mode) console.log(`server_mode: ${result.server_mode}`);
 }
 
 function printEventLine(event) {
@@ -421,6 +446,33 @@ async function requestServerCancel(baseUrl, sessionId) {
 }
 
 async function streamGenerate(options) {
+  if (isLoopbackBaseUrl(options.baseUrl)) {
+    const probe = await probeLocalManimate(options.baseUrl);
+    if (!probe.ok) {
+      const parsedBaseUrl = parseBaseUrl(options.baseUrl);
+      const port = Number.parseInt(parsedBaseUrl.port || (parsedBaseUrl.protocol === "https:" ? "443" : "80"), 10);
+      const openResult = await openLocalApp({
+        baseUrl: options.baseUrl,
+        cloudBaseUrl: DEFAULT_CLOUD_BASE_URL,
+        host: parsedBaseUrl.hostname,
+        port,
+        mode: "auto",
+        noOpen: true,
+        restart: false,
+        json: false,
+        timeoutSeconds: DEFAULT_OPEN_TIMEOUT_SECONDS,
+        portAdjusted: false,
+        portAdjustedReason: null,
+        baseUrlExplicit: options.baseUrlExplicit,
+        portExplicit: false,
+      });
+      options.baseUrl = openResult.app_url || options.baseUrl;
+      if (!options.quiet) {
+        console.error(`[manimate] ${openResult.message}`);
+      }
+    }
+  }
+
   const payload = {
     prompt: options.prompt,
     ...(options.sessionId ? { session_id: options.sessionId } : {}),
@@ -625,22 +677,6 @@ async function fileExists(targetPath) {
   } catch {
     return false;
   }
-}
-
-function readJsonFileSafe(filePath) {
-  return fs.readFile(filePath, "utf8")
-    .then((raw) => JSON.parse(raw))
-    .catch(() => ({}));
-}
-
-async function writeCloudSyncConfig(config) {
-  await fs.mkdir(path.dirname(LOCAL_CONFIG_PATH), { recursive: true });
-  const current = await readJsonFileSafe(LOCAL_CONFIG_PATH);
-  const next = {
-    ...(current && typeof current === "object" ? current : {}),
-    cloud_sync: config,
-  };
-  await fs.writeFile(LOCAL_CONFIG_PATH, `${JSON.stringify(next, null, 2)}\n`, "utf8");
 }
 
 function tryOpenBrowser(url) {
@@ -920,7 +956,20 @@ async function waitForLocalManimate(baseUrl, timeoutSeconds) {
 
 async function resolveLaunchMode(mode) {
   if (mode !== "auto") return mode;
+  if (await fileExists(NEXT_STANDALONE_SERVER_PATH)) return "standalone";
   return (await fileExists(NEXT_BUILD_ID_PATH)) ? "start" : "dev";
+}
+
+async function ensureStandaloneStaticAssets() {
+  if (await fileExists(NEXT_STANDALONE_STATIC_PATH)) {
+    return;
+  }
+  if (!(await fileExists(NEXT_STATIC_PATH))) {
+    throw new Error(`Missing Next.js static assets at ${NEXT_STATIC_PATH}. Run npm run build first.`);
+  }
+
+  await fs.mkdir(path.dirname(NEXT_STANDALONE_STATIC_PATH), { recursive: true });
+  await fs.cp(NEXT_STATIC_PATH, NEXT_STANDALONE_STATIC_PATH, { recursive: true });
 }
 
 function parseBaseUrl(baseUrl) {
@@ -939,21 +988,31 @@ function parseBaseUrl(baseUrl) {
 }
 
 async function startLocalApp(options) {
-  if (!(await fileExists(NEXT_CLI_PATH))) {
-    throw new Error(`Missing Next.js CLI at ${NEXT_CLI_PATH}. Run npm install first.`);
-  }
-
   const baseUrl = parseBaseUrl(options.baseUrl);
   const port = Number.parseInt(baseUrl.port || (baseUrl.protocol === "https:" ? "443" : "80"), 10);
   const host = baseUrl.hostname;
   const mode = await resolveLaunchMode(options.mode);
-  const args = [NEXT_CLI_PATH, mode, "--port", String(port), "--hostname", host];
+  const packageRoot = mode === "standalone" ? NEXT_STANDALONE_ROOT : PROJECT_ROOT;
+  let args;
+  if (mode === "standalone") {
+    if (!(await fileExists(NEXT_STANDALONE_SERVER_PATH))) {
+      throw new Error(`Missing standalone server at ${NEXT_STANDALONE_SERVER_PATH}. Run npm run build first.`);
+    }
+    await ensureStandaloneStaticAssets();
+    args = [NEXT_STANDALONE_SERVER_PATH];
+  } else {
+    if (!(await fileExists(NEXT_CLI_PATH))) {
+      throw new Error(`Missing Next.js CLI at ${NEXT_CLI_PATH}. Run npm install first.`);
+    }
+    args = [NEXT_CLI_PATH, mode, "--port", String(port), "--hostname", host];
+  }
   const child = spawn(process.execPath, args, {
     cwd: PROJECT_ROOT,
     detached: true,
     stdio: "ignore",
     env: {
       ...process.env,
+      MANIMATE_PACKAGE_ROOT: packageRoot,
       PORT: String(port),
       HOSTNAME: host,
       MANIMATE_CLOUD_SYNC_URL: options.cloudBaseUrl,
@@ -1018,163 +1077,25 @@ async function openLocalApp(options) {
   };
 }
 
-async function startConnectRequest(options) {
-  let response;
-  try {
-    response = await fetch(`${options.baseUrl}/api/local-sync/connect/start`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        device_name: options.deviceName,
-      }),
-    });
-  } catch (error) {
-    throw new Error(`Could not reach ${options.baseUrl}. ${cloudBaseUrlHint(options.baseUrl)} ${normalizeErrorMessage(error)}`);
-  }
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = typeof data.error === "string" ? data.error : `HTTP ${response.status}`;
-    throw new Error(message);
-  }
-
-  return data;
-}
-
-async function pollConnectRequest(options) {
-  const deadline = Date.now() + (options.timeoutSeconds * 1000);
-  const pollUrl = `${options.baseUrl}/api/local-sync/connect/poll?request_id=${encodeURIComponent(options.requestId)}&poll_token=${encodeURIComponent(options.pollToken)}`;
-
-  while (Date.now() < deadline) {
-    let response;
-    try {
-      response = await fetch(pollUrl);
-    } catch (error) {
-      throw new Error(`Failed to poll connect status. ${normalizeErrorMessage(error)}`);
-    }
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = typeof data.error === "string" ? data.error : `HTTP ${response.status}`;
-      throw new Error(message);
-    }
-
-    if (data.status === "approved" && typeof data.syncToken === "string") {
-      return data;
-    }
-
-    if (data.status === "expired") {
-      throw new Error("Connect request expired before approval");
-    }
-
-    await sleep(2000);
-  }
-
-  throw new Error("Timed out waiting for browser approval");
-}
-
-async function connectCloudSync(options) {
-  const request = await startConnectRequest(options);
-
-  if (!options.noOpen) {
-    const opened = tryOpenBrowser(request.connect_url);
-    if (!opened) {
-      console.error("[manimate] could not open the browser automatically");
-    }
-  }
-
-  if (!options.json) {
-    console.error(`Open this URL to approve the device: ${request.connect_url}`);
-    console.error(`Verification code: ${request.code}`);
-    console.error("Waiting for browser approval...");
-  }
-
-  const approved = await pollConnectRequest({
-    baseUrl: options.baseUrl,
-    requestId: request.request_id,
-    pollToken: request.poll_token,
-    timeoutSeconds: options.timeoutSeconds,
-  });
-
-  const config = {
-    base_url: options.baseUrl,
-    token: approved.syncToken,
-    connected_at: new Date().toISOString(),
-    user_id: approved.user?.id || null,
-    user_email: approved.user?.email || null,
-    user_name: approved.user?.name || null,
-    device_name: request.device_name || options.deviceName || null,
-  };
-
-  await writeCloudSyncConfig(config);
-
-  return {
-    ok: true,
-    status: "connected",
-    account_email: config.user_email,
-    account_name: config.user_name,
-    config_path: LOCAL_CONFIG_PATH,
-    base_url: options.baseUrl,
-  };
-}
-
 async function main() {
-  const [, , maybeCommand, ...rest] = process.argv;
-  if (maybeCommand === "--help" || maybeCommand === "-h") usage(0);
-
-  const command = !maybeCommand || maybeCommand.startsWith("--") ? "open" : maybeCommand;
-  const commandArgs = command === "open" && maybeCommand?.startsWith("--")
-    ? [maybeCommand, ...rest]
-    : rest;
-
-  if (!["open", "generate", "connect"].includes(command)) {
-    console.error(`Unknown command: ${command}`);
-    usage(1);
-  }
+  const [, , ...argv] = process.argv;
+  if (argv[0] === "--help" || argv[0] === "-h") usage(0);
 
   try {
+    rejectRemovedSubcommand(argv);
+    const command = inferImplicitCommand(argv);
     const isOpenCommand = command === "open";
-    const isConnectCommand = command === "connect";
-    const options = isOpenCommand
-      ? parseOpenArgs(commandArgs)
-      : isConnectCommand
-        ? parseConnectArgs(commandArgs)
-        : parseGenerateArgs(commandArgs);
-    const result = isOpenCommand
-      ? await openLocalApp(options)
-      : isConnectCommand
-        ? await connectCloudSync(options)
-        : await streamGenerate(options);
+    const options = isOpenCommand ? parseOpenArgs(argv) : parseGenerateArgs(argv);
+    const result = isOpenCommand ? await openLocalApp(options) : await streamGenerate(options);
 
-    if (options.json) {
+    if (!isOpenCommand) {
       console.log(JSON.stringify(result));
     } else {
-      console.log(`status: ${result.status}`);
-      if (result.app_url) console.log(`app_url: ${result.app_url}`);
-      if (result.cloud_base_url) console.log(`cloud_base_url: ${result.cloud_base_url}`);
-      if (result.session_id) console.log(`session_id: ${result.session_id}`);
-      if (result.run_id) console.log(`run_id: ${result.run_id}`);
-      if (result.video_url) console.log(`video_url: ${result.video_url}`);
-      if (result.review_url) console.log(`review_url: ${result.review_url}`);
-      if (result.account_email) console.log(`account_email: ${result.account_email}`);
-      if (result.account_name) console.log(`account_name: ${result.account_name}`);
-      if (result.config_path) console.log(`config_path: ${result.config_path}`);
-      if (typeof result.server_started === "boolean") console.log(`server_started: ${result.server_started}`);
-      if (typeof result.server_restarted === "boolean") console.log(`server_restarted: ${result.server_restarted}`);
-      if (result.server_mode) console.log(`server_mode: ${result.server_mode}`);
-      if (result.base_url && isConnectCommand) console.log(`base_url: ${result.base_url}`);
-      if (result.message) console.log(`message: ${result.message}`);
+      printHumanResult(result);
     }
 
     if (result.review_url) {
       console.error(`Review in browser: ${result.review_url}`);
-    }
-    if (result.status === "ready" && !options.noOpen) {
-      console.error(`Opening local Manimate in browser: ${result.app_url}`);
-      console.error(`Cloud sync target: ${result.cloud_base_url}`);
-    }
-    if (result.status === "connected" && !options.json) {
-      console.error("Autosync is now connected. Completed renders will sync in the background.");
     }
 
     process.exit(result.ok ? 0 : 1);

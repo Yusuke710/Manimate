@@ -36,7 +36,7 @@ npm run manimate
 
 That starts the local app, opens the browser, and on first run opens `manimate.ai` for browser approval so completed renders autosync.
 
-If a production build already exists, the launcher uses it. Otherwise it falls back to the local dev server automatically.
+If a packaged standalone build exists, the launcher uses it. Otherwise it falls back to the local Next server automatically.
 
 For direct local development, this still works:
 
@@ -88,7 +88,15 @@ Behavior:
 Launch the local app:
 
 ```bash
-node scripts/manimate-tool.mjs
+manimate
+```
+
+Packaged install flow for local verification:
+
+```bash
+npm pack
+npm install -g ./manimate-0.1.0.tgz
+manimate
 ```
 
 Repo launcher script:
@@ -100,14 +108,19 @@ npm run manimate
 Run generation from shell/agents:
 
 ```bash
-node scripts/manimate-tool.mjs generate --prompt "Animate Laplace transform" --json
+manimate "Animate Laplace transform"
+manimate -p "Animate Laplace transform"
+manimate "Animate Laplace transform" -m opus -a 16:9
+manimate "Animate Laplace transform" -m opus -a 16:9 -v Lci8YeL6PAFHJjNKvwXq
 ```
+
+Generation returns JSON on stdout by default. `--show-events` prints progress to stderr. Voiceover is off by default; pass `-v <voice_id>` to opt in. If cloud auth expires, just reopen `manimate` and the browser reconnect flow will start again automatically.
 
 Convenience npm script:
 
 ```bash
 npm run tool:open
-npm run tool:generate -- --prompt "Animate Laplace transform" --json
+npm run tool:generate -- "Animate Laplace transform"
 ```
 
 Useful launcher flags:
@@ -115,15 +128,16 @@ Useful launcher flags:
 - `--cloud-base-url <https://manimate.ai>`
 - `--port <3000>`
 - `--host <127.0.0.1>`
-- `--mode <auto|dev|start>`
+- `--mode <auto|standalone|dev|start>`
 - `--no-open`
 
 Useful generate flags:
 
-- `--session <id>` reuse session
-- `--model <opus|sonnet|haiku>`
-- `--aspect-ratio <16:9|9:16|1:1>`
-- `--voice <voice_id>`
+- `-s`, `--session <id>` reuse session
+- `-m`, `--model <opus|sonnet|haiku>`
+- `-a`, `--aspect <16:9|9:16|1:1>`
+- `-v`, `--voice <voice_id>` opt into voiceover
+- `--no-voice` explicit silent mode
 - `--base-url <http://localhost:3000>`
 - `--show-events` readable live event stream (stderr), while final JSON remains on stdout
 

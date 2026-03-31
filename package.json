@@ -1,20 +1,30 @@
 {
-  "name": "web",
+  "name": "manimate",
   "version": "0.1.0",
-  "private": true,
+  "description": "Local-first Manim animation app with a packaged CLI",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    ".next/standalone/**/*",
+    "README.md",
+    "LICENSE",
+    "scripts/manimate-tool.mjs"
+  ],
   "bin": {
     "manimate": "scripts/manimate-tool.mjs"
   },
   "scripts": {
     "manimate": "node scripts/manimate-tool.mjs",
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/prepare-standalone.mjs",
+    "prepack": "npm run build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
-    "tool:open": "node scripts/manimate-tool.mjs open",
-    "tool:generate": "node scripts/manimate-tool.mjs generate",
-    "tool:connect": "node scripts/manimate-tool.mjs connect"
+    "tool:open": "node scripts/manimate-tool.mjs",
+    "tool:generate": "node scripts/manimate-tool.mjs"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

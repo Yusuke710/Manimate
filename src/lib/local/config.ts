@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 const DEFAULT_LOCAL_ROOT = path.join(os.homedir(), ".manimate");
+const PACKAGE_ROOT = process.env.MANIMATE_PACKAGE_ROOT?.trim() || process.cwd();
 
 export const LOCAL_ROOT = process.env.MANIMATE_LOCAL_ROOT || DEFAULT_LOCAL_ROOT;
 export const LOCAL_DB_PATH = path.join(LOCAL_ROOT, "db", "app.db");
@@ -44,10 +45,11 @@ export function getLocalSessionPaths(sessionId: string): {
 /**
  * Path to the canonical Manim expert prompt (CLAUDE.md) bundled in the repo.
  * This file is copied into each session's project dir so Claude CLI picks it up.
- * Uses process.cwd() (project root) since __dirname is unreliable in Next.js bundles.
+ * The launcher passes MANIMATE_PACKAGE_ROOT for installed builds. Falling back to
+ * process.cwd() keeps local repo development working.
  */
 const MANIM_PROMPT_PATH = path.join(
-  process.cwd(),
+  PACKAGE_ROOT,
   "src",
   "lib",
   "local",
@@ -56,13 +58,13 @@ const MANIM_PROMPT_PATH = path.join(
 );
 
 const TTS_GENERATE_PATH = path.join(
-  process.cwd(),
+  PACKAGE_ROOT,
   "scripts",
   "tts-generate.py"
 );
 
 const SUBTITLE_LINTER_PATH = path.join(
-  process.cwd(),
+  PACKAGE_ROOT,
   "scripts",
   "lint-subtitles.py"
 );

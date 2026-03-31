@@ -1,7 +1,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { getLocalSessionPaths } from "@/lib/local/config";
-import { getLocalCloudSyncConfig } from "@/lib/local/cloud-sync-config";
+import { clearLocalCloudSyncConfig, getLocalCloudSyncConfig } from "@/lib/local/cloud-sync-config";
 import {
   getLocalSession,
   listLocalActivityEvents,
@@ -175,7 +175,7 @@ async function postSessionSnapshot(payload: CloudSyncPayload): Promise<{
 }> {
   const settings = getCloudSyncSettings();
   if (!settings) {
-    throw new Error("Cloud sync is not configured. Run `manimate connect`.");
+    throw new Error("Cloud sync is not configured. Open Manimate to reconnect.");
   }
   const formData = await buildSessionSnapshotFormData(payload);
   const response = await fetch(`${settings.baseUrl}/api/local-sync/sessions`, {
@@ -235,10 +235,14 @@ async function syncLocalSessionToCloud(sessionId: string): Promise<void> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Cloud sync failed";
+    const unauthorized = message.includes("Unauthorized");
+    if (unauthorized) {
+      clearLocalCloudSyncConfig();
+    }
     updateLocalSession(sessionId, {
       cloud_sync_status: "failed",
-      cloud_last_error: message.includes("Unauthorized")
-        ? "Cloud sync is no longer authorized. Run `manimate connect` again."
+      cloud_last_error: unauthorized
+        ? "Cloud sync is no longer authorized. Reopen Manimate to reconnect."
         : message,
     });
   }

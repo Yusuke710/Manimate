@@ -56,7 +56,7 @@ Steps:
 4. `npm install --production && npm run build`
 5. Install `manimate` shim to `~/.local/bin/manimate`
 6. Run `manimate doctor`
-7. Print: "Run `manimate connect` to link to manimate.ai (optional)"
+7. Print: "Run `manimate` to launch locally and connect to manimate.ai if needed"
 
 ---
 
@@ -72,7 +72,7 @@ New file: `scripts/manimate.mjs` — the single entrypoint for all CLI operation
 | `manimate start` | Start daemon in background |
 | `manimate stop` | Stop daemon |
 | `manimate status` | Show daemon status and cloud connection |
-| `manimate connect` | Authenticate with manimate.ai, save token |
+| `manimate` | Launch local app; if needed, start browser auth with manimate.ai |
 | `manimate disconnect` | Remove cloud token |
 | `manimate sync [--session <id>]` | Backfill or repair cloud mirror for local sessions |
 | `manimate open` | Open local UI in browser |
@@ -88,7 +88,7 @@ New file: `scripts/manimate.mjs` — the single entrypoint for all CLI operation
 ✓ python3 --version         Python 3
 ✓ pip3 show requests        Python requests
 ~ ELEVENLABS_API_KEY        (optional) set in .env.local for voiceover
-~ Cloud token               (optional) run 'manimate connect' to enable
+~ Cloud token               (optional) reconnect by reopening 'manimate'
 ```
 
 ---
@@ -133,7 +133,7 @@ If an extra local file is required for later cloud-side editing or rerendering, 
 }
 ```
 
-### `manimate connect` flow
+### Reconnect flow
 1. Generate a random `machineId`
 2. Open browser: `https://manimate.ai/connect?device=<machineId>`
 3. Poll `GET https://manimate.ai/api/devices/token?device=<machineId>` every 2s (timeout 5min)
@@ -171,7 +171,7 @@ This should preserve the original `session_id` rather than minting a second clou
 
 ### Environment variables (new, add to `.env.example`)
 ```bash
-# Cloud connect (set automatically by 'manimate connect')
+# Cloud connect (set automatically after opening `manimate`)
 MANIMATE_CLOUD_TOKEN=
 MANIMATE_CLOUD_URL=https://manimate.ai
 ```

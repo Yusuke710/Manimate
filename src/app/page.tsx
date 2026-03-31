@@ -1644,7 +1644,7 @@ function HomeContent() {
       const status = await refreshCloudAuthStatus();
       if (cancelled || !status) return;
 
-      const shouldAutoOpenBrowser = (status.status === "disconnected" || status.status === "pending") && (() => {
+      const shouldAutoOpenBrowser = (status.status === "disconnected" || status.status === "pending" || status.status === "error") && (() => {
         try {
           if (sessionStorage.getItem(CLOUD_AUTH_AUTO_ATTEMPT_KEY) === "1") return false;
           sessionStorage.setItem(CLOUD_AUTH_AUTO_ATTEMPT_KEY, "1");
