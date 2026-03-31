@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import os from "node:os";
-import { getLocalCloudSyncConfig, getLocalCloudSyncEnvOverride, getLocalCloudSyncPendingConnect } from "@/lib/local/cloud-sync-config";
-import { beginLocalCloudSyncConnect, mapConnectedStatus, mapPendingStatus, openExternalBrowser } from "@/lib/local/cloud-sync-connect";
+import { beginOrResumeLocalCloudSyncConnect, getDefaultCloudSyncBaseUrl } from "@/lib/local/cloud-sync-connect";
 
 export const runtime = "nodejs";
 
@@ -10,17 +9,6 @@ type RequestBody = {
 };
 
 export async function POST(request: NextRequest): Promise<Response> {
-  const envOverride = getLocalCloudSyncEnvOverride();
-  if (envOverride) {
-    return NextResponse.json(mapConnectedStatus(envOverride));
-  }
-
-  const existingConfig = getLocalCloudSyncConfig();
-  if (existingConfig) {
-    return NextResponse.json(mapConnectedStatus(existingConfig));
-  }
-
-  const pending = getLocalCloudSyncPendingConnect();
   let body: RequestBody = {};
   try {
     body = (await request.json()) as RequestBody;
@@ -28,16 +16,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     body = {};
   }
 
-  if (pending) {
-    return NextResponse.json({
-      ...mapPendingStatus(pending),
-      browser_opened: body.reopen === true ? openExternalBrowser(pending.connect_url) : false,
-    });
-  }
-
   try {
-    const started = await beginLocalCloudSyncConnect({
-      baseUrl: process.env.MANIMATE_CLOUD_SYNC_URL?.trim() || "https://manimate.ai",
+    const started = await beginOrResumeLocalCloudSyncConnect({
+      baseUrl: getDefaultCloudSyncBaseUrl(),
       deviceName: os.hostname(),
       reopen: body.reopen !== false,
     });
@@ -47,7 +28,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     return NextResponse.json({
       status: "error",
       connected: false,
-      base_url: process.env.MANIMATE_CLOUD_SYNC_URL?.trim() || "https://manimate.ai",
+      base_url: getDefaultCloudSyncBaseUrl(),
       message,
     }, { status: 500 });
   }

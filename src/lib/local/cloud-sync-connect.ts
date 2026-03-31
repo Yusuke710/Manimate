@@ -2,6 +2,9 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import {
   clearLocalCloudSyncPendingConnect,
+  getLocalCloudSyncConfig,
+  getLocalCloudSyncEnvOverride,
+  getLocalCloudSyncPendingConnect,
   type LocalCloudSyncConfig,
   type LocalCloudSyncPendingConnect,
   writeLocalCloudSyncConfig,
@@ -70,6 +73,10 @@ export type LocalCloudSyncStatus =
       device_name?: string | null;
       expires_at?: string | null;
     };
+
+export function getDefaultCloudSyncBaseUrl(): string {
+  return normalizeBaseUrl();
+}
 
 function normalizeBaseUrl(baseUrl?: string | null): string {
   const trimmed = baseUrl?.trim() || DEFAULT_CLOUD_SYNC_BASE_URL;
@@ -177,6 +184,14 @@ export function mapPendingStatus(pending: LocalCloudSyncPendingConnect): LocalCl
   };
 }
 
+export function mapDisconnectedStatus(baseUrl = getDefaultCloudSyncBaseUrl()): LocalCloudSyncStatus {
+  return {
+    status: "disconnected",
+    connected: false,
+    base_url: normalizeBaseUrl(baseUrl),
+  };
+}
+
 export async function refreshPendingCloudSyncConnect(
   pending: LocalCloudSyncPendingConnect
 ): Promise<LocalCloudSyncStatus> {
@@ -239,6 +254,25 @@ export async function refreshPendingCloudSyncConnect(
   }
 }
 
+export async function getLocalCloudSyncStatus(): Promise<LocalCloudSyncStatus> {
+  const envOverride = getLocalCloudSyncEnvOverride();
+  if (envOverride) {
+    return mapConnectedStatus(envOverride);
+  }
+
+  const config = getLocalCloudSyncConfig();
+  if (config) {
+    return mapConnectedStatus(config);
+  }
+
+  const pending = getLocalCloudSyncPendingConnect();
+  if (pending) {
+    return refreshPendingCloudSyncConnect(pending);
+  }
+
+  return mapDisconnectedStatus();
+}
+
 export async function beginLocalCloudSyncConnect(input?: {
   baseUrl?: string | null;
   deviceName?: string | null;
@@ -251,4 +285,30 @@ export async function beginLocalCloudSyncConnect(input?: {
     ...mapPendingStatus(pending),
     browser_opened: browserOpened,
   };
+}
+
+export async function beginOrResumeLocalCloudSyncConnect(input?: {
+  baseUrl?: string | null;
+  deviceName?: string | null;
+  reopen?: boolean;
+}): Promise<LocalCloudSyncStatus & { browser_opened?: boolean }> {
+  const envOverride = getLocalCloudSyncEnvOverride();
+  if (envOverride) {
+    return mapConnectedStatus(envOverride);
+  }
+
+  const existingConfig = getLocalCloudSyncConfig();
+  if (existingConfig) {
+    return mapConnectedStatus(existingConfig);
+  }
+
+  const pending = getLocalCloudSyncPendingConnect();
+  if (pending) {
+    return {
+      ...mapPendingStatus(pending),
+      browser_opened: input?.reopen === true ? openExternalBrowser(pending.connect_url) : false,
+    };
+  }
+
+  return beginLocalCloudSyncConnect(input);
 }
