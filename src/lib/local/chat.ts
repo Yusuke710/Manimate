@@ -22,6 +22,7 @@ import {
   updateLocalRun,
   updateLocalSession,
 } from "@/lib/local/db";
+import { queueLocalCloudSync } from "@/lib/local/cloud-sync";
 import {
   beginLocalRunStart,
   endLocalRunStart,
@@ -760,6 +761,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         ...(videoUrl ? { video_url: videoUrl } : {}),
         terminal_status: "completed",
       });
+      queueLocalCloudSync(sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "An unexpected local-mode error occurred";
       if (runId) {

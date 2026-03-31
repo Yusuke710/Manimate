@@ -23,6 +23,11 @@ export interface LocalSession {
   script_content: string | null;
   subtitles_content: string | null;
   chapters: string | null;
+  cloud_sync_status: string;
+  cloud_last_synced_at: string | null;
+  cloud_last_error: string | null;
+  cloud_public_video_url: string | null;
+  last_user_activity_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -76,6 +81,10 @@ type SessionUpdateInput = Partial<{
   script_content: string | null;
   subtitles_content: string | null;
   chapters: string | null;
+  cloud_sync_status: string;
+  cloud_last_synced_at: string | null;
+  cloud_last_error: string | null;
+  cloud_public_video_url: string | null;
 }>;
 
 type RunUpdateInput = Partial<{
@@ -111,6 +120,13 @@ function ensureSessionColumns(database: DatabaseSync): void {
       name: "last_user_activity_at",
       ddl: "last_user_activity_at TEXT NOT NULL DEFAULT ''",
     },
+    {
+      name: "cloud_sync_status",
+      ddl: "cloud_sync_status TEXT NOT NULL DEFAULT 'idle'",
+    },
+    { name: "cloud_last_synced_at", ddl: "cloud_last_synced_at TEXT" },
+    { name: "cloud_last_error", ddl: "cloud_last_error TEXT" },
+    { name: "cloud_public_video_url", ddl: "cloud_public_video_url TEXT" },
   ];
 
   for (const column of required) {
@@ -145,6 +161,11 @@ function mapSession(row: Record<string, unknown>): LocalSession {
     script_content: row.script_content ? String(row.script_content) : null,
     subtitles_content: row.subtitles_content ? String(row.subtitles_content) : null,
     chapters: row.chapters ? String(row.chapters) : null,
+    cloud_sync_status: row.cloud_sync_status ? String(row.cloud_sync_status) : "idle",
+    cloud_last_synced_at: row.cloud_last_synced_at ? String(row.cloud_last_synced_at) : null,
+    cloud_last_error: row.cloud_last_error ? String(row.cloud_last_error) : null,
+    cloud_public_video_url: row.cloud_public_video_url ? String(row.cloud_public_video_url) : null,
+    last_user_activity_at: row.last_user_activity_at ? String(row.last_user_activity_at) : null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -216,6 +237,10 @@ function openDb(): DatabaseSync {
       script_content TEXT,
       subtitles_content TEXT,
       chapters TEXT,
+      cloud_sync_status TEXT NOT NULL DEFAULT 'idle',
+      cloud_last_synced_at TEXT,
+      cloud_last_error TEXT,
+      cloud_public_video_url TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       last_user_activity_at TEXT NOT NULL DEFAULT ''
@@ -275,13 +300,30 @@ function openDb(): DatabaseSync {
 }
 
 const SESSION_SUMMARY_COLS =
-  "id, title, status, sandbox_id, claude_session_id, model, aspect_ratio, voice_id, video_path, last_video_url, created_at, updated_at";
+  "id, title, status, sandbox_id, claude_session_id, model, aspect_ratio, voice_id, video_path, last_video_url, cloud_sync_status, cloud_last_synced_at, cloud_last_error, cloud_public_video_url, last_user_activity_at, created_at, updated_at";
 
 export function listLocalSessions(): LocalSession[] {
   const rows = openDb()
-    .prepare(`SELECT ${SESSION_SUMMARY_COLS} FROM sessions ORDER BY updated_at DESC`)
+    .prepare(`
+      SELECT ${SESSION_SUMMARY_COLS}
+      FROM sessions
+      ORDER BY COALESCE(NULLIF(last_user_activity_at, ''), created_at, updated_at) DESC
+    `)
     .all() as Record<string, unknown>[];
   return rows.map((r) => ({ ...mapSession(r), plan_content: null, script_content: null, subtitles_content: null, chapters: null }));
+}
+
+export function listLocalCloudSyncRetryCandidates(): LocalSession[] {
+  const rows = openDb()
+    .prepare(`
+      SELECT *
+      FROM sessions
+      WHERE COALESCE(video_path, '') <> ''
+        AND cloud_sync_status IN ('idle', 'pending', 'failed')
+      ORDER BY updated_at DESC
+    `)
+    .all() as Record<string, unknown>[];
+  return rows.map(mapSession);
 }
 
 export function createLocalSession(input: {
@@ -312,12 +354,16 @@ export function createLocalSession(input: {
         script_content,
         subtitles_content,
         chapters,
+        cloud_sync_status,
+        cloud_last_synced_at,
+        cloud_last_error,
+        cloud_public_video_url,
         created_at,
         updated_at,
         last_user_activity_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `)
     .run(
@@ -332,6 +378,10 @@ export function createLocalSession(input: {
       null,
       null,
       null,
+      null,
+      null,
+      null,
+      "idle",
       null,
       null,
       null,
@@ -369,6 +419,10 @@ export function updateLocalSession(sessionId: string, updates: SessionUpdateInpu
     "script_content",
     "subtitles_content",
     "chapters",
+    "cloud_sync_status",
+    "cloud_last_synced_at",
+    "cloud_last_error",
+    "cloud_public_video_url",
   ]);
 
   const keys = Object.keys(updates).filter((k) =>
@@ -379,14 +433,25 @@ export function updateLocalSession(sessionId: string, updates: SessionUpdateInpu
 
   const assignments: string[] = [];
   const values: unknown[] = [];
+  const syncOnlyKeys = new Set<keyof SessionUpdateInput>([
+    "cloud_sync_status",
+    "cloud_last_synced_at",
+    "cloud_last_error",
+    "cloud_public_video_url",
+  ]);
+  const touchesSessionContent = keys.some((key) => !syncOnlyKeys.has(key));
   for (const key of keys) {
     assignments.push(`${key} = ?`);
     values.push(updates[key] ?? null);
   }
 
-  const now = new Date().toISOString();
-  assignments.push("updated_at = ?");
-  values.push(now);
+  if (touchesSessionContent) {
+    const now = new Date().toISOString();
+    assignments.push("last_user_activity_at = ?");
+    values.push(now);
+    assignments.push("updated_at = ?");
+    values.push(now);
+  }
 
   values.push(sessionId);
 
@@ -490,6 +555,13 @@ export function getLocalActiveRun(sessionId: string): LocalRun | null {
     `)
     .get(sessionId) as Record<string, unknown> | undefined;
   return row ? mapRun(row) : null;
+}
+
+export function listLocalRuns(sessionId: string): LocalRun[] {
+  const rows = openDb()
+    .prepare("SELECT * FROM runs WHERE session_id = ? ORDER BY created_at ASC")
+    .all(sessionId) as Record<string, unknown>[];
+  return rows.map(mapRun);
 }
 
 export function updateLocalRun(runId: string, updates: RunUpdateInput): void {

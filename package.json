@@ -2,13 +2,19 @@
   "name": "web",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "manimate": "scripts/manimate-tool.mjs"
+  },
   "scripts": {
+    "manimate": "node scripts/manimate-tool.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
-    "tool:generate": "node scripts/manimate-tool.mjs generate"
+    "tool:open": "node scripts/manimate-tool.mjs open",
+    "tool:generate": "node scripts/manimate-tool.mjs generate",
+    "tool:connect": "node scripts/manimate-tool.mjs connect"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

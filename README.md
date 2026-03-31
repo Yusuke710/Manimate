@@ -1,11 +1,12 @@
-# Manimate (Local-Only)
+# Manimate (Local-First)
 
 Local single-user version of Manimate with:
 
 - local Claude Code runtime,
 - local filesystem storage,
 - local SQLite persistence,
-- SSE chat streaming with session/run persistence.
+- SSE chat streaming with session/run persistence,
+- optional autosync to `manimate.ai`.
 
 ## Prerequisites
 
@@ -19,10 +20,31 @@ Local single-user version of Manimate with:
 ```bash
 cp .env.example .env.local
 npm install
+```
+
+Run the local app with one command:
+
+```bash
+manimate
+```
+
+In the repo, the equivalent command is:
+
+```bash
+npm run manimate
+```
+
+That starts the local app, opens the browser, and on first run opens `manimate.ai` for browser approval so completed renders autosync.
+
+If a production build already exists, the launcher uses it. Otherwise it falls back to the local dev server automatically.
+
+For direct local development, this still works:
+
+```bash
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Then open `http://localhost:3000`.
 
 ## URL Launch Params
 
@@ -63,6 +85,18 @@ Behavior:
 
 ## CLI Tool
 
+Launch the local app:
+
+```bash
+node scripts/manimate-tool.mjs
+```
+
+Repo launcher script:
+
+```bash
+npm run manimate
+```
+
 Run generation from shell/agents:
 
 ```bash
@@ -72,10 +106,19 @@ node scripts/manimate-tool.mjs generate --prompt "Animate Laplace transform" --j
 Convenience npm script:
 
 ```bash
+npm run tool:open
 npm run tool:generate -- --prompt "Animate Laplace transform" --json
 ```
 
-Useful flags:
+Useful launcher flags:
+
+- `--cloud-base-url <https://manimate.ai>`
+- `--port <3000>`
+- `--host <127.0.0.1>`
+- `--mode <auto|dev|start>`
+- `--no-open`
+
+Useful generate flags:
 
 - `--session <id>` reuse session
 - `--model <opus|sonnet|haiku>`
@@ -101,6 +144,6 @@ Override root with `MANIMATE_LOCAL_ROOT`.
 
 ## Notes
 
-- This repo is intentionally local-only.
+- Local execution remains the source of truth; `manimate.ai` is for autosync and sharing.
 - Voiceover works when `ELEVENLABS_API_KEY` is set.
 - Advanced actions are chat-driven (for example, ask for `render in hq`) rather than dedicated API routes.

@@ -9,6 +9,7 @@ type LibrarySession = {
   has_video: boolean;
   last_video_url: string | null;
   aspect_ratio: string | null;
+  created_at: string;
   updated_at: string;
 };
 
@@ -163,7 +164,7 @@ function VideoCard({
           {session.title}
         </div>
         <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-          {formatDate(session.updated_at)}
+          {formatDate(session.created_at)}
         </div>
       </div>
     </button>

@@ -30,6 +30,183 @@ const MODEL_PREF_KEY = "manimate-preferred-model";
 const VOICE_PREF_KEY = "manimate-preferred-voice";
 const VOICE_NAMES_KEY = "manimate-voice-names";
 const ASPECT_RATIO_PREF_KEY = "manimate-preferred-aspect-ratio";
+const CLOUD_AUTH_AUTO_ATTEMPT_KEY = "manimate-cloud-auth-auto-attempted";
+const CLOUD_SYNC_RETRY_ATTEMPT_KEY = "manimate-cloud-sync-retry-attempted";
+
+type CloudAuthStatus =
+  | {
+      status: "connected";
+      connected: true;
+      base_url: string;
+      user_email: string | null;
+      user_name: string | null;
+      device_name: string | null;
+      connected_at: string;
+    }
+  | {
+      status: "pending";
+      connected: false;
+      base_url: string;
+      code: string;
+      connect_url: string;
+      device_name: string | null;
+      expires_at: string;
+      browser_opened?: boolean;
+    }
+  | {
+      status: "disconnected";
+      connected: false;
+      base_url: string;
+    }
+  | {
+      status: "error";
+      connected: false;
+      base_url: string;
+      message: string;
+      code?: string | null;
+      connect_url?: string | null;
+      device_name?: string | null;
+      expires_at?: string | null;
+      browser_opened?: boolean;
+    };
+
+function CloudAuthGate({
+  isLoading,
+  status,
+  onRetry,
+}: {
+  isLoading: boolean;
+  status: CloudAuthStatus | null;
+  onRetry: () => void;
+}) {
+  const isPending = status?.status === "pending";
+  const isError = status?.status === "error";
+  const title = isPending ? "Continue in Manimate.ai" : "Connect to Manimate.ai";
+  const description = isLoading
+    ? "Opening manimate.ai..."
+    : isError
+      ? status.message
+      : isPending
+        ? "Finish connecting in your browser. This window will continue automatically."
+        : "manimate.ai will open in your browser to connect autosync while rendering and Claude Code stay local.";
+
+  return (
+    <div
+      style={{
+        minHeight: "100dvh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        background: "#f6f3ec",
+      }}
+    >
+      <div
+        style={{
+          width: "min(470px, 100%)",
+          background: "#fbfaf7",
+          border: `1px solid ${isError ? "rgba(180,35,24,0.18)" : "rgba(15,23,42,0.10)"}`,
+          borderRadius: 24,
+          padding: "34px 26px 28px",
+          boxShadow: "0 24px 60px rgba(15,23,42,0.08)",
+          display: "grid",
+          gap: 18,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            margin: "0 auto",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 44,
+              lineHeight: 1,
+              color: "var(--accent)",
+              fontFamily: "'Computer Modern', 'Latin Modern Math', 'STIX Two Math', serif",
+            }}
+          >
+            ∑
+          </span>
+          <span
+            style={{
+              fontSize: 28,
+              lineHeight: 1,
+              color: "var(--text-primary)",
+              fontFamily: "var(--font-display)",
+            }}
+          >
+            Manimate
+          </span>
+        </div>
+
+        {(isLoading || isPending) ? (
+          <div
+            style={{
+              width: 42,
+              height: 42,
+              margin: "0 auto",
+              borderRadius: 999,
+              border: "3px solid rgba(43,181,160,0.18)",
+              borderTopColor: "var(--accent)",
+              animation: "spin 0.9s linear infinite",
+            }}
+          />
+        ) : null}
+
+        <div style={{ display: "grid", gap: 10, textAlign: "center" }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 18,
+              lineHeight: 1.45,
+              color: "#171717",
+              fontWeight: 500,
+            }}
+          >
+            {title}
+          </h1>
+          {description ? (
+            <p
+              style={{
+                margin: 0,
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: isError ? "#b42318" : "#525252",
+              }}
+            >
+              {description}
+            </p>
+          ) : null}
+        </div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          <button
+            onClick={onRetry}
+            disabled={isLoading}
+            style={{
+              border: "none",
+              borderRadius: 12,
+              padding: "13px 18px",
+              fontWeight: 600,
+              fontSize: 15,
+              background: "var(--accent)",
+              color: "#ffffff",
+              cursor: isLoading ? "default" : "pointer",
+              opacity: isLoading ? 0.72 : 1,
+            }}
+          >
+            {isLoading ? "Opening Browser..." : isPending ? "Open Browser Again" : isError ? "Retry Sign-In" : "Continue in Manimate.ai"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function usePreferredModel() {
   const [model, setModel] = useState(DEFAULT_MODEL);
@@ -1389,6 +1566,8 @@ function HomeContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [aspectRatio, setAspectRatio] = usePreferredAspectRatio();
+  const [cloudAuthStatus, setCloudAuthStatus] = useState<CloudAuthStatus | null>(null);
+  const [cloudAuthLoading, setCloudAuthLoading] = useState(true);
   const searchParamsString = searchParams.toString();
 
   const activeSessionId = searchParams.get("session");
@@ -1410,6 +1589,111 @@ function HomeContent() {
   const pendingWelcomePayloadRef = useRef<Map<string, { prompt: string; images?: File[] }>>(new Map());
   const appliedLaunchAspectRef = useRef<string | null>(null);
   const consumedLaunchAutoSendRef = useRef<string | null>(null);
+  const cloudAuthStartingRef = useRef(false);
+  const cloudSyncRetryStartedRef = useRef(false);
+
+  const refreshCloudAuthStatus = useCallback(async (): Promise<CloudAuthStatus | null> => {
+    try {
+      const response = await fetch("/api/cloud-sync/status");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = (await response.json()) as CloudAuthStatus;
+      setCloudAuthStatus(data);
+      return data;
+    } catch (error) {
+      const status: CloudAuthStatus = {
+        status: "error",
+        connected: false,
+        base_url: process.env.NEXT_PUBLIC_APP_URL || "https://manimate.ai",
+        message: error instanceof Error ? error.message : "Failed to check manimate.ai connection",
+      };
+      setCloudAuthStatus(status);
+      return status;
+    } finally {
+      setCloudAuthLoading(false);
+    }
+  }, []);
+
+  const startCloudAuth = useCallback(async (reopen = true) => {
+    if (cloudAuthStartingRef.current) return;
+    cloudAuthStartingRef.current = true;
+    try {
+      const response = await fetch("/api/cloud-sync/connect/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reopen }),
+      });
+      const data = (await response.json()) as CloudAuthStatus;
+      setCloudAuthStatus(data);
+    } catch (error) {
+      setCloudAuthStatus({
+        status: "error",
+        connected: false,
+        base_url: "https://manimate.ai",
+        message: error instanceof Error ? error.message : "Failed to start manimate.ai authentication",
+      });
+    } finally {
+      setCloudAuthLoading(false);
+      cloudAuthStartingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const status = await refreshCloudAuthStatus();
+      if (cancelled || !status) return;
+
+      const shouldAutoOpenBrowser = (status.status === "disconnected" || status.status === "pending") && (() => {
+        try {
+          if (sessionStorage.getItem(CLOUD_AUTH_AUTO_ATTEMPT_KEY) === "1") return false;
+          sessionStorage.setItem(CLOUD_AUTH_AUTO_ATTEMPT_KEY, "1");
+          return true;
+        } catch {
+          return true;
+        }
+      })();
+
+      if (shouldAutoOpenBrowser) {
+        await startCloudAuth(true);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [refreshCloudAuthStatus, startCloudAuth]);
+
+  useEffect(() => {
+    if (cloudAuthStatus?.status !== "pending") return;
+    const timer = window.setInterval(() => {
+      void refreshCloudAuthStatus();
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [cloudAuthStatus?.status, refreshCloudAuthStatus]);
+
+  useEffect(() => {
+    if (cloudAuthStatus?.status !== "connected") return;
+    if (cloudSyncRetryStartedRef.current) return;
+
+    const shouldRetry = (() => {
+      try {
+        const marker = `${cloudAuthStatus.connected_at}:${cloudAuthStatus.base_url}`;
+        if (sessionStorage.getItem(CLOUD_SYNC_RETRY_ATTEMPT_KEY) === marker) return false;
+        sessionStorage.setItem(CLOUD_SYNC_RETRY_ATTEMPT_KEY, marker);
+      } catch {
+        // Ignore storage failures and still retry once for this mount.
+      }
+      return true;
+    })();
+
+    if (!shouldRetry) return;
+
+    cloudSyncRetryStartedRef.current = true;
+    void fetch("/api/cloud-sync/retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }).catch(() => {});
+  }, [cloudAuthStatus]);
 
   const handleNewSession = useCallback(() => { router.push("/"); }, [router]);
 
@@ -1529,6 +1813,18 @@ function HomeContent() {
     setMobileSidebarOpen(false);
     handleLibraryClick();
   }, [handleLibraryClick]);
+
+  const shouldGateOnCloudAuth = cloudAuthLoading || !cloudAuthStatus || cloudAuthStatus.status !== "connected";
+
+  if (shouldGateOnCloudAuth) {
+    return (
+      <CloudAuthGate
+        isLoading={cloudAuthLoading}
+        status={cloudAuthStatus}
+        onRetry={() => { void startCloudAuth(true); }}
+      />
+    );
+  }
 
   return (
     <div style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
