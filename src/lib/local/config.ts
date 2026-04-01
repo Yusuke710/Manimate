@@ -80,15 +80,19 @@ export function ensureLocalSessionLayout(sessionId: string): {
   fs.mkdirSync(paths.projectDir, { recursive: true });
   fs.mkdirSync(paths.artifactsDir, { recursive: true });
 
-  // Copy the Manim expert prompt into the project dir (only if missing).
-  // Claude CLI auto-discovers CLAUDE.md in cwd and uses it as system context.
+  // Keep the bundled Claude prompt in sync so prompt fixes apply to both new
+  // and existing Manimate sessions.
   const destClaudeMd = path.join(paths.projectDir, "CLAUDE.md");
-  if (!fs.existsSync(destClaudeMd)) {
-    try {
-      fs.copyFileSync(MANIM_PROMPT_PATH, destClaudeMd);
-    } catch {
-      // Non-fatal: Claude will still work, just without the expert prompt.
+  try {
+    const sourcePrompt = fs.readFileSync(MANIM_PROMPT_PATH, "utf8");
+    const currentPrompt = fs.existsSync(destClaudeMd)
+      ? fs.readFileSync(destClaudeMd, "utf8")
+      : null;
+    if (currentPrompt !== sourcePrompt) {
+      fs.writeFileSync(destClaudeMd, sourcePrompt, "utf8");
     }
+  } catch {
+    // Non-fatal: Claude will still work, just without the expert prompt.
   }
 
   // Copy TTS generator into project dir so Claude Code can run:
