@@ -85,65 +85,82 @@ Behavior:
 
 ## CLI Tool
 
-Launch the local app:
+Open the local app:
 
 ```bash
 manimate
+manimate --no-open
 ```
 
-Packaged install flow for local verification:
+Stop the local app:
 
 ```bash
-npm pack
-npm install -g ./manimate-0.1.0.tgz
-manimate
-```
-
-Repo launcher script:
-
-```bash
-npm run manimate
+manimate stop
 ```
 
 Run generation from shell/agents:
 
 ```bash
 manimate "Animate Laplace transform"
-manimate -p "Animate Laplace transform"
 manimate "Animate Laplace transform" -m opus -a 16:9
-manimate "Animate Laplace transform" -m opus -a 16:9 -v Lci8YeL6PAFHJjNKvwXq
+manimate "Animate Laplace transform" -v Lci8YeL6PAFHJjNKvwXq
+manimate "Animate eigenvectors" --no-voice
+manimate -p "--animate a prompt that starts with a dash"
 ```
 
-Generation returns JSON on stdout by default. `--show-events` prints progress to stderr. Voiceover is off by default; pass `-v <voice_id>` to opt in. If cloud auth expires, just reopen `manimate` and the browser reconnect flow will start again automatically.
+Generation returns one JSON object on stdout. `--show-events` prints readable progress to stderr. Voiceover is off by default, so only pass `-v` when voiceover is wanted. Do not pass `--json`.
 
-Convenience npm script:
+Legacy `manimate open`, `manimate generate`, and `manimate connect` were removed. Use plain `manimate` to open the app and `manimate "<prompt>"` to generate.
+
+Repo entrypoints:
 
 ```bash
+npm run manimate
 npm run tool:open
 npm run tool:generate -- "Animate Laplace transform"
+node scripts/manimate-tool.mjs "Animate Laplace transform"
 ```
 
-Useful launcher flags:
+Useful open flags:
 
-- `--cloud-base-url <https://manimate.ai>`
-- `--port <3000>`
-- `--host <127.0.0.1>`
-- `--mode <auto|standalone|dev|start>`
+- `--cloud-base-url <url>`
 - `--no-open`
+- `--restart`
+- `--mode <auto|standalone|dev|start>`
+- `--port <number>`
+- `--host <hostname>`
 
 Useful generate flags:
 
+- `-p`, `--prompt <text>` use this when the prompt starts with `-`
 - `-s`, `--session <id>` reuse session
 - `-m`, `--model <opus|sonnet|haiku>`
 - `-a`, `--aspect <16:9|9:16|1:1>`
-- `-v`, `--voice <voice_id>` opt into voiceover
-- `--no-voice` explicit silent mode
+- `-v`, `--voice <voice_id>`
+- `--no-voice`
 - `--base-url <http://localhost:3000>`
-- `--show-events` readable live event stream (stderr), while final JSON remains on stdout
+- `--show-events`
+- `--quiet`
 
-Agent-facing tool spec (OpenClaw style):
+Example output:
 
-- `docs/SKILL.md`
+```json
+{
+  "ok": true,
+  "status": "completed",
+  "session_id": "b92794d1-2279-477b-b818-064d78d272b1",
+  "run_id": "6fea0020-7f6a-4d97-bcb9-44327b3fdee9",
+  "video_url": "/api/files?session_id=...&path=.../video.mp4&_v=...",
+  "review_url": "http://localhost:3000/?session=b92794d1-2279-477b-b818-064d78d272b1",
+  "message": "Complete"
+}
+```
+
+Troubleshooting:
+
+- If Manimate cannot be reached, start it with `manimate` or pass `--base-url`.
+- If `status=failed`, inspect `/api/sessions/<session_id>/messages`.
+- If cloud auth expired, run plain `manimate` to reconnect.
 
 ## Local Data Layout
 
