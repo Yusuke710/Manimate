@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 
+import {
+  buildPreviewLoadKey,
+  shouldAcceptPreviewCanPlay,
+} from "@/lib/preview-load";
 import { normalizeChaptersToVideoDuration } from "@/lib/timeline";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -23,27 +27,26 @@ interface PreviewPanelProps {
 export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, onRequestHqRender, onRequest4kRender, onPreviewReady }: PreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>("plan");
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
-  const [isVideoPlayable, setIsVideoPlayable] = useState(false);
+  const [previewReadyKey, setPreviewReadyKey] = useState<string | null>(null);
   // Track whether user has manually selected a tab (suppresses auto-switch)
   const userSelectedTabRef = useRef(false);
-  const lastPreviewReadyKeyRef = useRef<string | null>(null);
 
   // Track previous videoUrl to detect changes
   const prevVideoUrlRef = useRef(videoUrl);
-  // Nonce marks intentional same-key silent re-renders (multi-turn updates).
-  const prevVideoUpdateNonceRef = useRef(videoUpdateNonce);
+  const activePreviewKey = effectiveVideoUrl
+    ? buildPreviewLoadKey(effectiveVideoUrl, videoUpdateNonce)
+    : null;
+  const isVideoPlayable = activePreviewKey !== null && previewReadyKey === activePreviewKey;
 
   // Sync effectiveVideoUrl when videoUrl prop changes.
   useEffect(() => {
     if (videoUrl !== prevVideoUrlRef.current) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing controlled preview state from parent props
-      setIsVideoPlayable(false);
       setEffectiveVideoUrl(videoUrl);
       userSelectedTabRef.current = false;
       prevVideoUrlRef.current = videoUrl;
     }
-    prevVideoUpdateNonceRef.current = videoUpdateNonce;
-  }, [videoUrl, videoUpdateNonce]);
+  }, [videoUrl]);
 
   const handleTabClick = useCallback((tab: Tab) => {
     userSelectedTabRef.current = true;
@@ -114,10 +117,8 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
             <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} sessionModel={sessionModel} onRequestHqRender={onRequestHqRender} onRequest4kRender={onRequest4kRender} onCanPlay={() => {
-              const readyKey = effectiveVideoUrl ? `${videoUpdateNonce}:${effectiveVideoUrl}` : null;
-              setIsVideoPlayable(true);
-              if (readyKey && lastPreviewReadyKeyRef.current !== readyKey) {
-                lastPreviewReadyKeyRef.current = readyKey;
+              if (activePreviewKey && previewReadyKey !== activePreviewKey) {
+                setPreviewReadyKey(activePreviewKey);
                 onPreviewReady?.(videoUpdateNonce);
               }
               if (!userSelectedTabRef.current) setActiveTab("preview");
@@ -602,8 +603,11 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
   // Per-slot sources
   const [srcA, setSrcA] = useState<string | null>(() => fullVideoUrl);
   const [srcB, setSrcB] = useState<string | null>(null);
+  const [srcALoadId, setSrcALoadId] = useState(0);
+  const [srcBLoadId, setSrcBLoadId] = useState(0);
   // Get active video ref
   const videoRef = activeVideo === 'A' ? videoARef : videoBRef;
+  const activeLoadIdRef = useRef(0);
 
   const progressBarRef = useRef<HTMLDivElement>(null);
   // Refs for throttled scrubbing - reduces Range requests during drag
@@ -657,9 +661,6 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
   const lastSubtitleUrlRef = useRef<string | null>(null);
   const lastChaptersUrlRef = useRef<string | null>(null);
 
-  // Track URL for sync - declared here so session reset can access it
-  const prevFullVideoUrlRef = useRef(fullVideoUrl);
-
   // withSwapVersionParam removed: appending ad-hoc query params can break signed URLs.
   // Cache busting is unnecessary because refreshed assets already produce a new URL.
 
@@ -684,8 +685,8 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
     setActiveVideo('A');
     setSrcA(fullVideoUrl);
     setSrcB(null);
-    // Sync URL tracking ref to prevent redundant URL-sync effect run
-    prevFullVideoUrlRef.current = fullVideoUrl;
+    setSrcALoadId(0);
+    setSrcBLoadId(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fullVideoUrl used for refs only, not effect triggers
   }, [sessionId]);
 
@@ -716,45 +717,59 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
     prevVideoRefreshNonceRef.current = videoRefreshNonce;
   }, [videoUrl, videoRefreshNonce]);
 
-  // Note: fullVideoUrl is computed at the top of the function (before hooks)
-  // to ensure it's available for state initialization
+  const requestedVideoLoadKey = buildPreviewLoadKey(fullVideoUrl, videoRefreshNonce);
 
-  // Sync srcA/srcB with fullVideoUrl for non-swap updates.
+  // Sync srcA/srcB with the latest requested preview load.
   useEffect(() => {
-    let rafId: number | undefined;
+    if (!fullVideoUrl) return;
 
-    // Update active slot if URL actually changed.
-    // This path represents a fresh silent render and should restart playback at 0.
-    if (fullVideoUrl !== prevFullVideoUrlRef.current) {
-      const activeVideoEl = videoRef.current;
-      if (activeVideoEl) {
-        activeVideoEl.pause();
-        desiredTimeRef.current = 0;
-        desiredPausedRef.current = true;
-      }
-      setCurrentTime(0);
-      setDuration(0);
-      setIsPlaying(false);
-      setIsEnded(false);
-      if (activeVideo === 'A') {
-        setSrcA(fullVideoUrl);
-      } else {
-        setSrcB(fullVideoUrl);
-      }
-      // Explicitly call .load() after React flushes the src change to the DOM.
-      // Without this, browsers may not reload an already-loaded video element
-      // when its src attribute changes (e.g., multi-turn: turn 2 video
-      // replacing turn 1 video on the same element).
-      const el = activeVideoEl;
-      rafId = requestAnimationFrame(() => {
-        el?.load();
-      });
+    const activeVideoEl = videoRef.current;
+    if (activeVideoEl) {
+      activeVideoEl.pause();
+      desiredTimeRef.current = 0;
+      desiredPausedRef.current = true;
     }
-    prevFullVideoUrlRef.current = fullVideoUrl;
 
-    return () => { if (rafId !== undefined) cancelAnimationFrame(rafId); };
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
+    setIsEnded(false);
+
+    const nextLoadId = activeLoadIdRef.current + 1;
+    activeLoadIdRef.current = nextLoadId;
+
+    if (activeVideo === 'A') {
+      setSrcA(fullVideoUrl);
+      setSrcALoadId(nextLoadId);
+    } else {
+      setSrcB(fullVideoUrl);
+      setSrcBLoadId(nextLoadId);
+    }
+
+    // Force the active slot to reload after React flushes the new source/remount.
+    const rafId = requestAnimationFrame(() => {
+      const nextVideoEl = activeVideo === 'A' ? videoARef.current : videoBRef.current;
+      nextVideoEl?.load();
+    });
+
+    return () => { cancelAnimationFrame(rafId); };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo
-  }, [fullVideoUrl, activeVideo]);
+  }, [requestedVideoLoadKey, fullVideoUrl, activeVideo]);
+
+  const handleVideoCanPlay = useCallback((slot: 'A' | 'B', slotLoadId: number, slotUrl: string | null) => {
+    if (!shouldAcceptPreviewCanPlay({
+      activeSlot: activeVideo,
+      eventSlot: slot,
+      requestedLoadId: activeLoadIdRef.current,
+      eventLoadId: slotLoadId,
+      requestedUrl: fullVideoUrl,
+      slotUrl,
+    })) {
+      return;
+    }
+
+    onCanPlay?.();
+  }, [activeVideo, fullVideoUrl, onCanPlay]);
 
   // Gate on fullVideoUrl to avoid fetching before video exists.
   const fullSubtitleUrl = fullVideoUrl && sessionId
@@ -1277,6 +1292,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
       <div className="flex-1 relative flex items-center justify-center min-h-0">
         {/* Video A - active playback slot */}
         <video
+          key={`video-a:${srcALoadId}:${srcA ?? "empty"}`}
           ref={videoARef}
           data-testid={activeVideo === 'A' ? "video-player" : "video-player-inactive"}
           src={srcA || undefined}
@@ -1284,12 +1300,13 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
           className={`absolute inset-0 w-full h-full object-contain ${activeVideo === 'A' ? 'z-10' : 'z-0 opacity-0 pointer-events-none'}`}
           playsInline
           preload="auto"
-          onCanPlay={activeVideo === 'A' ? onCanPlay : undefined}
+          onCanPlay={activeVideo === 'A' ? () => handleVideoCanPlay('A', srcALoadId, srcA) : undefined}
         >
           Your browser does not support the video tag.
         </video>
         {/* Video B - inactive slot retained for compatibility */}
         <video
+          key={`video-b:${srcBLoadId}:${srcB ?? "empty"}`}
           ref={videoBRef}
           data-testid={activeVideo === 'B' ? "video-player" : "video-player-inactive"}
           src={srcB || undefined}
@@ -1297,7 +1314,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
           className={`absolute inset-0 w-full h-full object-contain ${activeVideo === 'B' ? 'z-10' : 'z-0 opacity-0 pointer-events-none'}`}
           playsInline
           preload="auto"
-          onCanPlay={activeVideo === 'B' ? onCanPlay : undefined}
+          onCanPlay={activeVideo === 'B' ? () => handleVideoCanPlay('B', srcBLoadId, srcB) : undefined}
         >
           Your browser does not support the video tag.
         </video>
