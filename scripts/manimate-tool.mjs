@@ -36,6 +36,7 @@ function usage(code = 0) {
 
 Usage:
   manimate
+  manimate stop [options]
   manimate "<prompt>" [options]
 
 Generate Options:
@@ -60,6 +61,11 @@ Open Options:
   --timeout <seconds>      Wait time for local app startup (default: ${DEFAULT_OPEN_TIMEOUT_SECONDS})
   --restart                Restart an existing local Manimate server on this port
   --no-open                Start local app without opening the browser
+
+Stop Options:
+  --base-url <url>         Local app URL to stop (default: ${DEFAULT_BASE_URL})
+  --port <number>          Local app port override (default: ${DEFAULT_APP_PORT})
+  --host <hostname>        Local app host override (default: ${DEFAULT_APP_HOST})
 `);
   process.exit(code);
 }
@@ -275,6 +281,51 @@ function parseOpenArgs(argv) {
   return options;
 }
 
+function parseStopArgs(argv) {
+  const options = {
+    baseUrl: DEFAULT_BASE_URL,
+    host: DEFAULT_APP_HOST,
+    port: DEFAULT_APP_PORT,
+    baseUrlExplicit: false,
+  };
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    switch (arg) {
+      case "--base-url":
+        options.baseUrl = nextValue(argv, i, "--base-url");
+        options.baseUrlExplicit = true;
+        i += 1;
+        break;
+      case "--port":
+        options.port = parsePositiveInteger(nextValue(argv, i, "--port"), NaN);
+        i += 1;
+        break;
+      case "--host":
+      case "--hostname":
+        options.host = nextValue(argv, i, arg);
+        i += 1;
+        break;
+      case "--help":
+        usage(0);
+        break;
+      default:
+        throw new Error(`Unknown flag: ${arg}`);
+    }
+  }
+
+  if (!options.baseUrlExplicit) {
+    options.baseUrl = `http://${options.host}:${options.port}`;
+  }
+
+  options.baseUrl = options.baseUrl.replace(/\/+$/, "");
+  if (!Number.isFinite(options.port) || options.port <= 0) {
+    throw new Error("--port must be a positive integer");
+  }
+
+  return options;
+}
+
 function safeJsonParse(text) {
   try {
     return JSON.parse(text);
@@ -314,6 +365,7 @@ function summarizeToolInput(toolInput) {
 
 function inferImplicitCommand(argv) {
   if (argv.length === 0) return "open";
+  if (argv[0] === "stop") return "stop";
 
   const generateFlags = new Set([
     "--prompt",
@@ -364,6 +416,7 @@ function printHumanResult(result) {
   if (result.review_url) console.log(`review_url: ${result.review_url}`);
   if (typeof result.server_started === "boolean") console.log(`server_started: ${result.server_started}`);
   if (typeof result.server_restarted === "boolean") console.log(`server_restarted: ${result.server_restarted}`);
+  if (typeof result.server_stopped === "boolean") console.log(`server_stopped: ${result.server_stopped}`);
   if (result.server_mode) console.log(`server_mode: ${result.server_mode}`);
 }
 
@@ -757,11 +810,17 @@ async function readProcessCwd(pid) {
   return cwdLine ? cwdLine.slice(1) : null;
 }
 
+function isManagedProcessCwd(cwd) {
+  if (!cwd) return false;
+  const resolved = path.resolve(cwd);
+  return resolved === PROJECT_ROOT || resolved === NEXT_STANDALONE_ROOT;
+}
+
 async function filterManagedPids(pids) {
   const managedPids = [];
   for (const pid of pids) {
     const cwd = await readProcessCwd(pid);
-    if (cwd && path.resolve(cwd) === PROJECT_ROOT) {
+    if (isManagedProcessCwd(cwd)) {
       managedPids.push(pid);
     }
   }
@@ -1077,6 +1136,16 @@ async function openLocalApp(options) {
   };
 }
 
+async function stopLocalApp(options) {
+  const stopped = await stopExistingLocalApp(options);
+  return {
+    ok: true,
+    status: stopped.stoppedPids.length > 0 ? "stopped" : "not_running",
+    app_url: options.baseUrl,
+    server_stopped: stopped.stoppedPids.length > 0,
+  };
+}
+
 async function main() {
   const [, , ...argv] = process.argv;
   if (argv[0] === "--help" || argv[0] === "-h") usage(0);
@@ -1085,10 +1154,20 @@ async function main() {
     rejectRemovedSubcommand(argv);
     const command = inferImplicitCommand(argv);
     const isOpenCommand = command === "open";
-    const options = isOpenCommand ? parseOpenArgs(argv) : parseGenerateArgs(argv);
-    const result = isOpenCommand ? await openLocalApp(options) : await streamGenerate(options);
+    const isStopCommand = command === "stop";
+    const commandArgv = isStopCommand ? argv.slice(1) : argv;
+    const options = isOpenCommand
+      ? parseOpenArgs(commandArgv)
+      : isStopCommand
+        ? parseStopArgs(commandArgv)
+        : parseGenerateArgs(commandArgv);
+    const result = isOpenCommand
+      ? await openLocalApp(options)
+      : isStopCommand
+        ? await stopLocalApp(options)
+        : await streamGenerate(options);
 
-    if (!isOpenCommand) {
+    if (!isOpenCommand && !isStopCommand) {
       console.log(JSON.stringify(result));
     } else {
       printHumanResult(result);
