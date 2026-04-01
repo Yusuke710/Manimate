@@ -1,44 +1,60 @@
-# Manimate (Local-First)
+# Manimate
 
-Local single-user version of Manimate with:
+Run manimate.ai with your own claude code locally.
 
-- local Claude Code runtime,
-- local filesystem storage,
-- local SQLite persistence,
-- SSE chat streaming with session/run persistence,
-- optional autosync to `manimate.ai`.
+- Claude Code, Manim, and rendering run locally
+- sessions are stored locally in SQLite and the filesystem
+- finished work can autosync to `manimate.ai` to view and share easily
 
-## Prerequisites
+## Requirements
 
 - Node.js 22+
-- Claude Code CLI (`claude`) authenticated with your local subscription
+- Claude Code CLI (`claude`) authenticated locally
 - Manim CE (`manim`) and `ffmpeg`
-- ElevenLabs API key — set `ELEVENLABS_API_KEY` in `.env.local` for voiceover features
+- optional: `ELEVENLABS_API_KEY` for voiceover, or paste it in the Studio voice menu
 
-## Setup
+## Install
 
 ```bash
-cp .env.example .env.local
-npm install
+curl -fsSL https://manimate.ai/install.sh | bash
 ```
 
-Run the local app with one command:
+Then run:
 
 ```bash
 manimate
 ```
 
-In the repo, the equivalent command is:
+## From Source
+
+```bash
+npm install
+```
+
+Optional voiceover:
+
+```bash
+cp .env.example .env.local
+# then set ELEVENLABS_API_KEY in .env.local
+```
+
+You can also open the voice menu in Studio and paste your ElevenLabs API key there. Manimate saves it locally in `~/.manimate/config.json`, so users do not need to edit `.env.local` by hand.
+
+## Run
+
+```bash
+manimate
+```
+
+In this repo, the equivalent command is:
 
 ```bash
 npm run manimate
 ```
 
-That starts the local app, opens the browser, and on first run opens `manimate.ai` for browser approval so completed renders autosync.
+This starts the local app, opens the browser, and reconnects `manimate.ai` if needed.
 
-If a packaged standalone build exists, the launcher uses it. Otherwise it falls back to the local Next server automatically.
-
-For direct local development, this still works:
+For direct local development:
 
 ```bash
 npm run dev
@@ -46,46 +62,9 @@ npm run dev
 
 Then open `http://localhost:3000`.
 
-## URL Launch Params
+## CLI
 
-Welcome-screen deep links support prefill and optional auto-send:
-
-- `prompt` (or alias `q`) pre-fills the welcome composer
-- `send=1` auto-sends immediately into a new session
-- optional: `model`, `voice_id` (or `voice`), `aspect_ratio`
-
-Examples:
-
-- `http://localhost:3000/?prompt=Animate%20Taylor%20series`
-- `http://localhost:3000/?prompt=Animate%20Bayes%20rule&send=1`
-- `http://localhost:3000/?prompt=Animate%20FFT&send=1&model=sonnet&aspect_ratio=16:9`
-
-## Tool API (Agents/CLI)
-
-Use one-step generation endpoint:
-
-- `POST /api/tool/generate`
-
-Request JSON:
-
-```json
-{
-  "prompt": "Animate eigenvectors in 2D",
-  "model": "opus",
-  "aspect_ratio": "16:9",
-  "voice_id": "Lci8YeL6PAFHJjNKvwXq"
-}
-```
-
-Behavior:
-
-- materializes (or reuses) a session,
-- runs the same local generation pipeline as the UI,
-- streams SSE events (same event types as `/api/chat`) with `session_id` included.
-
-## CLI Tool
-
-Open the local app:
+Open the app:
 
 ```bash
 manimate
@@ -98,7 +77,7 @@ Stop the local app:
 manimate stop
 ```
 
-Run generation from shell/agents:
+Generate from the shell:
 
 ```bash
 manimate "Animate Laplace transform"
@@ -108,20 +87,21 @@ manimate "Animate eigenvectors" --no-voice
 manimate -p "--animate a prompt that starts with a dash"
 ```
 
-Generation returns one JSON object on stdout. `--show-events` prints readable progress to stderr. Voiceover is off by default, so only pass `-v` when voiceover is wanted. Do not pass `--json`.
+Generation returns one JSON object on `stdout`. `--show-events` prints readable progress to `stderr`. Voice is off by default, so only pass `-v` when voiceover is wanted. Do not pass `--json`.
 
-Legacy `manimate open`, `manimate generate`, and `manimate connect` were removed. Use plain `manimate` to open the app and `manimate "<prompt>"` to generate.
+Generate flags:
 
-Repo entrypoints:
+- `-p`, `--prompt <text>` use this when the prompt starts with `-`
+- `-s`, `--session <id>` continue an existing session
+- `-m`, `--model <opus|sonnet|haiku>`
+- `-a`, `--aspect <16:9|9:16|1:1>`
+- `-v`, `--voice <voice_id>`
+- `--no-voice`
+- `--base-url <url>`
+- `--show-events`
+- `--quiet`
 
-```bash
-npm run manimate
-npm run tool:open
-npm run tool:generate -- "Animate Laplace transform"
-node scripts/manimate-tool.mjs "Animate Laplace transform"
-```
-
-Useful open flags:
+Open flags:
 
 - `--cloud-base-url <url>`
 - `--no-open`
@@ -130,19 +110,17 @@ Useful open flags:
 - `--port <number>`
 - `--host <hostname>`
 
-Useful generate flags:
+Legacy `manimate open`, `manimate generate`, and `manimate connect` were removed. Use plain `manimate` to open the app and `manimate "<prompt>"` to generate.
 
-- `-p`, `--prompt <text>` use this when the prompt starts with `-`
-- `-s`, `--session <id>` reuse session
-- `-m`, `--model <opus|sonnet|haiku>`
-- `-a`, `--aspect <16:9|9:16|1:1>`
-- `-v`, `--voice <voice_id>`
-- `--no-voice`
-- `--base-url <http://localhost:3000>`
-- `--show-events`
-- `--quiet`
+Repo entrypoints:
 
-Example output:
+```bash
+npm run tool:open
+npm run tool:generate -- "Animate Laplace transform"
+node scripts/manimate-tool.mjs "Animate Laplace transform"
+```
+
+Example generation output:
 
 ```json
 {
@@ -156,25 +134,59 @@ Example output:
 }
 ```
 
+Useful output fields:
+
+- `status`: `completed` | `canceled` | `failed`
+- `session_id`: session to inspect later
+- `review_url`: browser review link
+- `video_url`: rendered video URL, if present
+
 Troubleshooting:
 
 - If Manimate cannot be reached, start it with `manimate` or pass `--base-url`.
 - If `status=failed`, inspect `/api/sessions/<session_id>/messages`.
 - If cloud auth expired, run plain `manimate` to reconnect.
 
-## Local Data Layout
+## HTTP API
+
+Generate with:
+
+- `POST /api/tool/generate`
+
+Example request:
+
+```json
+{
+  "prompt": "Animate eigenvectors in 2D",
+  "model": "opus",
+  "aspect_ratio": "16:9"
+}
+```
+
+The endpoint materializes or reuses a session and streams SSE events from the same local generation pipeline used by the UI.
+
+## Deep Links
+
+The welcome screen supports:
+
+- `prompt` or `q`
+- `send=1`
+- `model`
+- `voice_id` or `voice`
+- `aspect_ratio`
+
+Examples:
+
+- `http://localhost:3000/?prompt=Animate%20Taylor%20series`
+- `http://localhost:3000/?prompt=Animate%20Bayes%20rule&send=1`
+
+## Local Data
 
 Default root: `~/.manimate/`
 
 - `db/app.db`
 - `sessions/<session_id>/project/`
-- `sessions/<session_id>/project/inputs/` (chat attachments, including images and PDFs)
+- `sessions/<session_id>/project/inputs/`
 - `sessions/<session_id>/artifacts/`
 
-Override root with `MANIMATE_LOCAL_ROOT`.
-
-## Notes
-
-- Local execution remains the source of truth; `manimate.ai` is for autosync and sharing.
-- Voiceover works when `ELEVENLABS_API_KEY` is set.
-- Advanced actions are chat-driven (for example, ask for `render in hq`) rather than dedicated API routes.
+Override with `MANIMATE_LOCAL_ROOT`.
