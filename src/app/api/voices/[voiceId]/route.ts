@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getResolvedElevenLabsApiKey } from "@/lib/local/elevenlabs-config";
+
+export const runtime = "nodejs";
 
 /**
  * GET /api/voices/{voiceId} — Resolve voice name from ElevenLabs (local mode, no auth gate)
@@ -13,7 +16,7 @@ export async function GET(
     return NextResponse.json({ error: "Invalid voice ID" }, { status: 400 });
   }
 
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = getResolvedElevenLabsApiKey().apiKey;
   if (!apiKey) {
     return NextResponse.json({ error: "ElevenLabs not configured" }, { status: 503 });
   }

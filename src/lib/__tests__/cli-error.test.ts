@@ -79,6 +79,12 @@ describe("transformCliError", () => {
     expect(msg).toContain("configuration error");
   });
 
+  it("maps missing ElevenLabs keys to the Studio voice setting", () => {
+    const msg = transformCliError(1, "Error: ELEVENLABS_API_KEY must be set");
+    expect(msg).toContain("voice menu");
+    expect(msg).toContain("No Voice");
+  });
+
   it("handles rate limit errors", () => {
     const msg = transformCliError(1, "Error: 429 Too Many Requests");
     expect(msg).toContain("temporarily busy");
@@ -154,6 +160,19 @@ describe("transformCliError", () => {
     const msg = transformCliError(1, "Error: Not authenticated. Please login first.");
     expect(msg).toContain("not signed in");
     expect(msg).toContain("Run `claude` locally and sign in");
+  });
+
+  it("maps ElevenLabs setup errors during execution", () => {
+    const raw = JSON.stringify({
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      num_turns: 4,
+    });
+    const stderr = "Error: ELEVENLABS_API_KEY must be set";
+    const msg = transformCliError(1, raw, stderr);
+    expect(msg).toContain("voice menu");
+    expect(msg).toContain("4 steps");
   });
 });
 

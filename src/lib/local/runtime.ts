@@ -1,6 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import { isRegisteredModelId } from "@/lib/models";
+import { getResolvedElevenLabsApiKey } from "@/lib/local/elevenlabs-config";
 
 export interface ActiveLocalRunProcess {
   sessionId: string;
@@ -247,10 +248,15 @@ export function spawnLocalClaudeProcess(input: {
   }
 
   args.push("-p", input.prompt);
+  const env = buildLocalClaudeEnv();
+  const elevenLabsApiKey = getResolvedElevenLabsApiKey().apiKey;
+  if (elevenLabsApiKey) {
+    env.ELEVENLABS_API_KEY = elevenLabsApiKey;
+  }
 
   const child = spawn("claude", args, {
     cwd: input.cwd,
-    env: buildLocalClaudeEnv(),
+    env,
     stdio: ["pipe", "pipe", "pipe"],
     detached: true, // Own process group so kill(-pid) terminates the whole tree
   });

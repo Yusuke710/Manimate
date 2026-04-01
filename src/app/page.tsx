@@ -33,6 +33,7 @@ const VOICE_NAMES_KEY = "manimate-voice-names";
 const ASPECT_RATIO_PREF_KEY = "manimate-preferred-aspect-ratio";
 const CLOUD_AUTH_AUTO_ATTEMPT_KEY = "manimate-cloud-auth-auto-attempted";
 const CLOUD_SYNC_RETRY_ATTEMPT_KEY = "manimate-cloud-sync-retry-attempted";
+const ELEVENLABS_SETTINGS_ENDPOINT = "/api/settings/elevenlabs";
 
 type CloudAuthStatus =
   | {
@@ -488,12 +489,40 @@ function truncateVoiceName(name: string, max = 20): string {
   return name.slice(0, max - 1) + "…";
 }
 
+type ElevenLabsKeyStatus = {
+  configured: boolean;
+  source: "saved" | "env" | null;
+  masked_key: string | null;
+};
+
+function getElevenLabsKeySummary(status: ElevenLabsKeyStatus | null): string {
+  if (!status) return "Checking ElevenLabs configuration...";
+  if (!status.configured) {
+    return "For voiceover and voice lookup.";
+  }
+  if (status.source === "saved") {
+    return status.masked_key
+      ? `Saved locally as ${status.masked_key}.`
+      : "Saved locally for this Studio install.";
+  }
+  return status.masked_key
+    ? `Using environment key ${status.masked_key}.`
+    : "Using environment key.";
+}
+
 function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange: (voice: string) => void; disabled?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [customId, setCustomId] = useState("");
   const [suggestion, setSuggestion] = useState<{ id: string; name: string } | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [apiKeyStatus, setApiKeyStatus] = useState<ElevenLabsKeyStatus | null>(null);
+  const [apiKeyStatusLoading, setApiKeyStatusLoading] = useState(false);
+  const [apiKeySaving, setApiKeySaving] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [showApiKeyForm, setShowApiKeyForm] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const apiKeyInputRef = useRef<HTMLInputElement>(null);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lookupVersion = useRef(0);
 
@@ -504,6 +533,46 @@ function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange:
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const refreshApiKeyStatus = useCallback(async () => {
+    setApiKeyStatusLoading(true);
+    try {
+      const response = await fetch(ELEVENLABS_SETTINGS_ENDPOINT, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          typeof data?.error === "string" ? data.error : "Failed to load ElevenLabs API key status"
+        );
+      }
+      setApiKeyStatus(data as ElevenLabsKeyStatus);
+      setShowApiKeyForm(!data.configured);
+      setApiKeyError(null);
+    } catch (error) {
+      setApiKeyError(
+        error instanceof Error ? error.message : "Failed to load ElevenLabs API key status"
+      );
+      setShowApiKeyForm(true);
+    } finally {
+      setApiKeyStatusLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    void refreshApiKeyStatus();
+  }, [isOpen, refreshApiKeyStatus]);
+
+  useEffect(() => {
+    if (!showApiKeyForm) return;
+    const timer = window.setTimeout(() => apiKeyInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [showApiKeyForm]);
+
+  useEffect(() => {
+    if (isOpen) return;
+    setApiKeyInput("");
+    setApiKeyError(null);
   }, [isOpen]);
 
   // Auto-lookup: debounce 500ms after input reaches 15+ alphanumeric chars
@@ -557,6 +626,62 @@ function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange:
     setIsOpen(false);
   };
 
+  const handleSaveApiKey = useCallback(async () => {
+    const trimmed = apiKeyInput.trim();
+    if (!trimmed) {
+      setApiKeyError("Paste your ElevenLabs API key.");
+      return;
+    }
+
+    setApiKeySaving(true);
+    setApiKeyError(null);
+    try {
+      const response = await fetch(ELEVENLABS_SETTINGS_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: trimmed }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          typeof data?.error === "string" ? data.error : "Failed to save ElevenLabs API key"
+        );
+      }
+      setApiKeyStatus(data as ElevenLabsKeyStatus);
+      setApiKeyInput("");
+      setShowApiKeyForm(false);
+    } catch (error) {
+      setApiKeyError(
+        error instanceof Error ? error.message : "Failed to save ElevenLabs API key"
+      );
+    } finally {
+      setApiKeySaving(false);
+    }
+  }, [apiKeyInput]);
+
+  const handleClearSavedApiKey = useCallback(async () => {
+    setApiKeySaving(true);
+    setApiKeyError(null);
+    try {
+      const response = await fetch(ELEVENLABS_SETTINGS_ENDPOINT, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          typeof data?.error === "string" ? data.error : "Failed to clear ElevenLabs API key"
+        );
+      }
+      setApiKeyStatus(data as ElevenLabsKeyStatus);
+      setApiKeyInput("");
+      setShowApiKeyForm(!data.configured);
+    } catch (error) {
+      setApiKeyError(
+        error instanceof Error ? error.message : "Failed to clear ElevenLabs API key"
+      );
+    } finally {
+      setApiKeySaving(false);
+    }
+  }, []);
+
   return (
     <div style={{ position: "relative" }} ref={ref}>
       <button
@@ -590,15 +715,199 @@ function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange:
       </button>
       {isOpen && (
         <div style={{
-          position: "absolute", top: "100%", left: 0,
-          marginTop: 4,
+          position: "absolute", bottom: "calc(100% + 4px)", left: 0,
           background: "var(--bg-white)",
           border: "1px solid var(--border-main)",
           borderRadius: 10,
           boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-          zIndex: 50, overflow: "hidden",
+          zIndex: 50,
+          overflowX: "hidden",
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+          maxHeight: "min(60vh, 520px)",
           minWidth: 180,
         }}>
+          <div
+            style={{
+              padding: "10px 14px 12px",
+              background: "rgba(43,181,160,0.04)",
+              borderBottom: "1px solid var(--border-main)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div style={{ display: "grid", gap: 3, flex: 1, minWidth: 0 }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    fontFamily: "var(--font)",
+                  }}
+                >
+                  ElevenLabs key
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    lineHeight: 1.45,
+                    color: "var(--text-tertiary)",
+                    fontFamily: "var(--font)",
+                  }}
+                >
+                  {apiKeyStatusLoading ? "Checking..." : getElevenLabsKeySummary(apiKeyStatus)}
+                </span>
+                {showApiKeyForm && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      lineHeight: 1.45,
+                      color: "var(--text-tertiary)",
+                      fontFamily: "var(--font)",
+                    }}
+                  >
+                    Saved locally in ~/.manimate/config.json.
+                  </span>
+                )}
+              </div>
+
+              {!showApiKeyForm && (
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button
+                    onClick={() => {
+                      setShowApiKeyForm(true);
+                      setApiKeyError(null);
+                    }}
+                    style={{
+                      border: "1px solid var(--border-main)",
+                      background: "var(--bg-white)",
+                      borderRadius: 8,
+                      padding: "5px 8px",
+                      cursor: "pointer",
+                      fontSize: 11,
+                      color: "var(--text-secondary)",
+                      fontFamily: "var(--font)",
+                    }}
+                  >
+                    {apiKeyStatus?.source === "saved" ? "Replace" : "Save local key"}
+                  </button>
+                  {apiKeyStatus?.source === "saved" && (
+                    <button
+                      onClick={() => { void handleClearSavedApiKey(); }}
+                      disabled={apiKeySaving}
+                      style={{
+                        border: "1px solid rgba(180,35,24,0.18)",
+                        background: "#fff7f6",
+                        borderRadius: 8,
+                        padding: "5px 8px",
+                        cursor: apiKeySaving ? "default" : "pointer",
+                        fontSize: 11,
+                        color: "#b42318",
+                        fontFamily: "var(--font)",
+                        opacity: apiKeySaving ? 0.6 : 1,
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {showApiKeyForm && (
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                <input
+                  ref={apiKeyInputRef}
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void handleSaveApiKey(); }}
+                  placeholder="Paste ElevenLabs API key..."
+                  autoComplete="off"
+                  spellCheck={false}
+                  style={{
+                    fontSize: 12,
+                    fontFamily: "monospace",
+                    border: "1px solid var(--border-main)",
+                    borderRadius: 6,
+                    background: "var(--bg-white)",
+                    padding: "6px 8px",
+                    width: "100%",
+                    outline: "none",
+                    color: "var(--text-primary)",
+                    boxSizing: "border-box",
+                  }}
+                />
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => { void handleSaveApiKey(); }}
+                    disabled={apiKeySaving}
+                    style={{
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "6px 10px",
+                      background: "var(--accent)",
+                      color: "#ffffff",
+                      cursor: apiKeySaving ? "default" : "pointer",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      fontFamily: "var(--font)",
+                      opacity: apiKeySaving ? 0.72 : 1,
+                    }}
+                  >
+                    {apiKeySaving ? "Saving..." : "Save key"}
+                  </button>
+
+                  {apiKeyStatus?.configured && (
+                    <button
+                      onClick={() => {
+                        setShowApiKeyForm(false);
+                        setApiKeyInput("");
+                        setApiKeyError(null);
+                      }}
+                      disabled={apiKeySaving}
+                      style={{
+                        border: "1px solid var(--border-main)",
+                        borderRadius: 8,
+                        padding: "6px 10px",
+                        background: "var(--bg-white)",
+                        color: "var(--text-secondary)",
+                        cursor: apiKeySaving ? "default" : "pointer",
+                        fontSize: 11,
+                        fontFamily: "var(--font)",
+                        opacity: apiKeySaving ? 0.72 : 1,
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {apiKeyError && (
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 11,
+                  lineHeight: 1.45,
+                  color: "#b42318",
+                  fontFamily: "var(--font)",
+                }}
+              >
+                {apiKeyError}
+              </div>
+            )}
+          </div>
+
           {/* None option */}
           <div
             style={{

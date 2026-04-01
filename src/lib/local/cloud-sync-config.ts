@@ -1,6 +1,8 @@
-import fs from "node:fs";
-import path from "node:path";
-import { LOCAL_ROOT, ensureLocalLayout } from "@/lib/local/config";
+import {
+  isRecord,
+  readStoredLocalConfig,
+  updateStoredLocalConfig,
+} from "@/lib/local/local-config-store";
 
 export interface LocalCloudSyncConfig {
   base_url: string;
@@ -26,12 +28,6 @@ export interface LocalCloudSyncPendingConnect {
 interface StoredLocalConfig {
   cloud_sync?: LocalCloudSyncConfig;
   cloud_sync_pending?: LocalCloudSyncPendingConnect;
-}
-
-export const LOCAL_CONFIG_PATH = path.join(LOCAL_ROOT, "config.json");
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseLocalCloudSyncConfig(value: unknown): LocalCloudSyncConfig | null {
@@ -79,18 +75,12 @@ function parseLocalCloudSyncPendingConnect(value: unknown): LocalCloudSyncPendin
   };
 }
 
-function readStoredLocalConfig(): StoredLocalConfig {
-  try {
-    const raw = fs.readFileSync(LOCAL_CONFIG_PATH, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    return isRecord(parsed) ? (parsed as StoredLocalConfig) : {};
-  } catch {
-    return {};
-  }
+function readCloudSyncConfig(): StoredLocalConfig {
+  return readStoredLocalConfig() as StoredLocalConfig;
 }
 
 export function getLocalCloudSyncConfig(): LocalCloudSyncConfig | null {
-  return parseLocalCloudSyncConfig(readStoredLocalConfig().cloud_sync);
+  return parseLocalCloudSyncConfig(readCloudSyncConfig().cloud_sync);
 }
 
 export function getLocalCloudSyncEnvOverride(): LocalCloudSyncConfig | null {
@@ -110,44 +100,34 @@ export function getLocalCloudSyncEnvOverride(): LocalCloudSyncConfig | null {
 }
 
 export function writeLocalCloudSyncConfig(config: LocalCloudSyncConfig): void {
-  ensureLocalLayout();
-  const next: StoredLocalConfig = {
-    ...readStoredLocalConfig(),
+  updateStoredLocalConfig((current) => ({
+    ...current,
     cloud_sync: config,
     cloud_sync_pending: undefined,
-  };
-  fs.writeFileSync(LOCAL_CONFIG_PATH, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  }));
 }
 
 export function clearLocalCloudSyncConfig(): void {
-  ensureLocalLayout();
-  const current = readStoredLocalConfig();
-  const next: StoredLocalConfig = {
+  updateStoredLocalConfig((current) => ({
     ...current,
     cloud_sync: undefined,
-  };
-  fs.writeFileSync(LOCAL_CONFIG_PATH, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  }));
 }
 
 export function getLocalCloudSyncPendingConnect(): LocalCloudSyncPendingConnect | null {
-  return parseLocalCloudSyncPendingConnect(readStoredLocalConfig().cloud_sync_pending);
+  return parseLocalCloudSyncPendingConnect(readCloudSyncConfig().cloud_sync_pending);
 }
 
 export function writeLocalCloudSyncPendingConnect(pending: LocalCloudSyncPendingConnect): void {
-  ensureLocalLayout();
-  const next: StoredLocalConfig = {
-    ...readStoredLocalConfig(),
+  updateStoredLocalConfig((current) => ({
+    ...current,
     cloud_sync_pending: pending,
-  };
-  fs.writeFileSync(LOCAL_CONFIG_PATH, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  }));
 }
 
 export function clearLocalCloudSyncPendingConnect(): void {
-  ensureLocalLayout();
-  const current = readStoredLocalConfig();
-  const next: StoredLocalConfig = {
+  updateStoredLocalConfig((current) => ({
     ...current,
     cloud_sync_pending: undefined,
-  };
-  fs.writeFileSync(LOCAL_CONFIG_PATH, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  }));
 }

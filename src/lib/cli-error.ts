@@ -40,6 +40,9 @@ export function transformCliError(exitCode: number, rawDetails: string, stderr?:
   }
 
   const lower = rawDetails.toLowerCase();
+  if (lower.includes("elevenlabs_api_key")) {
+    return "ElevenLabs voiceover is not configured. Open the voice menu in Studio and save your ElevenLabs API key, or switch to No Voice.";
+  }
   if (lower.includes("anthropic_api_key") || lower.includes("api key") || lower.includes("api_key")) {
     return "AI service configuration error. Please try again or contact support.";
   }
@@ -86,6 +89,10 @@ export function normalizeClaudeCliSetupError(text: string): string | null {
  */
 function extractErrorHint(text: string): string | null {
   if (!text) return null;
+  const lower = text.toLowerCase();
+  if (lower.includes("elevenlabs_api_key")) {
+    return "ElevenLabs voiceover is not configured. Open the voice menu in Studio and save your ElevenLabs API key, or switch to No Voice.";
+  }
   // Python traceback: last "Error:" or "Exception:" line
   const errorLineMatch = text.match(/(?:^|\n)\s*(\w+(?:Error|Exception):\s*.+)/m);
   if (errorLineMatch) {
