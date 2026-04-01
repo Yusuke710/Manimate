@@ -30,6 +30,19 @@ interface StoredLocalConfig {
   cloud_sync_pending?: LocalCloudSyncPendingConnect;
 }
 
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+}
+
+function shouldIgnoreStoredCloudSyncConfig(config: LocalCloudSyncConfig): boolean {
+  try {
+    return isLoopbackHost(new URL(config.base_url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function parseLocalCloudSyncConfig(value: unknown): LocalCloudSyncConfig | null {
   if (!isRecord(value)) return null;
 
@@ -80,7 +93,20 @@ function readCloudSyncConfig(): StoredLocalConfig {
 }
 
 export function getLocalCloudSyncConfig(): LocalCloudSyncConfig | null {
-  return parseLocalCloudSyncConfig(readCloudSyncConfig().cloud_sync);
+  const config = parseLocalCloudSyncConfig(readCloudSyncConfig().cloud_sync);
+  if (!config) return null;
+
+  // Persisted loopback cloud targets usually come from local development and
+  // should not suppress the real hosted connect flow in installed builds.
+  if (shouldIgnoreStoredCloudSyncConfig(config)) {
+    updateStoredLocalConfig((current) => ({
+      ...current,
+      cloud_sync: undefined,
+    }));
+    return null;
+  }
+
+  return config;
 }
 
 export function getLocalCloudSyncEnvOverride(): LocalCloudSyncConfig | null {
