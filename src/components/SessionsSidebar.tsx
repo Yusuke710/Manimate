@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useReducer, useCallback, type MouseEvent, type ReactNode } from "react";
+import { StudioAccountCard, type StudioConnectionSummary } from "@/components/StudioStatus";
 
 type Session = {
   id: string;
@@ -16,6 +17,7 @@ interface SessionsSidebarProps {
   onToggleCollapse: () => void;
   isLibraryActive?: boolean;
   onLibraryClick?: () => void;
+  studioConnection?: StudioConnectionSummary | null;
 }
 
 interface SessionsState {
@@ -127,6 +129,7 @@ export function SessionsSidebar({
   onToggleCollapse,
   isLibraryActive = false,
   onLibraryClick,
+  studioConnection = null,
 }: SessionsSidebarProps) {
   const [state, dispatch] = useReducer(sessionsReducer, {
     sessions: [],
@@ -393,6 +396,8 @@ export function SessionsSidebar({
           ))
         )}
       </div>
+
+      <StudioAccountCard connection={studioConnection} />
 
     </div>
   );

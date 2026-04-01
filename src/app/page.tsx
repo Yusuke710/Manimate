@@ -8,6 +8,7 @@ import ChatMessages from "@/components/ChatMessages";
 import PreviewPanel from "@/components/PreviewPanel";
 import { SessionsSidebar } from "@/components/SessionsSidebar";
 import { LibraryView } from "@/components/LibraryView";
+import { StudioPlanPill, type StudioConnectionSummary } from "@/components/StudioStatus";
 import { SSEEvent, ActivityEvent, Message, DBActivityEvent, ActiveRun, dbActivityEventToUI, ImageAttachment } from "@/lib/types";
 import { useBrowserPreviewBadge } from "@/lib/useBrowserPreviewBadge";
 import { useIsMobile } from "@/lib/useIsMobile";
@@ -1461,7 +1462,12 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
         leftPanel={
           <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-main)" }}>
             <ChatMessages messages={state.messages} activityEvents={state.activityEvents} isLoading={state.isLoading} isLoadingMessages={state.isLoadingMessages} />
-            <ChatInput onSend={handleSend} onStop={handleCancel} isLoading={state.isLoading} draftKey={draftKey} />
+            <ChatInput
+              onSend={handleSend}
+              onStop={handleCancel}
+              isLoading={state.isLoading}
+              draftKey={draftKey}
+            />
           </div>
         }
         rightPanel={previewPanel}
@@ -1499,7 +1505,13 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
 
           <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>{previewPanel}</div>
 
-          <ChatInput onSend={handleSend} onStop={handleCancel} isLoading={state.isLoading} compact draftKey={draftKey} />
+          <ChatInput
+            onSend={handleSend}
+            onStop={handleCancel}
+            isLoading={state.isLoading}
+            compact
+            draftKey={draftKey}
+          />
         </>
       ) : (
         /* Normal chat mode (mobile without preview open, or desktop) */
@@ -1551,7 +1563,13 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
               </button>
             )}
 
-            <ChatInput onSend={handleSend} onStop={handleCancel} isLoading={state.isLoading} compact={isMobile} draftKey={draftKey} />
+            <ChatInput
+              onSend={handleSend}
+              onStop={handleCancel}
+              isLoading={state.isLoading}
+              compact={isMobile}
+              draftKey={draftKey}
+            />
           </div>
         </div>
       )}
@@ -1579,7 +1597,6 @@ function HomeContent() {
   }, [activeSessionId, searchParamsString]);
   useEffect(() => {
     if (isMobile) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional UX behavior: collapse sidebar when entering a session
     setSidebarCollapsed(Boolean(activeSessionId));
   }, [activeSessionId, isMobile]);
 
@@ -1814,6 +1831,15 @@ function HomeContent() {
     handleLibraryClick();
   }, [handleLibraryClick]);
 
+  const studioConnection: StudioConnectionSummary | null = cloudAuthStatus?.status === "connected"
+    ? {
+        baseUrl: cloudAuthStatus.base_url,
+        deviceName: cloudAuthStatus.device_name,
+        userEmail: cloudAuthStatus.user_email,
+        userName: cloudAuthStatus.user_name,
+      }
+    : null;
+
   const shouldGateOnCloudAuth = cloudAuthLoading || !cloudAuthStatus || cloudAuthStatus.status !== "connected";
 
   if (shouldGateOnCloudAuth) {
@@ -1858,6 +1884,7 @@ function HomeContent() {
               onToggleCollapse={() => setMobileSidebarOpen(false)}
               isLibraryActive={isLibraryActive}
               onLibraryClick={handleMobileLibraryClick}
+              studioConnection={studioConnection}
             />
           </div>
         </>
@@ -1875,6 +1902,7 @@ function HomeContent() {
             onToggleCollapse={handleToggleSidebar}
             isLibraryActive={isLibraryActive}
             onLibraryClick={handleLibraryClick}
+            studioConnection={studioConnection}
           />
         </div>
       )}
@@ -2005,6 +2033,10 @@ function WelcomeView({
       padding: isMobile ? "20px 16px" : 40,
     }}>
       <div style={{ flex: 1 }} />
+
+      <div style={{ marginBottom: 20 }}>
+        <StudioPlanPill />
+      </div>
 
       <div style={{
         fontSize: isMobile ? 26 : 36, fontWeight: 400,
