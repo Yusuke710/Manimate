@@ -34,6 +34,11 @@ export function transformCliError(exitCode: number, rawDetails: string, stderr?:
   }
 
   // Check for common patterns in non-JSON error output (case-insensitive)
+  const claudeSetupMessage = normalizeClaudeCliSetupError(stderr || rawDetails);
+  if (claudeSetupMessage) {
+    return claudeSetupMessage;
+  }
+
   const lower = rawDetails.toLowerCase();
   if (lower.includes("anthropic_api_key") || lower.includes("api key") || lower.includes("api_key")) {
     return "AI service configuration error. Please try again or contact support.";
@@ -45,6 +50,34 @@ export function transformCliError(exitCode: number, rawDetails: string, stderr?:
   // Fallback: truncate raw output, strip JSON noise
   const clean = rawDetails.replace(/\{[^}]{0,500}\}/g, "[...]").trim();
   return `Execution failed (exit code ${exitCode}): ${(clean || rawDetails).slice(0, 200)}`;
+}
+
+export function normalizeClaudeCliSetupError(text: string): string | null {
+  if (!text) return null;
+
+  const lower = text.toLowerCase();
+
+  if (
+    lower.includes("spawn claude enoent") ||
+    lower.includes("command not found: claude") ||
+    lower.includes("no such file or directory") && lower.includes("claude")
+  ) {
+    return "Claude Code CLI (`claude`) is not installed. Install it, then run `claude` locally and sign in.";
+  }
+
+  if (
+    lower.includes("not authenticated") ||
+    lower.includes("not logged in") ||
+    lower.includes("login required") ||
+    lower.includes("log in") ||
+    lower.includes("login") ||
+    lower.includes("sign in") ||
+    lower.includes("signed in")
+  ) {
+    return "Claude Code CLI is not signed in. Run `claude` locally and sign in, then try again.";
+  }
+
+  return null;
 }
 
 /**

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { parseNDJSONChunk } from "@/lib/ndjson-parser";
-import { transformCliError } from "@/lib/cli-error";
+import { normalizeClaudeCliSetupError, transformCliError } from "@/lib/cli-error";
 import { DEFAULT_MODEL } from "@/lib/models";
 import {
   ensureLocalSessionLayout,
@@ -763,7 +763,8 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       });
       queueLocalCloudSync(sessionId);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "An unexpected local-mode error occurred";
+      const rawMessage = error instanceof Error ? error.message : "An unexpected local-mode error occurred";
+      const message = normalizeClaudeCliSetupError(rawMessage) || rawMessage;
       if (runId) {
         updateLocalRun(runId, {
           status: "failed",

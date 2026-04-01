@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { transformCliError } from "@/lib/cli-error";
+import { normalizeClaudeCliSetupError, transformCliError } from "@/lib/cli-error";
 
 describe("transformCliError", () => {
   it("transforms permission_denial JSON into friendly message", () => {
@@ -142,5 +142,23 @@ describe("transformCliError", () => {
   it("handles 'Too Many Requests' without status code", () => {
     const msg = transformCliError(1, "Error: Too Many Requests");
     expect(msg).toContain("temporarily busy");
+  });
+
+  it("maps missing Claude CLI errors", () => {
+    const msg = transformCliError(1, "spawn claude ENOENT");
+    expect(msg).toContain("Claude Code CLI");
+    expect(msg).toContain("run `claude` locally and sign in");
+  });
+
+  it("maps signed-out Claude CLI errors", () => {
+    const msg = transformCliError(1, "Error: Not authenticated. Please login first.");
+    expect(msg).toContain("not signed in");
+    expect(msg).toContain("Run `claude` locally and sign in");
+  });
+});
+
+describe("normalizeClaudeCliSetupError", () => {
+  it("returns null for unrelated errors", () => {
+    expect(normalizeClaudeCliSetupError("ValueError: invalid input")).toBeNull();
   });
 });
