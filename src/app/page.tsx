@@ -1277,11 +1277,18 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
   useEffect(() => { videoUpdateNonceRef.current = state.videoUpdateNonce; }, [state.videoUpdateNonce]);
   useBrowserPreviewBadge(showPreviewReadyBadge);
 
-  const handlePreviewReady = useCallback((previewNonce: number) => {
-    if (expectedPreviewNonceRef.current !== previewNonce) return;
+  const showPendingPreviewReadyBadge = useCallback(() => {
+    if (expectedPreviewNonceRef.current === null) return;
+    // `complete` + `video_url` is already authoritative. Background tabs can defer
+    // media loading events, so the browser badge cannot wait on `<video>.canplay`.
     expectedPreviewNonceRef.current = null;
     setShowPreviewReadyBadge(true);
   }, []);
+
+  const handlePreviewReady = useCallback((previewNonce: number) => {
+    if (expectedPreviewNonceRef.current !== previewNonce) return;
+    showPendingPreviewReadyBadge();
+  }, [showPendingPreviewReadyBadge]);
 
   const applyFetchedSessionData = useCallback(
     (
@@ -1394,6 +1401,10 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
 
         const data = (await response.json()) as SessionMessagesResponse;
         applyFetchedSessionData(data, { preserveExistingArtifacts: true });
+        const runStillActive = Boolean(
+          data.activeRun &&
+          (data.activeRun.status === "running" || data.activeRun.status === "queued"),
+        );
 
         if (data.session.last_video_url) {
           const fullChanged = data.session.last_video_url !== videoUrlRef.current;
@@ -1409,6 +1420,9 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
               url: data.session.last_video_url,
               bumpNonce: baseChanged || fullChanged,
             });
+            if ((baseChanged || fullChanged) && !runStillActive) {
+              showPendingPreviewReadyBadge();
+            }
           }
         }
 
@@ -1419,7 +1433,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
         }
 
         // Activate sandbox if an active run is detected (sandbox is already in use)
-        if (data.activeRun && (data.activeRun.status === "running" || data.activeRun.status === "queued")) {
+        if (runStillActive) {
           expectedPreviewNonceRef.current = videoUpdateNonceRef.current + 1;
           setShowPreviewReadyBadge(false);
         }
@@ -1447,7 +1461,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
     return () => {
       clearInterval(poller);
     };
-  }, [sessionId, router, applyFetchedSessionData]);
+  }, [sessionId, router, applyFetchedSessionData, showPendingPreviewReadyBadge]);
 
   const addActivity = useCallback((event: Omit<ActivityEvent, "id" | "timestamp">, turnId?: string) => {
     dispatch({ type: "ADD_ACTIVITY", event: { ...event, id: crypto.randomUUID(), timestamp: new Date(), turnId } });
@@ -1635,6 +1649,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
                 videoUrlRef.current = event.video_url;
                 videoUrlBaseRef.current = event.video_url.split('?')[0];
                 dispatch({ type: "SET_VIDEO_URL", url: event.video_url, bumpNonce: true });
+                showPendingPreviewReadyBadge();
               } else {
                 expectedPreviewNonceRef.current = null;
               }
@@ -1672,7 +1687,7 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
       abortControllerRef.current = null;
       currentAssistantMessageIdRef.current = null;
     }
-  }, [addActivity, sessionId, state.model, sessionReady, aspectRatio, resolveArtifactType]);
+  }, [addActivity, sessionId, state.model, sessionReady, aspectRatio, resolveArtifactType, showPendingPreviewReadyBadge]);
 
   // Auto-send pending welcome payload when a new session loads
   const welcomeSentRef = useRef(false);
