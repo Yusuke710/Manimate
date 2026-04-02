@@ -1,7 +1,8 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { getLocalSessionPaths } from "@/lib/local/config";
-import { clearLocalCloudSyncConfig, getLocalCloudSyncConfig } from "@/lib/local/cloud-sync-config";
+import { getLocalCloudSyncConfig } from "@/lib/local/cloud-sync-config";
+import { formatCloudSyncFailureMessage } from "@/lib/local/cloud-sync-policy";
 import {
   getLocalSession,
   listLocalActivityEvents,
@@ -235,15 +236,9 @@ async function syncLocalSessionToCloud(sessionId: string): Promise<void> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Cloud sync failed";
-    const unauthorized = message.includes("Unauthorized");
-    if (unauthorized) {
-      clearLocalCloudSyncConfig();
-    }
     updateLocalSession(sessionId, {
       cloud_sync_status: "failed",
-      cloud_last_error: unauthorized
-        ? "Cloud sync is no longer authorized. Reopen Manimate to reconnect."
-        : message,
+      cloud_last_error: formatCloudSyncFailureMessage(message),
     });
   }
 }

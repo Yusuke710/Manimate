@@ -5,6 +5,7 @@ import {
   ensureLocalLayout,
   getLocalSandboxId,
 } from "@/lib/local/config";
+import { shouldRetryCloudSyncSession } from "@/lib/local/cloud-sync-policy";
 
 type JsonLike = Record<string, unknown> | Array<unknown> | string | number | boolean | null;
 
@@ -323,7 +324,14 @@ export function listLocalCloudSyncRetryCandidates(): LocalSession[] {
       ORDER BY updated_at DESC
     `)
     .all() as Record<string, unknown>[];
-  return rows.map(mapSession);
+  return rows
+    .map(mapSession)
+    .filter((session) =>
+      shouldRetryCloudSyncSession({
+        cloudSyncStatus: session.cloud_sync_status,
+        cloudLastError: session.cloud_last_error,
+      }),
+    );
 }
 
 export function createLocalSession(input: {
