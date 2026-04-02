@@ -1,6 +1,6 @@
 {
   "name": "manimate",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local-first Manim animation app with a packaged CLI",
   "license": "MIT",
   "engines": {
