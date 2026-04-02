@@ -511,6 +511,28 @@ function highlightPython(code: string): string {
 // Format time helper
 const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
+interface PreviewPlaybackSnapshot {
+  currentTime: number;
+  duration: number;
+  isPlaying: boolean;
+  isEnded: boolean;
+  playbackSpeed: number;
+  isPaused: boolean;
+}
+
+export function getPreviewPlaybackSnapshot(
+  video: Pick<HTMLVideoElement, "currentTime" | "duration" | "paused" | "ended" | "playbackRate">
+): PreviewPlaybackSnapshot {
+  return {
+    currentTime: Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0,
+    duration: Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0,
+    isPlaying: !video.paused && !video.ended,
+    isEnded: video.ended,
+    playbackSpeed: Number.isFinite(video.playbackRate) && video.playbackRate > 0 ? video.playbackRate : 1,
+    isPaused: video.paused,
+  };
+}
+
 // Subtitle type
 interface Subtitle {
   start: number;
@@ -867,6 +889,23 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
   }, [currentTime, timelineChapters]);
   const activeVideoLoadId = activeVideo === 'A' ? srcALoadId : srcBLoadId;
 
+  const syncPlaybackState = useCallback((
+    video: Pick<HTMLVideoElement, "currentTime" | "duration" | "paused" | "ended" | "playbackRate">,
+    options?: { syncCurrentTime?: boolean },
+  ) => {
+    const snapshot = getPreviewPlaybackSnapshot(video);
+    if (options?.syncCurrentTime !== false && !isDraggingRef.current) {
+      setCurrentTime(snapshot.currentTime);
+      desiredTimeRef.current = snapshot.currentTime;
+    }
+    setDuration(snapshot.duration);
+    setIsPlaying(snapshot.isPlaying);
+    setIsEnded(snapshot.isEnded);
+    setPlaybackSpeed(snapshot.playbackSpeed);
+    desiredRateRef.current = snapshot.playbackSpeed;
+    desiredPausedRef.current = snapshot.isPaused;
+  }, []);
+
   // Update current subtitle based on time
   useEffect(() => {
     if (!subtitlesOn || subtitles.length === 0) {
@@ -877,53 +916,25 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
     setCurrentSubtitle(sub?.text || '');
   }, [currentTime, subtitles, subtitlesOn]);
 
-  // Video event handlers - re-attach when the active video element remounts.
+  // Direct session loads can hydrate a cached video before React receives any media events.
+  // Read the current element state immediately when the active slot changes.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-
-    // Skip timeupdate while dragging to prevent progress bar jumps
-    const handleTimeUpdate = () => {
-      if (!isDraggingRef.current) {
-        setCurrentTime(video.currentTime);
-        // Keep ref in sync for swap state mirroring
-        desiredTimeRef.current = video.currentTime;
-      }
-    };
-    const handleLoadedMetadata = () => {
-      setDuration(video.duration);
-    };
-    const handlePlay = () => {
-      setIsPlaying(true);
-      setIsEnded(false);
-      desiredPausedRef.current = false;
-    };
-    const handlePause = () => {
-      setIsPlaying(false);
-      desiredPausedRef.current = true;
-    };
-    const handleEnded = () => { setIsPlaying(false); setIsEnded(true); };
-    const handleRateChange = () => {
-      desiredRateRef.current = video.playbackRate;
-    };
-
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-    video.addEventListener('ended', handleEnded);
-    video.addEventListener('ratechange', handleRateChange);
-
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
-      video.removeEventListener('ended', handleEnded);
-      video.removeEventListener('ratechange', handleRateChange);
-    };
+    syncPlaybackState(video);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo which is in deps
-  }, [fullVideoUrl, activeVideo, activeVideoLoadId]);
+  }, [fullVideoUrl, activeVideo, activeVideoLoadId, syncPlaybackState]);
+
+  const handleVideoTimeUpdate = useCallback((video: HTMLVideoElement) => {
+    if (!isDraggingRef.current) {
+      setCurrentTime(video.currentTime);
+      desiredTimeRef.current = video.currentTime;
+    }
+  }, []);
+
+  const handleVideoPlaybackStateChange = useCallback((video: HTMLVideoElement, options?: { syncCurrentTime?: boolean }) => {
+    syncPlaybackState(video, options);
+  }, [syncPlaybackState]);
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
@@ -1327,6 +1338,13 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
           playsInline
           preload="auto"
           onCanPlay={activeVideo === 'A' ? () => handleVideoCanPlay('A', srcALoadId, srcA) : undefined}
+          onLoadedMetadata={activeVideo === 'A' ? (event) => handleVideoPlaybackStateChange(event.currentTarget) : undefined}
+          onDurationChange={activeVideo === 'A' ? (event) => handleVideoPlaybackStateChange(event.currentTarget, { syncCurrentTime: false }) : undefined}
+          onTimeUpdate={activeVideo === 'A' ? (event) => handleVideoTimeUpdate(event.currentTarget) : undefined}
+          onPlay={activeVideo === 'A' ? (event) => handleVideoPlaybackStateChange(event.currentTarget, { syncCurrentTime: false }) : undefined}
+          onPause={activeVideo === 'A' ? (event) => handleVideoPlaybackStateChange(event.currentTarget, { syncCurrentTime: false }) : undefined}
+          onEnded={activeVideo === 'A' ? (event) => handleVideoPlaybackStateChange(event.currentTarget) : undefined}
+          onRateChange={activeVideo === 'A' ? (event) => handleVideoPlaybackStateChange(event.currentTarget, { syncCurrentTime: false }) : undefined}
         >
           Your browser does not support the video tag.
         </video>
@@ -1341,6 +1359,13 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
           playsInline
           preload="auto"
           onCanPlay={activeVideo === 'B' ? () => handleVideoCanPlay('B', srcBLoadId, srcB) : undefined}
+          onLoadedMetadata={activeVideo === 'B' ? (event) => handleVideoPlaybackStateChange(event.currentTarget) : undefined}
+          onDurationChange={activeVideo === 'B' ? (event) => handleVideoPlaybackStateChange(event.currentTarget, { syncCurrentTime: false }) : undefined}
+          onTimeUpdate={activeVideo === 'B' ? (event) => handleVideoTimeUpdate(event.currentTarget) : undefined}
+          onPlay={activeVideo === 'B' ? (event) => handleVideoPlaybackStateChange(event.currentTarget, { syncCurrentTime: false }) : undefined}
+          onPause={activeVideo === 'B' ? (event) => handleVideoPlaybackStateChange(event.currentTarget, { syncCurrentTime: false }) : undefined}
+          onEnded={activeVideo === 'B' ? (event) => handleVideoPlaybackStateChange(event.currentTarget) : undefined}
+          onRateChange={activeVideo === 'B' ? (event) => handleVideoPlaybackStateChange(event.currentTarget, { syncCurrentTime: false }) : undefined}
         >
           Your browser does not support the video tag.
         </video>
