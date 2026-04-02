@@ -25,7 +25,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         }
         return [session];
       })()
-    : listLocalCloudSyncRetryCandidates();
+    : listLocalCloudSyncRetryCandidates({ includeAuthFailures: true });
 
   for (const session of targets) {
     queueLocalCloudSync(session.id);

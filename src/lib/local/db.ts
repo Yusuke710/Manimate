@@ -314,7 +314,9 @@ export function listLocalSessions(): LocalSession[] {
   return rows.map((r) => ({ ...mapSession(r), plan_content: null, script_content: null, subtitles_content: null, chapters: null }));
 }
 
-export function listLocalCloudSyncRetryCandidates(): LocalSession[] {
+export function listLocalCloudSyncRetryCandidates(options?: {
+  includeAuthFailures?: boolean;
+}): LocalSession[] {
   const rows = openDb()
     .prepare(`
       SELECT *
@@ -324,14 +326,16 @@ export function listLocalCloudSyncRetryCandidates(): LocalSession[] {
       ORDER BY updated_at DESC
     `)
     .all() as Record<string, unknown>[];
-  return rows
-    .map(mapSession)
-    .filter((session) =>
-      shouldRetryCloudSyncSession({
-        cloudSyncStatus: session.cloud_sync_status,
-        cloudLastError: session.cloud_last_error,
-      }),
-    );
+  const sessions = rows.map(mapSession);
+  if (options?.includeAuthFailures) {
+    return sessions;
+  }
+  return sessions.filter((session) =>
+    shouldRetryCloudSyncSession({
+      cloudSyncStatus: session.cloud_sync_status,
+      cloudLastError: session.cloud_last_error,
+    }),
+  );
 }
 
 export function createLocalSession(input: {
