@@ -3,8 +3,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 
 import {
+  buildPreviewAssetLoadKey,
   buildPreviewLoadKey,
   shouldAcceptPreviewCanPlay,
+  shouldAcceptPreviewAsyncResult,
 } from "@/lib/preview-load";
 import { normalizeChaptersToVideoDuration } from "@/lib/timeline";
 import { useIsMobile } from "@/lib/useIsMobile";
@@ -657,7 +659,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
   useEffect(() => {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
-  // Refs for tracking loaded URLs (declared before effects that use them)
+  // Refs for tracking loaded preview asset requests.
   const lastSubtitleUrlRef = useRef<string | null>(null);
   const lastChaptersUrlRef = useRef<string | null>(null);
 
@@ -687,37 +689,32 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
     setSrcB(null);
     setSrcALoadId(0);
     setSrcBLoadId(0);
+    activeLoadIdRef.current = 0;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fullVideoUrl used for refs only, not effect triggers
   }, [sessionId]);
 
-  // Reset URL tracking refs and clear stale data when videoUrl changes
-  // (new video means subtitles/chapters need to be re-fetched)
+  // Reset URL tracking refs and clear stale data when any preview load changes.
   const prevVideoUrlRef = useRef<string | null>(null);
   const prevVideoRefreshNonceRef = useRef(videoRefreshNonce);
   useEffect(() => {
-    const getBasePath = (url: string | null) => url?.split('?')[0] || null;
-    const prevBase = getBasePath(prevVideoUrlRef.current);
-    const currBase = getBasePath(videoUrl);
+    const videoChanged = videoUrl !== prevVideoUrlRef.current;
     const nonceChanged = videoRefreshNonce !== prevVideoRefreshNonceRef.current;
 
-    if (currBase !== prevBase) {
-      // Different video entirely (e.g., session switch) - clear everything immediately
+    if (videoChanged || nonceChanged) {
+      // Do not keep stale segmentation/subtitles visible while the next preview loads.
       lastSubtitleUrlRef.current = null;
       lastChaptersUrlRef.current = null;
       setSubtitles([]);
       setChapters([]);
       setCurrentSubtitle('');
-    } else if (videoUrl !== prevVideoUrlRef.current || nonceChanged) {
-      // Same video path but different URL means a refreshed output (new scenes rendered)
-      // Clear refs to trigger re-fetch, but keep existing data displayed for smooth transition
-      lastSubtitleUrlRef.current = null;
-      lastChaptersUrlRef.current = null;
     }
     prevVideoUrlRef.current = videoUrl;
     prevVideoRefreshNonceRef.current = videoRefreshNonce;
   }, [videoUrl, videoRefreshNonce]);
 
   const requestedVideoLoadKey = buildPreviewLoadKey(fullVideoUrl, videoRefreshNonce);
+  const requestedVideoLoadKeyRef = useRef(requestedVideoLoadKey);
+  requestedVideoLoadKeyRef.current = requestedVideoLoadKey;
 
   // Sync srcA/srcB with the latest requested preview load.
   useEffect(() => {
@@ -775,6 +772,10 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
   const fullSubtitleUrl = fullVideoUrl && sessionId
     ? `/api/subtitles?session_id=${encodeURIComponent(sessionId)}`
     : null;
+  const subtitleLoadKey = buildPreviewAssetLoadKey(
+    requestedVideoLoadKey,
+    fullSubtitleUrl
+  );
 
   // Note: We no longer poll sandbox for video existence.
   // Videos are served from CDN and existence is determined by fullVideoUrl being set.
@@ -783,46 +784,70 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
   const fullChaptersUrl = sessionId
     ? `/api/chapters?session_id=${encodeURIComponent(sessionId)}`
     : null;
+  const chaptersLoadKey = buildPreviewAssetLoadKey(
+    requestedVideoLoadKey,
+    fullChaptersUrl
+  );
 
   // Load subtitles - fetches with retry if data not ready yet
   useEffect(() => {
-    if (!fullSubtitleUrl) return;
-    // Skip if already successfully loaded for this URL
-    if (lastSubtitleUrlRef.current === fullSubtitleUrl) return;
+    if (!fullSubtitleUrl || !subtitleLoadKey) return;
+    // Skip if already successfully loaded for this preview request.
+    if (lastSubtitleUrlRef.current === subtitleLoadKey) return;
 
     return runRetryingLoad(async (signal) => {
-      const response = await fetch(fullSubtitleUrl, { signal });
+      const response = await fetch(fullSubtitleUrl, {
+        signal,
+        cache: "no-store",
+      });
       if (!response.ok || signal.aborted) return false;
 
       const text = await response.text();
+      if (!shouldAcceptPreviewAsyncResult({
+        requestedLoadKey: requestedVideoLoadKeyRef.current,
+        responseLoadKey: requestedVideoLoadKey,
+        aborted: signal.aborted,
+      })) {
+        return false;
+      }
       const parsed = parseSRT(text);
       if (parsed.length === 0) return false;
 
-      lastSubtitleUrlRef.current = fullSubtitleUrl;
+      lastSubtitleUrlRef.current = subtitleLoadKey;
       setSubtitlesOn(true); // Auto-enable if subtitles exist
       setSubtitles(parsed);
       return true;
     });
-  }, [fullSubtitleUrl, videoUrl, videoRefreshNonce]);
+  }, [fullSubtitleUrl, requestedVideoLoadKey, subtitleLoadKey]);
 
   // Load chapters - fetches with retry if data not ready yet
   useEffect(() => {
-    if (!fullChaptersUrl) return;
-    // Skip if already successfully loaded for this URL
-    if (lastChaptersUrlRef.current === fullChaptersUrl) return;
+    if (!fullChaptersUrl || !chaptersLoadKey) return;
+    // Skip if already successfully loaded for this preview request.
+    if (lastChaptersUrlRef.current === chaptersLoadKey) return;
 
     return runRetryingLoad(async (signal) => {
-      const response = await fetch(fullChaptersUrl, { signal });
+      const response = await fetch(fullChaptersUrl, {
+        signal,
+        cache: "no-store",
+      });
       if (!response.ok || signal.aborted) return false;
 
       const data = await response.json();
+      if (!shouldAcceptPreviewAsyncResult({
+        requestedLoadKey: requestedVideoLoadKeyRef.current,
+        responseLoadKey: requestedVideoLoadKey,
+        aborted: signal.aborted,
+      })) {
+        return false;
+      }
       if (!Array.isArray(data) || data.length === 0) return false;
 
-      lastChaptersUrlRef.current = fullChaptersUrl;
+      lastChaptersUrlRef.current = chaptersLoadKey;
       setChapters(data);
       return true;
     });
-  }, [fullChaptersUrl, videoUrl, videoRefreshNonce]);
+  }, [chaptersLoadKey, fullChaptersUrl, requestedVideoLoadKey]);
 
   const normalizedTimeline = useMemo(
     () => normalizeChaptersToVideoDuration(chapters, duration),
@@ -840,6 +865,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
     const chapter = [...timelineChapters].reverse().find(c => currentTime >= c.start);
     return chapter || timelineChapters[0];
   }, [currentTime, timelineChapters]);
+  const activeVideoLoadId = activeVideo === 'A' ? srcALoadId : srcBLoadId;
 
   // Update current subtitle based on time
   useEffect(() => {
@@ -851,7 +877,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
     setCurrentSubtitle(sub?.text || '');
   }, [currentTime, subtitles, subtitlesOn]);
 
-  // Video event handlers - re-attach when active video changes
+  // Video event handlers - re-attach when the active video element remounts.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -897,7 +923,7 @@ function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, ses
       video.removeEventListener('ratechange', handleRateChange);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- videoRef is derived from activeVideo which is in deps
-  }, [fullVideoUrl, activeVideo]);
+  }, [fullVideoUrl, activeVideo, activeVideoLoadId]);
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
