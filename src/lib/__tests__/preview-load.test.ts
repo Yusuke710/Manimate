@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   buildPreviewAssetLoadKey,
   buildPreviewLoadKey,
+  shouldAbortLingeringPreviewStream,
   shouldAcceptPreviewCanPlay,
   shouldAcceptPreviewAsyncResult,
+  shouldAcceptPolledPreviewUpdate,
   shouldResetPreviewReady,
+  shouldShowBrowserPreviewBadge,
 } from "@/lib/preview-load";
 
 describe("preview load coordination", () => {
@@ -97,6 +100,74 @@ describe("preview load coordination", () => {
         requestedLoadKey: "6:/api/files?video=2",
         responseLoadKey: "6:/api/files?video=2",
         aborted: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("accepts a polled preview update after the run finishes even if the stream is still pending", () => {
+    expect(
+      shouldAcceptPolledPreviewUpdate({
+        hasPendingStream: true,
+        runStillActive: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps waiting for the stream while the run is still active", () => {
+    expect(
+      shouldAcceptPolledPreviewUpdate({
+        hasPendingStream: true,
+        runStillActive: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("aborts a lingering stream after polling recovers the completed preview", () => {
+    expect(
+      shouldAbortLingeringPreviewStream({
+        hasPendingStream: true,
+        runStillActive: false,
+        previewChanged: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not abort the stream before a completed preview is available", () => {
+    expect(
+      shouldAbortLingeringPreviewStream({
+        hasPendingStream: true,
+        runStillActive: false,
+        previewChanged: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("shows the browser badge for an already-completed session", () => {
+    expect(
+      shouldShowBrowserPreviewBadge({
+        videoUrl: "/api/files?video=1",
+        isLoading: false,
+        badgeAlreadyVisible: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("hides the browser badge while a new render is still running", () => {
+    expect(
+      shouldShowBrowserPreviewBadge({
+        videoUrl: "/api/files?video=1",
+        isLoading: true,
+        badgeAlreadyVisible: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps the browser badge visible during the completion handoff once shown", () => {
+    expect(
+      shouldShowBrowserPreviewBadge({
+        videoUrl: "/api/files?video=1",
+        isLoading: true,
+        badgeAlreadyVisible: true,
       }),
     ).toBe(true);
   });
