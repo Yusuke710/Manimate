@@ -27,7 +27,6 @@ export async function POST(request: NextRequest): Promise<Response> {
     const message = error instanceof Error ? error.message : "Failed to start cloud sync connection";
     return NextResponse.json({
       status: "error",
-      connected: false,
       base_url: getDefaultCloudSyncBaseUrl(),
       message,
     }, { status: 500 });

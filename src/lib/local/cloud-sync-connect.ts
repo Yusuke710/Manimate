@@ -1,6 +1,10 @@
 import os from "node:os";
 import { spawn } from "node:child_process";
 import {
+  DEFAULT_CLOUD_SYNC_BASE_URL,
+  type CloudAuthStatus,
+} from "@/lib/studio-cloud-auth";
+import {
   clearLocalCloudSyncPendingConnect,
   getLocalCloudSyncConfig,
   getLocalCloudSyncEnvOverride,
@@ -11,7 +15,8 @@ import {
   writeLocalCloudSyncPendingConnect,
 } from "@/lib/local/cloud-sync-config";
 
-const DEFAULT_CLOUD_SYNC_BASE_URL = process.env.MANIMATE_CLOUD_SYNC_URL?.trim() || "https://manimate.ai";
+const configuredCloudSyncBaseUrl =
+  process.env.MANIMATE_CLOUD_SYNC_URL?.trim() || DEFAULT_CLOUD_SYNC_BASE_URL;
 
 type ConnectStartResponse = {
   request_id: string;
@@ -39,47 +44,14 @@ type ConnectPollResponse = {
   };
 };
 
-export type LocalCloudSyncStatus =
-  | {
-      status: "connected";
-      connected: true;
-      base_url: string;
-      user_email: string | null;
-      user_name: string | null;
-      device_name: string | null;
-      connected_at: string;
-    }
-  | {
-      status: "pending";
-      connected: false;
-      base_url: string;
-      code: string;
-      connect_url: string;
-      device_name: string | null;
-      expires_at: string;
-    }
-  | {
-      status: "disconnected";
-      connected: false;
-      base_url: string;
-    }
-  | {
-      status: "error";
-      connected: false;
-      base_url: string;
-      message: string;
-      code?: string | null;
-      connect_url?: string | null;
-      device_name?: string | null;
-      expires_at?: string | null;
-    };
+export type LocalCloudSyncStatus = CloudAuthStatus;
 
 export function getDefaultCloudSyncBaseUrl(): string {
   return normalizeBaseUrl();
 }
 
 function normalizeBaseUrl(baseUrl?: string | null): string {
-  const trimmed = baseUrl?.trim() || DEFAULT_CLOUD_SYNC_BASE_URL;
+  const trimmed = baseUrl?.trim() || configuredCloudSyncBaseUrl;
   return trimmed.replace(/\/+$/, "");
 }
 
@@ -163,7 +135,6 @@ export function openExternalBrowser(url: string): boolean {
 export function mapConnectedStatus(config: LocalCloudSyncConfig): LocalCloudSyncStatus {
   return {
     status: "connected",
-    connected: true,
     base_url: normalizeBaseUrl(config.base_url),
     user_email: config.user_email ?? null,
     user_name: config.user_name ?? null,
@@ -175,7 +146,6 @@ export function mapConnectedStatus(config: LocalCloudSyncConfig): LocalCloudSync
 export function mapPendingStatus(pending: LocalCloudSyncPendingConnect): LocalCloudSyncStatus {
   return {
     status: "pending",
-    connected: false,
     base_url: normalizeBaseUrl(pending.base_url),
     code: pending.code,
     connect_url: pending.connect_url,
@@ -187,7 +157,6 @@ export function mapPendingStatus(pending: LocalCloudSyncPendingConnect): LocalCl
 export function mapDisconnectedStatus(baseUrl = getDefaultCloudSyncBaseUrl()): LocalCloudSyncStatus {
   return {
     status: "disconnected",
-    connected: false,
     base_url: normalizeBaseUrl(baseUrl),
   };
 }
@@ -199,7 +168,6 @@ export async function refreshPendingCloudSyncConnect(
     clearLocalCloudSyncPendingConnect();
     return {
       status: "error",
-      connected: false,
       base_url: normalizeBaseUrl(pending.base_url),
       message: "Connection request expired. Retry to open manimate.ai again.",
       code: pending.code,
@@ -229,7 +197,6 @@ export async function refreshPendingCloudSyncConnect(
       clearLocalCloudSyncPendingConnect();
       return {
         status: "error",
-        connected: false,
         base_url: normalizeBaseUrl(pending.base_url),
         message: "Connection request expired. Retry to open manimate.ai again.",
         code: pending.code,
@@ -243,7 +210,6 @@ export async function refreshPendingCloudSyncConnect(
   } catch (error) {
     return {
       status: "error",
-      connected: false,
       base_url: normalizeBaseUrl(pending.base_url),
       message: normalizeErrorMessage(error),
       code: pending.code,

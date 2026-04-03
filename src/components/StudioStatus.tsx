@@ -1,11 +1,6 @@
 "use client";
 
-export interface StudioConnectionSummary {
-  baseUrl: string;
-  deviceName?: string | null;
-  userEmail?: string | null;
-  userName?: string | null;
-}
+import type { CloudAuthStatus } from "@/lib/studio-cloud-auth";
 
 function getBaseUrlLabel(baseUrl: string) {
   try {
@@ -15,11 +10,54 @@ function getBaseUrlLabel(baseUrl: string) {
   }
 }
 
-function getInitials(connection: StudioConnectionSummary | null) {
-  const source = connection?.userName?.trim() || connection?.userEmail?.trim() || "Manimate Studio";
+function getInitials(source: string) {
   const parts = source.split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   return source.slice(0, 2).toUpperCase();
+}
+
+function getCloudTitle(status: CloudAuthStatus): string {
+  switch (status.status) {
+    case "connected":
+      return status.user_name?.trim() || "Connected account";
+    case "pending":
+      return "Connecting autosync";
+    case "disconnected":
+      return "Autosync is off";
+    case "error":
+      return "Autosync needs attention";
+    default:
+      return "Connected account";
+  }
+}
+
+function getCloudDescription(status: CloudAuthStatus, syncHost: string): string {
+  switch (status.status) {
+    case "connected":
+      return status.user_email?.trim() || `Connected to ${syncHost}`;
+    case "pending":
+      return "Finish sign-in in your browser. This Mac will continue automatically.";
+    case "disconnected":
+      return `Connect to ${syncHost} to sync finished renders automatically.`;
+    case "error":
+      return status.message?.trim() || `Reconnect to ${syncHost} to resume autosync.`;
+    default:
+      return `Connected to ${syncHost}`;
+  }
+}
+
+function getCloudActionLabel(status: CloudAuthStatus): string | null {
+  switch (status.status) {
+    case "pending":
+      return "Open Browser";
+    case "disconnected":
+      return "Connect";
+    case "error":
+      return "Retry";
+    case "connected":
+    default:
+      return null;
+  }
 }
 
 function LocalBadge({ size = 24 }: { size?: number }) {
@@ -86,12 +124,24 @@ export function StudioPlanPill() {
   );
 }
 
-export function StudioAccountCard({ connection }: { connection: StudioConnectionSummary | null }) {
-  const initials = getInitials(connection);
-  const accountName = connection?.userName?.trim() || "Connected account";
-  const accountEmail = connection?.userEmail?.trim() || null;
-  const syncHost = connection ? getBaseUrlLabel(connection.baseUrl) : "manimate.ai";
-  const deviceName = connection?.deviceName?.trim() || "This Mac";
+export function StudioAccountCard({
+  status,
+  onReconnect,
+}: {
+  status: CloudAuthStatus;
+  onReconnect: () => void;
+}) {
+  const syncHost = getBaseUrlLabel(status.base_url);
+  const deviceName = ("device_name" in status ? status.device_name : null)?.trim() || "This Mac";
+  const initials = getInitials(
+    status.status === "connected"
+      ? status.user_name?.trim() || status.user_email?.trim() || syncHost
+      : syncHost
+  );
+  const cloudTitle = getCloudTitle(status);
+  const cloudDescription = getCloudDescription(status, syncHost);
+  const actionLabel = getCloudActionLabel(status);
+  const descriptionColor = status.status === "error" ? "#b42318" : "var(--text-tertiary)";
 
   return (
     <div
@@ -100,7 +150,7 @@ export function StudioAccountCard({ connection }: { connection: StudioConnection
         borderTop: "1px solid var(--border-main)",
         paddingTop: 8,
       }}
-      title={`${deviceName} syncing through ${syncHost}`}
+      title={`${deviceName} via ${syncHost}`}
     >
       <div
         style={{
@@ -122,9 +172,7 @@ export function StudioAccountCard({ connection }: { connection: StudioConnection
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             <LocalBadge size={18} />
-            <div
-              style={{ minWidth: 0 }}
-            >
+            <div style={{ minWidth: 0 }}>
               <div
                 style={{
                   fontSize: 11,
@@ -189,22 +237,36 @@ export function StudioAccountCard({ connection }: { connection: StudioConnection
                 textOverflow: "ellipsis",
               }}
             >
-              {accountName}
+              {cloudTitle}
             </div>
-            {accountEmail ? (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--text-tertiary)",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {accountEmail}
-              </div>
-            ) : null}
+            <div
+              style={{
+                fontSize: 12,
+                color: descriptionColor,
+                lineHeight: 1.45,
+              }}
+            >
+              {cloudDescription}
+            </div>
           </div>
+          {actionLabel ? (
+            <button
+              onClick={onReconnect}
+              style={{
+                border: "1px solid var(--border-main)",
+                background: "var(--bg-white)",
+                color: "var(--text-primary)",
+                borderRadius: 999,
+                padding: "6px 10px",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              {actionLabel}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
