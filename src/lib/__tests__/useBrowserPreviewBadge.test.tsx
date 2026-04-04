@@ -18,13 +18,14 @@ function TestHarness({ active }: { active: boolean }) {
 describe("useBrowserPreviewBadge", () => {
   let container: HTMLDivElement;
   let root: Root;
+  let originalIcon: HTMLLinkElement;
 
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     document.head.innerHTML = "";
     document.body.innerHTML = "";
 
-    const originalIcon = document.createElement("link");
+    originalIcon = document.createElement("link");
     originalIcon.rel = "icon";
     originalIcon.href = "/icon.svg";
     document.head.appendChild(originalIcon);
@@ -43,24 +44,19 @@ describe("useBrowserPreviewBadge", () => {
     document.body.innerHTML = "";
   });
 
-  it("appends managed favicon links when the badge becomes active", () => {
+  it("badges the existing favicon link in place", () => {
     act(() => {
       root.render(<TestHarness active={true} />);
     });
 
-    const managedLinks = Array.from(
-      document.head.querySelectorAll<HTMLLinkElement>(
-        `link[${BROWSER_PREVIEW_BADGE_ATTR}="true"]`,
-      ),
-    );
-
-    expect(managedLinks).toHaveLength(2);
-    expect(managedLinks.map((link) => link.rel)).toEqual(["icon", "shortcut icon"]);
-    expect(managedLinks.every((link) => link.href === BADGED_FAVICON_DATA_URL)).toBe(true);
-    expect(document.head.querySelectorAll('link[rel~="icon"]')).toHaveLength(3);
+    expect(document.head.querySelectorAll('link[rel~="icon"]')).toHaveLength(1);
+    expect(originalIcon.getAttribute(BROWSER_PREVIEW_BADGE_ATTR)).toBe("true");
+    expect(originalIcon.href).toBe(BADGED_FAVICON_DATA_URL);
+    expect(originalIcon.type).toBe("image/svg+xml");
+    expect(originalIcon.getAttribute("sizes")).toBe("any");
   });
 
-  it("removes managed favicon links when the badge is cleared", () => {
+  it("restores the original favicon when the badge is cleared", () => {
     act(() => {
       root.render(<TestHarness active={true} />);
     });
@@ -73,33 +69,52 @@ describe("useBrowserPreviewBadge", () => {
       document.head.querySelectorAll(`link[${BROWSER_PREVIEW_BADGE_ATTR}="true"]`),
     ).toHaveLength(0);
     expect(document.head.querySelectorAll('link[rel~="icon"]')).toHaveLength(1);
-    expect(
-      document.head.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.getAttribute("href"),
-    ).toBe("/icon.svg");
+    expect(originalIcon.getAttribute("href")).toBe("/icon.svg");
   });
 
-  it("restores managed favicon links if head reconciliation removes them", async () => {
+  it("re-badges a replacement favicon link after head reconciliation", async () => {
     act(() => {
       root.render(<TestHarness active={true} />);
     });
 
-    Array.from(
-      document.head.querySelectorAll<HTMLLinkElement>(
-        `link[${BROWSER_PREVIEW_BADGE_ATTR}="true"]`,
-      ),
-    ).forEach((link) => link.remove());
+    const replacementIcon = document.createElement("link");
+    replacementIcon.rel = "icon";
+    replacementIcon.href = "/icon.svg?replacement=1";
+    originalIcon.replaceWith(replacementIcon);
 
     await act(async () => {
       await Promise.resolve();
     });
 
-    const managedLinks = Array.from(
-      document.head.querySelectorAll<HTMLLinkElement>(
-        `link[${BROWSER_PREVIEW_BADGE_ATTR}="true"]`,
-      ),
-    );
+    expect(document.head.querySelectorAll('link[rel~="icon"]')).toHaveLength(1);
+    expect(replacementIcon.getAttribute(BROWSER_PREVIEW_BADGE_ATTR)).toBe("true");
+    expect(replacementIcon.href).toBe(BADGED_FAVICON_DATA_URL);
 
-    expect(managedLinks).toHaveLength(2);
-    expect(managedLinks.map((link) => link.rel)).toEqual(["icon", "shortcut icon"]);
+    act(() => {
+      root.render(<TestHarness active={false} />);
+    });
+
+    expect(replacementIcon.getAttribute("href")).toBe("/icon.svg?replacement=1");
+    expect(replacementIcon.hasAttribute(BROWSER_PREVIEW_BADGE_ATTR)).toBe(false);
+  });
+
+  it("creates and later removes a fallback favicon when none exists", () => {
+    originalIcon.remove();
+
+    act(() => {
+      root.render(<TestHarness active={true} />);
+    });
+
+    const iconsWhileActive = Array.from(
+      document.head.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]'),
+    );
+    expect(iconsWhileActive).toHaveLength(1);
+    expect(iconsWhileActive[0]?.getAttribute(BROWSER_PREVIEW_BADGE_ATTR)).toBe("true");
+
+    act(() => {
+      root.render(<TestHarness active={false} />);
+    });
+
+    expect(document.head.querySelectorAll('link[rel~="icon"]')).toHaveLength(0);
   });
 });
