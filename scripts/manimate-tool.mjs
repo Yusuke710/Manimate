@@ -1046,6 +1046,35 @@ function normalizeVersion(value) {
   return normalized.length > 0 ? normalized : null;
 }
 
+function normalizeBuildId(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+export function hasVersionOrBuildMismatch({
+  installedVersion,
+  runningVersion,
+  installedBuildId,
+  runningBuildId,
+}) {
+  const normalizedInstalledVersion = normalizeVersion(installedVersion);
+  const normalizedRunningVersion = normalizeVersion(runningVersion);
+  const normalizedInstalledBuildId = normalizeBuildId(installedBuildId);
+  const normalizedRunningBuildId = normalizeBuildId(runningBuildId);
+
+  const versionMismatch = Boolean(
+    normalizedInstalledVersion &&
+    normalizedRunningVersion !== normalizedInstalledVersion
+  );
+  const buildMismatch = Boolean(
+    normalizedInstalledBuildId &&
+    normalizedRunningBuildId !== normalizedInstalledBuildId
+  );
+
+  return versionMismatch || buildMismatch;
+}
+
 export function isManimateStatusPayload(data, options = {}) {
   const markedLocal = options.markedLocal === true;
   if (!data || typeof data !== "object") return false;
@@ -1105,19 +1134,58 @@ async function promptYesNo(question, defaultValue = true) {
   }
 }
 
+async function readBuildIdFile(filePath) {
+  try {
+    return normalizeBuildId(await fs.readFile(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+async function resolveInstalledBuildId(mode) {
+  if (mode === "standalone") {
+    return (
+      await readBuildIdFile(path.join(NEXT_STANDALONE_ROOT, ".next", "BUILD_ID")) ||
+      await readBuildIdFile(NEXT_BUILD_ID_PATH)
+    );
+  }
+
+  if (mode === "start") {
+    return readBuildIdFile(NEXT_BUILD_ID_PATH);
+  }
+
+  return null;
+}
+
 async function maybeRestartVersionMismatch(existingStatus, options) {
+  const launchMode = await resolveLaunchMode(options.mode);
   const runningVersion = normalizeVersion(existingStatus?.version);
+  const runningBuildId = normalizeBuildId(existingStatus?.build_id);
   const installedVersion = normalizeVersion(CLI_VERSION);
-  if (!installedVersion || runningVersion === installedVersion) {
+  const installedBuildId = await resolveInstalledBuildId(launchMode);
+
+  if (!hasVersionOrBuildMismatch({
+    installedVersion,
+    runningVersion,
+    installedBuildId,
+    runningBuildId,
+  })) {
     return { restart: false, stoppedPids: [] };
   }
 
-  const versionSummary = runningVersion
-    ? `Installed: ${installedVersion}\nRunning: ${runningVersion}`
-    : `Installed: ${installedVersion}\nRunning: unknown`;
+  const summaryLines = [
+    `Installed version: ${installedVersion || "unknown"}`,
+    `Running version: ${runningVersion || "unknown"}`,
+  ];
+  if (installedBuildId || runningBuildId) {
+    summaryLines.push(
+      `Installed build: ${installedBuildId || "unknown"}`,
+      `Running build: ${runningBuildId || "unknown"}`
+    );
+  }
   const prompt =
-    `A different Manimate version is already running at ${options.baseUrl}.\n` +
-    `${versionSummary}\n` +
+    `A different Manimate build is already running at ${options.baseUrl}.\n` +
+    `${summaryLines.join("\n")}\n` +
     "Restart with the installed version now?";
 
   if (!isInteractivePrompt()) {
