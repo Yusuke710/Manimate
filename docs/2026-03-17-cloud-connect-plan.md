@@ -177,7 +177,7 @@ MANIMATE_CLOUD_URL=https://manimate.ai
 ```
 
 ### Offline / local-only mode
-If no token or cloud unreachable: daemon runs exactly as today. Everything works at `http://localhost:3000`. No degradation, no error.
+If no token or cloud unreachable: daemon runs exactly as today. Everything works at `http://localhost:32179`. No degradation, no error.
 
 ---
 

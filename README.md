@@ -60,7 +60,7 @@ For direct local development:
 npm run dev
 ```
 
-Then open `http://localhost:3000`.
+Then open `http://localhost:32179`.
 
 ## CLI
 
@@ -129,7 +129,7 @@ Example generation output:
   "session_id": "b92794d1-2279-477b-b818-064d78d272b1",
   "run_id": "6fea0020-7f6a-4d97-bcb9-44327b3fdee9",
   "video_url": "/api/files?session_id=...&path=.../video.mp4&_v=...",
-  "review_url": "http://localhost:3000/?session=b92794d1-2279-477b-b818-064d78d272b1",
+  "review_url": "http://localhost:32179/?session=b92794d1-2279-477b-b818-064d78d272b1",
   "message": "Complete"
 }
 ```
@@ -177,8 +177,8 @@ The welcome screen supports:
 
 Examples:
 
-- `http://localhost:3000/?prompt=Animate%20Taylor%20series`
-- `http://localhost:3000/?prompt=Animate%20Bayes%20rule&send=1`
+- `http://localhost:32179/?prompt=Animate%20Taylor%20series`
+- `http://localhost:32179/?prompt=Animate%20Bayes%20rule&send=1`
 
 ## Local Data
 

@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const packageMetadata = require("../package.json");
 const DEFAULT_APP_HOST = process.env.MANIMATE_APP_HOST || "127.0.0.1";
-const DEFAULT_APP_PORT = parsePositiveInteger(process.env.MANIMATE_APP_PORT, 3000);
+const DEFAULT_APP_PORT = parsePositiveInteger(process.env.MANIMATE_APP_PORT, 32179);
 const DEFAULT_BASE_URL = process.env.MANIMATE_BASE_URL || `http://${DEFAULT_APP_HOST}:${DEFAULT_APP_PORT}`;
 const DEFAULT_CLOUD_BASE_URL = process.env.MANIMATE_CLOUD_SYNC_URL || "https://manimate.ai";
 const DEFAULT_OPEN_TIMEOUT_SECONDS = 45;
@@ -838,6 +838,88 @@ function buildLoopbackBaseUrl(protocol, host, port) {
   return `${protocol}//${host}:${port}`;
 }
 
+export function chooseAutomaticOpenPort({ preferredPort, reservedCloudPort = null, restart = false, scanResults = [] }) {
+  let firstFreePort = null;
+  let firstExistingHealthyPort = null;
+  let firstRestartablePort = null;
+  let preferredPortBlocked = false;
+
+  for (const result of scanResults) {
+    const port = result.port;
+
+    if (port === reservedCloudPort || result.status === "reserved-cloud") {
+      if (port === preferredPort) {
+        preferredPortBlocked = true;
+      }
+      continue;
+    }
+
+    if (result.status === "free") {
+      if (firstFreePort === null) {
+        firstFreePort = port;
+      }
+      continue;
+    }
+
+    if (result.status === "managed-healthy") {
+      if (port === preferredPort) {
+        return { port, adjusted: false, reason: null };
+      }
+      if (firstExistingHealthyPort === null) {
+        firstExistingHealthyPort = port;
+      }
+      continue;
+    }
+
+    if (result.status === "managed-unhealthy" && restart && result.restartable && firstRestartablePort === null) {
+      firstRestartablePort = port;
+    }
+
+    if (port === preferredPort) {
+      preferredPortBlocked = true;
+    }
+  }
+
+  let chosenPort = null;
+  let reason = null;
+
+  if (preferredPortBlocked) {
+    if (firstExistingHealthyPort !== null) {
+      chosenPort = firstExistingHealthyPort;
+      reason = "existing-instance";
+    } else if (firstRestartablePort !== null) {
+      chosenPort = firstRestartablePort;
+      reason = chosenPort === preferredPort ? null : "existing-instance";
+    } else if (firstFreePort !== null) {
+      chosenPort = firstFreePort;
+      reason = chosenPort === preferredPort ? null : "port-in-use";
+    }
+  } else if (firstFreePort !== null) {
+    chosenPort = firstFreePort;
+    reason = chosenPort === preferredPort ? null : "port-in-use";
+  } else if (firstExistingHealthyPort !== null) {
+    chosenPort = firstExistingHealthyPort;
+    reason = "existing-instance";
+  } else if (firstRestartablePort !== null) {
+    chosenPort = firstRestartablePort;
+    reason = chosenPort === preferredPort ? null : "existing-instance";
+  }
+
+  if (chosenPort === null) {
+    return null;
+  }
+
+  if (reservedCloudPort === preferredPort && chosenPort !== preferredPort) {
+    reason = "cloud-port-conflict";
+  }
+
+  return {
+    port: chosenPort,
+    adjusted: chosenPort !== preferredPort,
+    reason: chosenPort === preferredPort ? null : reason,
+  };
+}
+
 async function resolveAutomaticOpenTarget(options) {
   if (options.baseUrlExplicit || options.portExplicit) {
     return options;
@@ -849,75 +931,53 @@ async function resolveAutomaticOpenTarget(options) {
     ? getUrlPort(parseBaseUrl(options.cloudBaseUrl))
     : null;
   const maxAttempts = 20;
-
-  let firstReusablePort = null;
-  let firstReusableReason = null;
-  let firstFreePort = null;
-  let preferredPortBlocked = false;
+  const scanResults = [];
 
   for (let offset = 0; offset < maxAttempts; offset += 1) {
     const port = preferredPort + offset;
     if (reservedCloudPort === port) {
-      if (port === preferredPort) {
-        preferredPortBlocked = true;
-      }
+      scanResults.push({ port, status: "reserved-cloud" });
       continue;
     }
 
     const pids = await listListeningPids(port);
     if (pids.length === 0) {
-      if (firstFreePort === null) {
-        firstFreePort = port;
-      }
+      scanResults.push({ port, status: "free" });
       continue;
     }
 
     const managedPids = await filterManagedPids(pids);
     if (managedPids.length === 0) {
-      if (port === preferredPort) {
-        preferredPortBlocked = true;
-      }
+      scanResults.push({ port, status: "unmanaged" });
       continue;
     }
 
     const candidateBaseUrl = buildLoopbackBaseUrl(parsedBaseUrl.protocol, parsedBaseUrl.hostname, port);
     const probe = await probeLocalManimate(candidateBaseUrl);
     if (probe.ok) {
-      options.baseUrl = candidateBaseUrl;
-      options.port = port;
-      options.portAdjusted = port !== preferredPort;
-      options.portAdjustedReason = port !== preferredPort ? "existing-instance" : null;
-      return options;
+      scanResults.push({ port, status: "managed-healthy" });
+      continue;
     }
 
-    if (options.restart && managedPids.length === pids.length && firstReusablePort === null) {
-      firstReusablePort = port;
-      firstReusableReason = port === preferredPort ? null : "existing-instance";
-    }
-
-    if (port === preferredPort) {
-      preferredPortBlocked = true;
-    }
+    scanResults.push({
+      port,
+      status: "managed-unhealthy",
+      restartable: options.restart && managedPids.length === pids.length,
+    });
   }
 
-  const chosenPort = firstReusablePort ?? firstFreePort;
-  if (chosenPort !== null) {
-    options.baseUrl = buildLoopbackBaseUrl(parsedBaseUrl.protocol, parsedBaseUrl.hostname, chosenPort);
-    options.port = chosenPort;
-    options.portAdjusted = chosenPort !== preferredPort;
-    if (chosenPort !== preferredPort) {
-      options.portAdjustedReason =
-        firstReusablePort === chosenPort
-          ? firstReusableReason
-          : preferredPortBlocked
-            ? "port-in-use"
-            : "port-in-use";
-      if (reservedCloudPort === preferredPort) {
-        options.portAdjustedReason = "cloud-port-conflict";
-      }
-    } else {
-      options.portAdjustedReason = null;
-    }
+  const selection = chooseAutomaticOpenPort({
+    preferredPort,
+    reservedCloudPort,
+    restart: options.restart,
+    scanResults,
+  });
+
+  if (selection) {
+    options.baseUrl = buildLoopbackBaseUrl(parsedBaseUrl.protocol, parsedBaseUrl.hostname, selection.port);
+    options.port = selection.port;
+    options.portAdjusted = selection.adjusted;
+    options.portAdjustedReason = selection.reason;
   }
 
   return options;
