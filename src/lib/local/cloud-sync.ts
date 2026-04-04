@@ -1,8 +1,14 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { getLocalSessionPaths } from "@/lib/local/config";
-import { getLocalCloudSyncConfig } from "@/lib/local/cloud-sync-config";
-import { formatCloudSyncFailureMessage } from "@/lib/local/cloud-sync-policy";
+import {
+  clearLocalCloudSyncConfig,
+  getLocalCloudSyncConfig,
+} from "@/lib/local/cloud-sync-config";
+import {
+  formatCloudSyncFailureMessage,
+  isCloudSyncAuthorizationError,
+} from "@/lib/local/cloud-sync-policy";
 import {
   getLocalSession,
   listLocalActivityEvents,
@@ -75,6 +81,13 @@ type CloudSyncSettings = {
 };
 
 const DIRECT_UPLOAD_UNSUPPORTED = "__MANIMATE_DIRECT_UPLOAD_UNSUPPORTED__";
+
+function hasCloudSyncEnvOverride(): boolean {
+  return Boolean(
+    process.env.MANIMATE_CLOUD_SYNC_URL?.trim() &&
+    process.env.MANIMATE_CLOUD_SYNC_TOKEN?.trim()
+  );
+}
 
 function getCloudSyncSettings(): CloudSyncSettings | null {
   const envBaseUrl = process.env.MANIMATE_CLOUD_SYNC_URL?.trim() || "";
@@ -453,6 +466,9 @@ async function syncLocalSessionToCloud(sessionId: string): Promise<void> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Cloud sync failed";
+    if (isCloudSyncAuthorizationError(message) && !hasCloudSyncEnvOverride()) {
+      clearLocalCloudSyncConfig();
+    }
     updateLocalSession(sessionId, {
       cloud_sync_status: "failed",
       cloud_last_error: formatCloudSyncFailureMessage(message),
