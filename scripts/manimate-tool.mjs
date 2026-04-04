@@ -3,8 +3,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import readline from "node:readline/promises";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
+const require = createRequire(import.meta.url);
+const packageMetadata = require("../package.json");
 const DEFAULT_APP_HOST = process.env.MANIMATE_APP_HOST || "127.0.0.1";
 const DEFAULT_APP_PORT = parsePositiveInteger(process.env.MANIMATE_APP_PORT, 3000);
 const DEFAULT_BASE_URL = process.env.MANIMATE_BASE_URL || `http://${DEFAULT_APP_HOST}:${DEFAULT_APP_PORT}`;
@@ -12,6 +16,9 @@ const DEFAULT_CLOUD_BASE_URL = process.env.MANIMATE_CLOUD_SYNC_URL || "https://m
 const DEFAULT_OPEN_TIMEOUT_SECONDS = 45;
 const NONE_VOICE_ID = "none";
 const STATUS_ENDPOINT_PATH = "/api/cloud-sync/status";
+const STATUS_MARKER_HEADER_NAME = "x-manimate-studio";
+const STATUS_MARKER_HEADER_VALUE = "local";
+const CLI_VERSION = typeof packageMetadata.version === "string" ? packageMetadata.version.trim() : "";
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const NEXT_CLI_PATH = path.join(PROJECT_ROOT, "node_modules", "next", "dist", "bin", "next");
 const NEXT_BUILD_ID_PATH = path.join(PROJECT_ROOT, ".next", "BUILD_ID");
@@ -916,7 +923,7 @@ async function resolveAutomaticOpenTarget(options) {
   return options;
 }
 
-async function stopExistingLocalApp(options) {
+async function stopExistingLocalApp(options, config = {}) {
   const baseUrl = parseBaseUrl(options.baseUrl);
   const port = Number.parseInt(baseUrl.port || (baseUrl.protocol === "https:" ? "443" : "80"), 10);
   const pids = await listListeningPids(port);
@@ -925,15 +932,16 @@ async function stopExistingLocalApp(options) {
   }
 
   const managedPids = await filterManagedPids(pids);
+  const stoppablePids = config.allowUnmanaged ? pids : managedPids;
 
-  if (managedPids.length === 0) {
+  if (stoppablePids.length === 0) {
     throw new Error(
       `Port ${port} is already in use by another process. ` +
       `Stop it manually or pick a different --port.`
     );
   }
 
-  for (const pid of managedPids) {
+  for (const pid of stoppablePids) {
     try {
       process.kill(pid, "SIGTERM");
     } catch {}
@@ -942,20 +950,20 @@ async function stopExistingLocalApp(options) {
   const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {
     const remaining = await listListeningPids(port);
-    const stillManaged = remaining.filter((pid) => managedPids.includes(pid));
+    const stillManaged = remaining.filter((pid) => stoppablePids.includes(pid));
     if (stillManaged.length === 0) {
-      return { stoppedPids: managedPids };
+      return { stoppedPids: stoppablePids };
     }
     await sleep(250);
   }
 
-  for (const pid of managedPids) {
+  for (const pid of stoppablePids) {
     try {
       process.kill(pid, "SIGKILL");
     } catch {}
   }
 
-  return { stoppedPids: managedPids };
+  return { stoppedPids: stoppablePids };
 }
 
 function resolveStatusUrl(baseUrl) {
@@ -972,6 +980,33 @@ async function fetchJsonWithTimeout(url, timeoutMs) {
   }
 }
 
+function normalizeVersion(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+export function isManimateStatusPayload(data, options = {}) {
+  const markedLocal = options.markedLocal === true;
+  if (!data || typeof data !== "object") return false;
+  if (typeof data.status !== "string") return false;
+
+  if (markedLocal) {
+    return true;
+  }
+
+  return (
+    typeof data.connected === "boolean" ||
+    typeof data.base_url === "string" ||
+    typeof data.connect_url === "string" ||
+    typeof data.message === "string"
+  );
+}
+
+function isMarkedLocalStudioResponse(response) {
+  return response.headers.get(STATUS_MARKER_HEADER_NAME) === STATUS_MARKER_HEADER_VALUE;
+}
+
 async function probeLocalManimate(baseUrl) {
   try {
     const response = await fetchJsonWithTimeout(resolveStatusUrl(baseUrl), 1500);
@@ -979,18 +1014,66 @@ async function probeLocalManimate(baseUrl) {
       return { ok: false, reason: `HTTP ${response.status}` };
     }
     const data = await response.json().catch(() => null);
-    if (
-      data &&
-      typeof data === "object" &&
-      typeof data.status === "string" &&
-      typeof data.connected === "boolean"
-    ) {
+    if (isManimateStatusPayload(data, { markedLocal: isMarkedLocalStudioResponse(response) })) {
       return { ok: true, status: data };
     }
     return { ok: false, reason: "Unexpected response shape" };
   } catch (error) {
     return { ok: false, reason: normalizeErrorMessage(error) };
   }
+}
+
+function isInteractivePrompt() {
+  return Boolean(process.stdin.isTTY && process.stderr.isTTY);
+}
+
+async function promptYesNo(question, defaultValue = true) {
+  const suffix = defaultValue ? " [Y/n] " : " [y/N] ";
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stderr,
+  });
+
+  try {
+    const answer = (await rl.question(`${question}${suffix}`)).trim().toLowerCase();
+    if (!answer) return defaultValue;
+    if (answer === "y" || answer === "yes") return true;
+    if (answer === "n" || answer === "no") return false;
+    return defaultValue;
+  } finally {
+    rl.close();
+  }
+}
+
+async function maybeRestartVersionMismatch(existingStatus, options) {
+  const runningVersion = normalizeVersion(existingStatus?.version);
+  const installedVersion = normalizeVersion(CLI_VERSION);
+  if (!installedVersion || runningVersion === installedVersion) {
+    return { restart: false, stoppedPids: [] };
+  }
+
+  const versionSummary = runningVersion
+    ? `Installed: ${installedVersion}\nRunning: ${runningVersion}`
+    : `Installed: ${installedVersion}\nRunning: unknown`;
+  const prompt =
+    `A different Manimate version is already running at ${options.baseUrl}.\n` +
+    `${versionSummary}\n` +
+    "Restart with the installed version now?";
+
+  if (!isInteractivePrompt()) {
+    console.error(
+      `${prompt}\nReusing the running server. Run \`manimate --restart\` to replace it.`
+    );
+    return { restart: false, stoppedPids: [] };
+  }
+
+  const shouldRestart = await promptYesNo(prompt, true);
+  if (!shouldRestart) {
+    return { restart: false, stoppedPids: [] };
+  }
+
+  const stopped = await stopExistingLocalApp(options, { allowUnmanaged: true });
+  return { restart: true, stoppedPids: stopped.stoppedPids };
 }
 
 async function waitForLocalManimate(baseUrl, timeoutSeconds) {
@@ -1095,10 +1178,18 @@ async function openLocalApp(options) {
     stoppedPids = stopped.stoppedPids;
   }
 
-  const existing = await probeLocalManimate(options.baseUrl);
+  let existing = await probeLocalManimate(options.baseUrl);
   let serverStarted = false;
   let serverMode = null;
   let serverPid = null;
+
+  if (existing.ok && !options.restart) {
+    const versionDecision = await maybeRestartVersionMismatch(existing.status, options);
+    if (versionDecision.restart) {
+      stoppedPids = versionDecision.stoppedPids;
+      existing = { ok: false, reason: "version-mismatch" };
+    }
+  }
 
   if (!existing.ok) {
     const started = await startLocalApp(options);
@@ -1124,15 +1215,15 @@ async function openLocalApp(options) {
     server_mode: serverMode,
     server_pid: serverPid,
     browser_opened: browserOpened,
-    message: options.portAdjusted
+    message: stoppedPids.length > 0
+      ? `Restarted local Manimate on ${options.baseUrl}. Autosync auth and uploads use ${options.cloudBaseUrl}.`
+      : options.portAdjusted
       ? options.portAdjustedReason === "cloud-port-conflict"
         ? `Cloud sync target already uses ${options.cloudBaseUrl}; local Manimate moved to ${options.baseUrl}.`
         : options.portAdjustedReason === "existing-instance"
           ? `Reusing local Manimate at ${options.baseUrl}. Autosync auth and uploads use ${options.cloudBaseUrl}.`
           : `Preferred local port was unavailable; local Manimate moved to ${options.baseUrl}. Autosync auth and uploads use ${options.cloudBaseUrl}.`
-      : stoppedPids.length > 0
-        ? `Restarted local Manimate on ${options.baseUrl}. Autosync auth and uploads use ${options.cloudBaseUrl}.`
-        : `Local Manimate is running at ${options.baseUrl}. Autosync auth and uploads use ${options.cloudBaseUrl}.`,
+      : `Local Manimate is running at ${options.baseUrl}. Autosync auth and uploads use ${options.cloudBaseUrl}.`,
   };
 }
 
@@ -1185,4 +1276,16 @@ async function main() {
   }
 }
 
-main();
+const isDirectExecution = (() => {
+  const entrypoint = process.argv[1];
+  if (!entrypoint) return false;
+  try {
+    return path.resolve(entrypoint) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+})();
+
+if (isDirectExecution) {
+  main();
+}
