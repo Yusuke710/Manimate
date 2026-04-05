@@ -1,13 +1,10 @@
 "use client";
 
 import type { CloudAuthStatus } from "@/lib/studio-cloud-auth";
+import { getCloudSyncDisplayHost } from "@/lib/local/cloud-sync-base-url";
 
 function getBaseUrlLabel(baseUrl: string) {
-  try {
-    return new URL(baseUrl).host;
-  } catch {
-    return baseUrl.replace(/^https?:\/\//, "");
-  }
+  return getCloudSyncDisplayHost(baseUrl);
 }
 
 function getInitials(source: string) {

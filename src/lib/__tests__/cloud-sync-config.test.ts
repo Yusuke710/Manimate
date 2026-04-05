@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("getLocalCloudSyncConfig", () => {
-  it("returns hosted cloud sync config as-is", async () => {
+  it("returns hosted cloud sync config using the canonical hosted origin", async () => {
     const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-cloud-sync-"));
     try {
       const { store, config } = await loadCloudSyncModules(localRoot);
@@ -40,7 +40,7 @@ describe("getLocalCloudSyncConfig", () => {
       });
 
       expect(config.getLocalCloudSyncConfig()).toMatchObject({
-        base_url: "https://manimate.ai",
+        base_url: "https://www.manimate.ai",
         token: "token-123",
         connected_at: "2026-04-01T00:00:00.000Z",
         user_email: "user@example.com",

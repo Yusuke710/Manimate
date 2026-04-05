@@ -4,6 +4,7 @@ import {
   DEFAULT_CLOUD_SYNC_BASE_URL,
   type CloudAuthStatus,
 } from "@/lib/studio-cloud-auth";
+import { normalizeCloudSyncBaseUrl } from "@/lib/local/cloud-sync-base-url";
 import {
   clearLocalCloudSyncPendingConnect,
   getLocalCloudSyncConfig,
@@ -51,8 +52,7 @@ export function getDefaultCloudSyncBaseUrl(): string {
 }
 
 function normalizeBaseUrl(baseUrl?: string | null): string {
-  const trimmed = baseUrl?.trim() || configuredCloudSyncBaseUrl;
-  return trimmed.replace(/\/+$/, "");
+  return normalizeCloudSyncBaseUrl(baseUrl, configuredCloudSyncBaseUrl);
 }
 
 function normalizeErrorMessage(error: unknown): string {

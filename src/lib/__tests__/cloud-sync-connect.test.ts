@@ -91,13 +91,13 @@ describe("beginOrResumeLocalCloudSyncConnect", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({
         status: "connected",
-        base_url: "https://manimate.ai",
+        base_url: "https://www.manimate.ai",
         user_email: "youfu1202mo@gmail.com",
         user_name: "Yusuke Miyashita",
         device_name: "Yusukes-Laptop.lan",
       });
       expect(config.getLocalCloudSyncConfig()).toMatchObject({
-        base_url: "https://manimate.ai",
+        base_url: "https://www.manimate.ai",
         token: "msync_token_123",
         user_id: "user-123",
         user_email: "youfu1202mo@gmail.com",
@@ -106,7 +106,7 @@ describe("beginOrResumeLocalCloudSyncConnect", () => {
       });
       expect(store.readStoredLocalConfig()).toEqual({
         cloud_sync: {
-          base_url: "https://manimate.ai",
+          base_url: "https://www.manimate.ai",
           token: "msync_token_123",
           connected_at: "2026-04-05T00:00:03.000Z",
           user_id: "user-123",
@@ -140,7 +140,7 @@ describe("beginOrResumeLocalCloudSyncConnect", () => {
       });
 
       const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        expect(String(input)).toBe("https://manimate.ai/api/local-sync/connect/start");
+        expect(String(input)).toBe("https://www.manimate.ai/api/local-sync/connect/start");
         expect(init?.method).toBe("POST");
         return new Response(JSON.stringify({
           request_id: "fresh-req",

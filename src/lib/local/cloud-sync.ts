@@ -1,6 +1,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { getLocalSessionPaths } from "@/lib/local/config";
+import { normalizeCloudSyncBaseUrl } from "@/lib/local/cloud-sync-base-url";
 import {
   clearLocalCloudSyncConfig,
   getLocalCloudSyncConfig,
@@ -94,7 +95,7 @@ function getCloudSyncSettings(): CloudSyncSettings | null {
   const envToken = process.env.MANIMATE_CLOUD_SYNC_TOKEN?.trim() || "";
   if (envBaseUrl && envToken) {
     return {
-      baseUrl: envBaseUrl.replace(/\/+$/, ""),
+      baseUrl: normalizeCloudSyncBaseUrl(envBaseUrl),
       token: envToken,
     };
   }
@@ -103,7 +104,7 @@ function getCloudSyncSettings(): CloudSyncSettings | null {
   if (!stored?.base_url || !stored.token) return null;
 
   return {
-    baseUrl: stored.base_url.replace(/\/+$/, ""),
+    baseUrl: normalizeCloudSyncBaseUrl(stored.base_url),
     token: stored.token,
   };
 }

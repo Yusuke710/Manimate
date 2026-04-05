@@ -3,6 +3,7 @@ import {
   readStoredLocalConfig,
   updateStoredLocalConfig,
 } from "@/lib/local/local-config-store";
+import { normalizeCloudSyncBaseUrl } from "@/lib/local/cloud-sync-base-url";
 
 export interface LocalCloudSyncConfig {
   base_url: string;
@@ -52,7 +53,7 @@ function parseLocalCloudSyncConfig(value: unknown): LocalCloudSyncConfig | null 
   if (!baseUrl || !token || !connectedAt) return null;
 
   return {
-    base_url: baseUrl,
+    base_url: normalizeCloudSyncBaseUrl(baseUrl),
     token,
     connected_at: connectedAt,
     user_id: typeof value.user_id === "string" ? value.user_id : null,
@@ -77,7 +78,7 @@ function parseLocalCloudSyncPendingConnect(value: unknown): LocalCloudSyncPendin
   }
 
   return {
-    base_url: baseUrl,
+    base_url: normalizeCloudSyncBaseUrl(baseUrl),
     request_id: requestId,
     poll_token: pollToken,
     code,
@@ -115,7 +116,7 @@ export function getLocalCloudSyncEnvOverride(): LocalCloudSyncConfig | null {
   if (!baseUrl || !token) return null;
 
   return {
-    base_url: baseUrl,
+    base_url: normalizeCloudSyncBaseUrl(baseUrl),
     token,
     connected_at: new Date(0).toISOString(),
     user_id: null,
@@ -126,9 +127,13 @@ export function getLocalCloudSyncEnvOverride(): LocalCloudSyncConfig | null {
 }
 
 export function writeLocalCloudSyncConfig(config: LocalCloudSyncConfig): void {
+  const normalizedConfig: LocalCloudSyncConfig = {
+    ...config,
+    base_url: normalizeCloudSyncBaseUrl(config.base_url),
+  };
   updateStoredLocalConfig((current) => ({
     ...current,
-    cloud_sync: config,
+    cloud_sync: normalizedConfig,
     cloud_sync_pending: undefined,
   }));
 }
@@ -145,9 +150,13 @@ export function getLocalCloudSyncPendingConnect(): LocalCloudSyncPendingConnect 
 }
 
 export function writeLocalCloudSyncPendingConnect(pending: LocalCloudSyncPendingConnect): void {
+  const normalizedPending: LocalCloudSyncPendingConnect = {
+    ...pending,
+    base_url: normalizeCloudSyncBaseUrl(pending.base_url),
+  };
   updateStoredLocalConfig((current) => ({
     ...current,
-    cloud_sync_pending: pending,
+    cloud_sync_pending: normalizedPending,
   }));
 }
 
