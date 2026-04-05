@@ -80,6 +80,26 @@ export function useStudioCloudAuth(initialCloudAuthStatus: CloudAuthStatus) {
   }, [cloudAuthStatus.status, refreshCloudAuthStatus]);
 
   useEffect(() => {
+    if (cloudAuthStatus.status === "connected") return;
+
+    const refreshOnReturn = () => {
+      void refreshCloudAuthStatus();
+    };
+    const refreshOnVisible = () => {
+      if (document.visibilityState === "visible") {
+        void refreshCloudAuthStatus();
+      }
+    };
+
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", refreshOnVisible);
+    return () => {
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", refreshOnVisible);
+    };
+  }, [cloudAuthStatus.status, refreshCloudAuthStatus]);
+
+  useEffect(() => {
     if (cloudAuthStatus.status !== "connected") return;
     if (cloudSyncRetryStartedRef.current) return;
 

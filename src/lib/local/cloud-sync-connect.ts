@@ -270,10 +270,19 @@ export async function beginOrResumeLocalCloudSyncConnect(input?: {
 
   const pending = getLocalCloudSyncPendingConnect();
   if (pending) {
-    return {
-      ...mapPendingStatus(pending),
-      browser_opened: input?.reopen === true ? openExternalBrowser(pending.connect_url) : false,
-    };
+    if (isExpired(pending.expires_at)) {
+      clearLocalCloudSyncPendingConnect();
+    } else {
+      const refreshed = await refreshPendingCloudSyncConnect(pending);
+      if (refreshed.status !== "pending") {
+        return refreshed;
+      }
+
+      return {
+        ...refreshed,
+        browser_opened: input?.reopen === true ? openExternalBrowser(pending.connect_url) : false,
+      };
+    }
   }
 
   return beginLocalCloudSyncConnect(input);
