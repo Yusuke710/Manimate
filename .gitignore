@@ -49,3 +49,6 @@ next-env.d.ts
 # Manim render output
 media/
 .git.backup-before-magent-20260223-104004/
+CLAUDE.md
+AGENT.md
+
