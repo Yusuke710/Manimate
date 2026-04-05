@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useEffect, useCallback, useRef, useState, Suspense, useMemo } from "react";
+import { useReducer, useEffect, useCallback, useRef, useState, Suspense, useMemo, useLayoutEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SplitPanel from "@/components/SplitPanel";
 import ChatInput from "@/components/ChatInput";
@@ -1072,7 +1072,7 @@ interface ChatPanelProps {
   isMobile?: boolean;
 }
 
-function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWelcomePayload, consumeWelcomePayload, sessionReady, isMobile = false }: ChatPanelProps) {
+export function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWelcomePayload, consumeWelcomePayload, sessionReady, isMobile = false }: ChatPanelProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(chatReducer, initialState);
   const draftKey = sessionId ? `chat-draft:${sessionId}` : undefined;
@@ -1544,12 +1544,12 @@ function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPendingWel
 
   // Auto-send pending welcome payload when a new session loads
   const welcomeSentRef = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!sessionId || welcomeSentRef.current) return;
     const pending = consumeWelcomePayload?.(sessionId);
     if (!pending) return;
     welcomeSentRef.current = true;
-    handleSend(pending.prompt, pending.images);
+    void handleSend(pending.prompt, pending.images);
   }, [sessionId, handleSend, consumeWelcomePayload]);
 
   const handleCancel = useCallback(async () => {
