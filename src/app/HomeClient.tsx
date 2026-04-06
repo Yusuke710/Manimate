@@ -22,11 +22,11 @@ import {
 import { AVAILABLE_VOICES, DEFAULT_VOICE_ID, NONE_VOICE_ID, getVoicePageUrl } from "@/lib/voices";
 import {
   ASPECT_RATIO_OPTIONS,
-  DEFAULT_ASPECT_RATIO,
   isAspectRatio,
   type AspectRatio,
 } from "@/lib/aspect-ratio";
 import { parseUrlLaunchIntent } from "@/lib/url-launch-intent";
+import { usePreferredAspectRatio } from "@/lib/usePreferredAspectRatio";
 import {
   shouldAbortLingeringPreviewStream,
   shouldAcceptPolledPreviewUpdate,
@@ -38,7 +38,6 @@ import { useStudioCloudAuth } from "@/lib/useStudioCloudAuth";
 const MODEL_PREF_KEY = "manimate-preferred-model";
 const VOICE_PREF_KEY = "manimate-preferred-voice";
 const VOICE_NAMES_KEY = "manimate-voice-names";
-const ASPECT_RATIO_PREF_KEY = "manimate-preferred-aspect-ratio";
 const ELEVENLABS_SETTINGS_ENDPOINT = "/api/settings/elevenlabs";
 
 function usePreferredModel() {
@@ -62,32 +61,6 @@ function usePreferredModel() {
     try { localStorage.setItem(MODEL_PREF_KEY, m); } catch {}
   }, []);
   return [model, set] as const;
-}
-
-function usePreferredAspectRatio() {
-  const [ratio, setRatio] = useState<AspectRatio>(DEFAULT_ASPECT_RATIO);
-
-  useEffect(() => {
-    let timer: number | null = null;
-    try {
-      const saved = localStorage.getItem(ASPECT_RATIO_PREF_KEY);
-      if (isAspectRatio(saved)) {
-        timer = window.setTimeout(() => setRatio(saved), 0);
-      }
-    } catch {}
-    return () => {
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, []);
-
-  const set = useCallback((r: AspectRatio) => {
-    setRatio((prev) => {
-      if (prev === r) return prev;
-      try { localStorage.setItem(ASPECT_RATIO_PREF_KEY, r); } catch {}
-      return r;
-    });
-  }, []);
-  return [ratio, set] as const;
 }
 
 // Manus-style model selector dropdown
