@@ -25,6 +25,7 @@ import {
   isAspectRatio,
   type AspectRatio,
 } from "@/lib/aspect-ratio";
+import { readUploadErrorResponse } from "@/lib/chat-upload-response";
 import { parseUrlLaunchIntent } from "@/lib/url-launch-intent";
 import { usePreferredAspectRatio } from "@/lib/usePreferredAspectRatio";
 import {
@@ -1337,10 +1338,12 @@ export function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPen
           for (const file of images) formData.append("images", file);
           const uploadResponse = await fetch("/api/chat/uploads", { method: "POST", body: formData });
           if (!uploadResponse.ok) {
-            const uploadErr = await uploadResponse.json();
-            throw new Error(uploadErr.error || "Upload failed");
+            throw new Error(await readUploadErrorResponse(uploadResponse, "Upload failed"));
           }
-          const uploadData = await uploadResponse.json();
+          const uploadData = await uploadResponse.json().catch(() => null) as { images?: ImageAttachment[] } | null;
+          if (!uploadData || !Array.isArray(uploadData.images)) {
+            throw new Error("Upload response was invalid");
+          }
           uploadedImages = uploadData.images;
         } catch (uploadError) {
           console.error("Failed to upload attachments:", uploadError);

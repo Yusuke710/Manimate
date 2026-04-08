@@ -123,7 +123,7 @@ export function dbActivityEventToUI(dbEvent: DBActivityEvent): ActivityEvent {
   };
 }
 
-// Image attachment for chat messages
+// Chat attachment metadata
 export interface ImageAttachment {
   id: string;
   path: string;      // Local filesystem path

@@ -2,16 +2,9 @@
 
 import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import ImageLightbox from "@/components/ImageLightbox";
+import { getAttachmentBadgeLabel } from "@/lib/chat-attachments";
 
 const MAX_ATTACHMENTS = 12;
-const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-const ALLOWED_TYPES = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "application/pdf",
-];
 
 interface AttachmentPreview {
   file: File;
@@ -144,11 +137,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
   }, [imageAttachments.length, lightboxIndex]);
 
   const addAttachments = useCallback((files: File[]) => {
-    const validFiles = files.filter((f) => {
-      if (!ALLOWED_TYPES.includes(f.type)) return false;
-      if (f.size > MAX_SIZE_BYTES) return false;
-      return true;
-    });
+    const validFiles = files;
 
     if (validFiles.length > 0) triggerPrewarm();
 
@@ -238,24 +227,24 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
     return () => window.removeEventListener("chat-add-image", handleAddImage as EventListener);
   }, [addAttachments]);
 
-  // Paste support for images
+  // Paste support for file attachments
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
 
-      const imageFiles: File[] = [];
+      const pastedFiles: File[] = [];
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        if (item.type.startsWith("image/")) {
+        if (item.kind === "file") {
           const file = item.getAsFile();
-          if (file) imageFiles.push(file);
+          if (file) pastedFiles.push(file);
         }
       }
 
-      if (imageFiles.length > 0) {
+      if (pastedFiles.length > 0) {
         e.preventDefault();
-        addAttachments(imageFiles);
+        addAttachments(pastedFiles);
       }
     },
     [addAttachments]
@@ -277,9 +266,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
       e.preventDefault();
       setDragOver(false);
 
-      const files = Array.from(e.dataTransfer.files).filter((f) =>
-        ALLOWED_TYPES.includes(f.type)
-      );
+      const files = Array.from(e.dataTransfer.files);
       if (files.length > 0) {
         addAttachments(files);
       }
@@ -331,7 +318,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
                     letterSpacing: 0.4,
                   }}
                 >
-                  PDF
+                  {getAttachmentBadgeLabel(attachment.file.name, attachment.file.type)}
                 </div>
               )}
               <button
@@ -408,7 +395,6 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/png,image/jpeg,image/webp,image/gif,application/pdf"
             style={{ display: "none" }}
             onChange={(e) => {
               const files = Array.from(e.target.files || []);
@@ -432,7 +418,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
               transition: "all 0.12s",
               opacity: disabled || attachments.length >= MAX_ATTACHMENTS ? 0.5 : 1,
             }}
-            title="Attach images or PDFs"
+            title="Attach files"
           >
             <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M15.621 4.379a3 3 0 0 0-4.242 0l-7 7a3 3 0 0 0 4.241 4.243h.001l.497-.5a.75.75 0 0 1 1.064 1.057l-.498.501a4.5 4.5 0 0 1-6.364-6.364l7-7a4.5 4.5 0 0 1 6.368 6.36l-3.455 3.553A2.625 2.625 0 1 1 9.52 9.52l3.45-3.451a.75.75 0 1 1 1.061 1.06l-3.45 3.451a1.125 1.125 0 0 0 1.587 1.595l3.454-3.553a3 3 0 0 0 0-4.242Z" clipRule="evenodd" />
@@ -503,7 +489,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
           borderRadius: 22,
           pointerEvents: "none",
         }}>
-          <span style={{ fontSize: 14, fontWeight: 500, color: "var(--accent)" }}>Drop images or PDFs here</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: "var(--accent)" }}>Drop files here</span>
         </div>
       )}
 

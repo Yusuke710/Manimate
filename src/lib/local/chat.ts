@@ -171,7 +171,7 @@ function buildPrompt(input: {
   images: Array<{ path: string; originalName: string }>;
 }): string {
   const imageSection = input.images.length
-    ? `\n\nAttached files (use Read tool to inspect images or PDFs):\n${input.images.map((image) => `- ${image.path} (${image.originalName})`).join("\n")}`
+    ? `\n\nAttached files (use Read tool to inspect them as needed):\n${input.images.map((image) => `- ${image.path} (${image.originalName})`).join("\n")}`
     : "";
   const voiceSection = input.voiceId === NONE_VOICE_ID ? "" : `\n\n**Voice ID**: ${input.voiceId}`;
   return `**Project Directory**: \`${input.projectDir}\` (cwd is already set)\n\n**Aspect Ratio**: ${input.aspectRatio}${voiceSection}\n\n${input.prompt}${imageSection}`;

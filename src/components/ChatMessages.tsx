@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ActivityEvent, Message } from "@/lib/types";
+import { getAttachmentBadgeLabel } from "@/lib/chat-attachments";
 import { getModelDisplayLabel } from "@/lib/models";
 import ImageLightbox from "@/components/ImageLightbox";
 
@@ -592,7 +593,7 @@ function ToolInputDetail({ input, toolName }: { input?: Record<string, unknown>;
   );
 }
 
-/** Collapsible attachment strip — images get thumbnails, PDFs show file tiles. */
+/** Collapsible attachment strip — images get thumbnails and other files get tiles. */
 function AttachmentGrid({
   attachments,
   onImageClick,
@@ -661,7 +662,7 @@ function AttachmentGrid({
               letterSpacing: 0.4,
             }}
           >
-            PDF
+            {getAttachmentBadgeLabel(attachment.name, attachment.type)}
           </a>
         );
       })}
