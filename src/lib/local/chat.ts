@@ -149,10 +149,17 @@ function stringifyToolResult(content: unknown): string {
 
 const TOOL_RESULT_MAX_CHARS = 6000;
 const TOOL_RESULT_MESSAGE_MAX_CHARS = 280;
+const CLI_ERROR_OUTPUT_TAIL_MAX_CHARS = 64_000;
 
 function truncateText(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
   return `${value.slice(0, maxChars)}\n…(truncated)`;
+}
+
+function appendOutputTail(current: string, nextChunk: string, maxChars = CLI_ERROR_OUTPUT_TAIL_MAX_CHARS): string {
+  if (!nextChunk) return current;
+  const combined = `${current}${nextChunk}`;
+  return combined.length <= maxChars ? combined : combined.slice(-maxChars);
 }
 
 function getMessageBlocks(obj: Record<string, unknown>): Array<Record<string, unknown>> {
@@ -459,7 +466,8 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       await persistActivity("progress", "Running Manimate...");
 
       let ndjsonBuffer = "";
-      let fullStderr = "";
+      let rawStdoutTail = "";
+      let stderrTail = "";
       let finalAssistantText = "";
 
       let streamChain = Promise.resolve();
@@ -472,6 +480,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       process.stdout.on("data", (chunk: Buffer) => {
         const data = chunk.toString("utf8");
         enqueue(async () => {
+          rawStdoutTail = appendOutputTail(rawStdoutTail, data);
           const parsed = parseNDJSONChunk(ndjsonBuffer, data);
           ndjsonBuffer = parsed.remainder;
 
@@ -568,7 +577,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       process.stderr.on("data", (chunk: Buffer) => {
         const data = chunk.toString("utf8");
         enqueue(async () => {
-          fullStderr += data;
+          stderrTail = appendOutputTail(stderrTail, data);
           const match = data.match(/(\d+)%\|/);
           if (match) {
             const progress = Number.parseInt(match[1], 10);
@@ -686,7 +695,11 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       }
 
       if (exitResult.code !== 0) {
-        const message = transformCliError(exitResult.code ?? 1, "", fullStderr.trim());
+        const message = transformCliError(
+          exitResult.code ?? 1,
+          rawStdoutTail.trim(),
+          stderrTail.trim()
+        );
         updateLocalRun(runId, {
           status: "failed",
           finished_at: finishedAt,
