@@ -225,11 +225,24 @@ export default function ChatMessages({
 
 function MessageRow({ message, onImageClick }: { message: Message; onImageClick: (images: LightboxImage[], index: number) => void }) {
   const isUser = message.role === "user";
+  const [isHovered, setIsHovered] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (message.content) {
+      navigator.clipboard.writeText(message.content).then(() => {
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 1500);
+      });
+    }
+  };
 
   if (isUser) {
     return (
       <div
         data-testid="message-user"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         style={{
           display: "flex", flexDirection: "column", alignItems: "flex-end",
           padding: "12px 20px",
@@ -248,6 +261,54 @@ function MessageRow({ message, onImageClick }: { message: Message; onImageClick:
           fontSize: 17, lineHeight: 1.65, color: "var(--text-primary)",
         }}>
           {message.content ? <p style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{message.content}</p> : null}
+        </div>
+        {/* Copy action row — appears below bubble on hover */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          marginTop: 4,
+          height: 28,
+          opacity: isHovered ? 1 : 0,
+          transition: "opacity 0.15s",
+          pointerEvents: isHovered ? "auto" : "none",
+        }}>
+          <button
+            onClick={handleCopy}
+            title={isCopied ? "Copied!" : "Copy message"}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              color: isCopied ? "#10a37f" : "#8e8ea0",
+              transition: "color 0.15s, background 0.15s",
+              padding: 0,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = "rgba(0,0,0,0.06)";
+              if (!isCopied) e.currentTarget.style.color = "#565869";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = isCopied ? "#10a37f" : "#8e8ea0";
+            }}
+          >
+            {isCopied ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            )}
+          </button>
         </div>
       </div>
     );
