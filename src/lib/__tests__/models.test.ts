@@ -21,7 +21,7 @@ describe("local model registry", () => {
   });
 
   it("shows full version labels and concise descriptions", () => {
-    expect(getModelDisplayLabel("opus")).toBe("Opus 4.6");
+    expect(getModelDisplayLabel("opus")).toBe("Opus 4.7");
     expect(getModelDisplayLabel("sonnet")).toBe("Sonnet 4.5");
     expect(getModelDisplayLabel("haiku")).toBe("Haiku 4.5");
 

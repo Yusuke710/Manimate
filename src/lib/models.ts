@@ -9,7 +9,7 @@ interface ModelEntry {
 
 export const MODEL_REGISTRY: Record<string, ModelEntry> = {
   opus: {
-    label: "Opus 4.6",
+    label: "Opus 4.7",
     description: "Most capable for complex work",
   },
   sonnet: {
