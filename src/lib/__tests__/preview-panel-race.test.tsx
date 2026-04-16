@@ -15,6 +15,19 @@ interface MutableVideoState {
   playbackRate: number;
 }
 
+function createMatchMediaResult(matches: boolean) {
+  return {
+    matches,
+    media: "",
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  };
+}
+
 function installVideoState(video: HTMLVideoElement, state: MutableVideoState): void {
   for (const key of Object.keys(state) as Array<keyof MutableVideoState>) {
     Object.defineProperty(video, key, {
@@ -50,6 +63,12 @@ describe("PreviewTab canplay hydration", () => {
             { status: 200 },
           );
         }
+        if (url.includes("/api/subtitles?session_id=session-single")) {
+          return new Response(
+            "1\n00:00:00,000 --> 00:00:01,000\nSingle scene",
+            { status: 200 },
+          );
+        }
         if (url.includes("/api/chapters?session_id=session-1")) {
           return new Response(
             JSON.stringify([
@@ -62,19 +81,21 @@ describe("PreviewTab canplay hydration", () => {
             },
           );
         }
+        if (url.includes("/api/chapters?session_id=session-single")) {
+          return new Response(
+            JSON.stringify([
+              { name: "Single Scene", start: 0, duration: 20 },
+            ]),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
         throw new Error(`Unexpected fetch: ${url}`);
       }),
     );
-    window.matchMedia = vi.fn().mockImplementation(() => ({
-      matches: false,
-      media: "",
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })) as typeof window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation(() => createMatchMediaResult(false)) as typeof window.matchMedia;
     HTMLMediaElement.prototype.load = vi.fn();
     HTMLMediaElement.prototype.pause = vi.fn();
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -246,5 +267,79 @@ describe("PreviewTab canplay hydration", () => {
     expect(handle?.style.left).toBe("calc(85% - 6px)");
     expect(container?.querySelector('[data-testid="current-time"]')?.textContent).toBe("0:17");
     expect(container?.querySelector('[data-testid="play-toggle"] svg path[d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"]')).not.toBeNull();
+  });
+
+  it("keeps the capture-frame button visible for single-chapter videos", async () => {
+    flushSync(() => {
+      root?.render(
+        <PreviewTab
+          videoUrl="/api/files?video=single"
+          videoRefreshNonce={0}
+          sandboxId="session-single"
+          sessionId="session-single"
+        />,
+      );
+    });
+
+    const video = container?.querySelector('[data-testid="video-player"]') as HTMLVideoElement | null;
+    expect(video).not.toBeNull();
+    if (!video) throw new Error("Expected active video element");
+
+    const videoState: MutableVideoState = {
+      currentTime: 0,
+      duration: 20,
+      paused: true,
+      ended: false,
+      playbackRate: 1,
+    };
+    installVideoState(video, videoState);
+
+    await act(async () => {
+      video.dispatchEvent(new Event("canplay"));
+    });
+
+    await flushEffects();
+    await flushEffects();
+
+    expect(container?.querySelector('[data-testid="capture-frame-button"]')).not.toBeNull();
+    expect(container?.textContent).not.toContain("Single Scene");
+  });
+
+  it("keeps the capture-frame button visible for single-chapter videos on mobile", async () => {
+    window.matchMedia = vi.fn().mockImplementation(() => createMatchMediaResult(true)) as typeof window.matchMedia;
+
+    flushSync(() => {
+      root?.render(
+        <PreviewTab
+          videoUrl="/api/files?video=single"
+          videoRefreshNonce={0}
+          sandboxId="session-single"
+          sessionId="session-single"
+        />,
+      );
+    });
+
+    const video = container?.querySelector('[data-testid="video-player"]') as HTMLVideoElement | null;
+    expect(video).not.toBeNull();
+    if (!video) throw new Error("Expected active video element");
+
+    const videoState: MutableVideoState = {
+      currentTime: 0,
+      duration: 20,
+      paused: true,
+      ended: false,
+      playbackRate: 1,
+    };
+    installVideoState(video, videoState);
+
+    await act(async () => {
+      video.dispatchEvent(new Event("canplay"));
+    });
+
+    await flushEffects();
+    await flushEffects();
+
+    expect(container?.querySelector('[data-testid="capture-frame-button"]')).not.toBeNull();
+    expect(container?.textContent).not.toContain("Single Scene");
   });
 });

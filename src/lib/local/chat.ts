@@ -16,6 +16,7 @@ import {
   createLocalSession,
   createLocalRun,
   getLocalSession,
+  hasLocalMessages,
   insertLocalActivityEvent,
   insertLocalMessage,
   listLocalMessages,
@@ -170,18 +171,22 @@ function getMessageBlocks(obj: Record<string, unknown>): Array<Record<string, un
   return content.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object");
 }
 
-function buildPrompt(input: {
+export function buildPrompt(input: {
   projectDir: string;
   prompt: string;
   aspectRatio: string;
   voiceId: string;
+  includeSessionConfig: boolean;
   images: Array<{ path: string; originalName: string }>;
 }): string {
   const imageSection = input.images.length
     ? `\n\nAttached files (use Read tool to inspect them as needed):\n${input.images.map((image) => `- ${image.path} (${image.originalName})`).join("\n")}`
     : "";
   const voiceSection = input.voiceId === NONE_VOICE_ID ? "" : `\n\n**Voice ID**: ${input.voiceId}`;
-  return `**Project Directory**: \`${input.projectDir}\` (cwd is already set)\n\n**Aspect Ratio**: ${input.aspectRatio}${voiceSection}\n\n${input.prompt}${imageSection}`;
+  const sessionConfigSection = input.includeSessionConfig
+    ? `\n\n**Aspect Ratio**: ${input.aspectRatio}${voiceSection}`
+    : "";
+  return `**Project Directory**: \`${input.projectDir}\` (cwd is already set)${sessionConfigSection}\n\n${input.prompt}${imageSection}`;
 }
 
 export async function handleLocalChatRequest(request: Request): Promise<Response> {
@@ -297,7 +302,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           updateLocalSession(sessionId, { title: truncated });
         }
       }
-
+      const isFirstTurn = !hasLocalMessages(sessionId);
 
       const userMessageId = insertLocalMessage({
         session_id: sessionId,
@@ -402,6 +407,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         prompt: promptBody,
         aspectRatio,
         voiceId,
+        includeSessionConfig: isFirstTurn,
         images: promptImages,
       });
 

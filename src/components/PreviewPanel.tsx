@@ -1423,10 +1423,9 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
             <span data-testid="duration-time">{formatTime(duration)}</span>
           </div>
 
-          {/* Chapter name with copy-to-chat icon */}
-          {currentChapter && useSegmentedTimeline && (
+          {!isMobile && (
             <div className="flex items-center gap-1.5 ml-3">
-              {!isMobile && (
+              {currentChapter && useSegmentedTimeline && (
                 <>
                   <span className="text-zinc-500">•</span>
                   <span className="text-sm text-zinc-300 truncate max-w-[200px]" title={currentChapter.name}>
@@ -1435,8 +1434,13 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
                 </>
               )}
               <button
+                data-testid="capture-frame-button"
                 className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
-                onClick={() => captureFrameAndInsert((t) => `[${formatTime(t)}] ${currentChapter.name}: `)}
+                onClick={() => captureFrameAndInsert((t) => (
+                  currentChapter && useSegmentedTimeline
+                    ? `[${formatTime(t)}] ${currentChapter.name}: `
+                    : `[${formatTime(t)}]: `
+                ))}
                 title="Capture frame + timestamp to chat"
                 aria-label="Capture frame and timestamp to chat"
               >
@@ -1452,6 +1456,21 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
           {isMobile ? (
             /* Mobile: more button + fullscreen button */
             <div className="flex items-center gap-1">
+              <button
+                data-testid="capture-frame-button"
+                className="w-9 h-9 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-zinc-300 hover:text-white"
+                onClick={() => captureFrameAndInsert((t) => (
+                  currentChapter && useSegmentedTimeline
+                    ? `[${formatTime(t)}] ${currentChapter.name}: `
+                    : `[${formatTime(t)}]: `
+                ))}
+                title="Capture frame + timestamp to chat"
+                aria-label="Capture frame and timestamp to chat"
+              >
+                <svg viewBox="0 0 24 24" className="w-4.5 h-4.5 fill-current">
+                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+              </button>
               <div className="relative">
               <button
                 className={`w-9 h-9 flex items-center justify-center rounded transition-colors ${openMenu === 'more' ? 'bg-white/20' : 'hover:bg-white/10'}`}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useReducer, useEffect, useCallback, useRef, useState, Suspense, useMemo, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import SplitPanel from "@/components/SplitPanel";
 import ChatInput from "@/components/ChatInput";
@@ -237,6 +238,796 @@ function AspectRatioSelector({ ratio, onChange, disabled }: { ratio: AspectRatio
     </div>
   );
 }
+
+// ─── Brand Kit ───────────────────────────────────────────────────────────────
+
+interface BrandLogo { name: string; dataUrl: string }
+interface BrandKit {
+  logos: { primary: BrandLogo | null };
+  colors: { primary: string[]; accent: string[]; background: string[] };
+  fonts: { heading: string; body: string; accent: string };
+  voice: string;
+  styleNotes: string;
+  styleTags: string[];
+}
+
+const BRAND_KIT_KEY = "manimate:brand-kit-v3";
+const STYLE_TAG_OPTIONS = ["Minimal", "Bold", "Clean", "Playful", "Elegant", "Technical", "Dark", "Vibrant", "Flat", "3D", "Retro", "Modern"];
+
+function emptyBrandKit(): BrandKit {
+  return {
+    logos: { primary: null },
+    colors: { primary: [], accent: [], background: [] },
+    fonts: { heading: "Inter", body: "Lato", accent: "Roboto Mono" },
+    voice: "", styleNotes: "", styleTags: [],
+  };
+}
+
+function deepCloneBrandKit(k: BrandKit): BrandKit {
+  const c = k.colors ?? { primary: [], accent: [], background: [] };
+  return {
+    logos: { ...k.logos },
+    colors: { primary: [...(c.primary ?? [])], accent: [...(c.accent ?? [])], background: [...(c.background ?? [])] },
+    fonts: { ...k.fonts },
+    voice: k.voice ?? "", styleNotes: k.styleNotes ?? "", styleTags: [...(k.styleTags ?? [])],
+  };
+}
+
+function useBrandKit(): [BrandKit | null, (kit: BrandKit | null) => void, boolean, (enabled: boolean) => void] {
+  const [kit, setKit] = useState<BrandKit | null>(null);
+  const [enabled, setEnabledState] = useState(true);
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem(BRAND_KIT_KEY);
+      if (s) {
+        const parsed = JSON.parse(s);
+        // Support old format (plain BrandKit) and new format ({ kit, enabled })
+        if (parsed && "kit" in parsed) {
+          setKit(parsed.kit);
+          setEnabledState(parsed.enabled ?? true);
+        } else {
+          setKit(parsed);
+        }
+      }
+    } catch {}
+  }, []);
+  const save = useCallback((newKit: BrandKit | null) => {
+    setKit(newKit);
+    try {
+      if (newKit) localStorage.setItem(BRAND_KIT_KEY, JSON.stringify({ kit: newKit, enabled: true }));
+      else localStorage.removeItem(BRAND_KIT_KEY);
+    } catch {}
+    setEnabledState(true);
+  }, []);
+  const setEnabled = useCallback((val: boolean) => {
+    setEnabledState(val);
+    try {
+      const s = localStorage.getItem(BRAND_KIT_KEY);
+      if (s) {
+        const parsed = JSON.parse(s);
+        const kitData = parsed && "kit" in parsed ? parsed.kit : parsed;
+        localStorage.setItem(BRAND_KIT_KEY, JSON.stringify({ kit: kitData, enabled: val }));
+      }
+    } catch {}
+  }, []);
+  return [kit, save, enabled, setEnabled];
+}
+
+function buildBrandGuideline(kit: BrandKit | null): string {
+  if (!kit) return "";
+  const parts: string[] = [];
+  const logoParts: string[] = [];
+  if (kit.logos.primary) logoParts.push(`primary logo "${kit.logos.primary.name}"`);
+  if (logoParts.length > 0) parts.push(`Logo — ${logoParts.join(", ")} provided`);
+  const colorParts: string[] = [];
+  if (kit.colors.primary.length > 0) colorParts.push(`primary: ${kit.colors.primary.join(", ")}`);
+  if (kit.colors.accent.length > 0) colorParts.push(`accent: ${kit.colors.accent.join(", ")}`);
+  if (kit.colors.background.length > 0) colorParts.push(`background: ${kit.colors.background.join(", ")}`);
+  if (colorParts.length > 0) parts.push(`Brand colors — ${colorParts.join("; ")}`);
+  const fontParts: string[] = [];
+  if (kit.fonts.heading) fontParts.push(`heading: ${kit.fonts.heading}`);
+  if (kit.fonts.body) fontParts.push(`body: ${kit.fonts.body}`);
+  if (kit.fonts.accent) fontParts.push(`accent: ${kit.fonts.accent}`);
+  if (fontParts.length > 0) parts.push(`Fonts — ${fontParts.join(", ")}`);
+  const styleAll = [...(kit.styleTags ?? []), (kit.styleNotes ?? "").trim()].filter(Boolean);
+  if (styleAll.length > 0) parts.push(`Visual style — ${styleAll.join(", ")}`);
+  if ((kit.voice ?? "").trim()) parts.push(`Brand voice — ${kit.voice.trim()}`);
+  if (parts.length === 0) return "";
+  return `\n\nBrand Guideline: ${parts.join(". ")}.`;
+}
+
+type BKTab = "logos" | "colors" | "fonts" | "voice";
+
+const FONT_OPTIONS: { group: string; fonts: string[] }[] = [
+  { group: "Sans-serif", fonts: ["Inter", "DM Sans", "Poppins", "Roboto", "Open Sans", "Lato", "Montserrat", "Nunito", "Raleway", "Outfit", "Plus Jakarta Sans", "Space Grotesk", "Work Sans", "Barlow", "Josefin Sans", "Quicksand", "Karla", "Mulish", "Rubik", "Urbanist", "Jost", "Be Vietnam Pro"] },
+  { group: "Serif", fonts: ["Playfair Display", "DM Serif Display", "Merriweather", "Lora", "Crimson Text", "EB Garamond", "Cormorant Garamond", "Libre Baskerville", "PT Serif", "Spectral", "Fraunces", "Bodoni Moda", "Cardo"] },
+  { group: "Display", fonts: ["Syne", "Lexend", "Manrope", "Figtree", "Bebas Neue", "Righteous", "Comfortaa", "Fredoka One", "Exo 2", "Orbitron", "Rajdhani", "Russo One", "Alfa Slab One"] },
+  { group: "Handwriting", fonts: ["Dancing Script", "Caveat", "Satisfy", "Great Vibes", "Architects Daughter", "Kalam", "Patrick Hand", "Sacramento", "Permanent Marker"] },
+  { group: "Monospace", fonts: ["Roboto Mono", "JetBrains Mono", "Fira Code", "Source Code Pro", "IBM Plex Mono", "Space Mono", "Courier Prime", "Inconsolata", "DM Mono"] },
+];
+const ALL_FONT_NAMES = FONT_OPTIONS.flatMap(g => g.fonts);
+
+// ─── Color-space utilities ───────────────────────────────────────────────────
+function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+  s /= 100; v /= 100;
+  const f = (n: number) => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return [Math.round(f(5) * 255), Math.round(f(3) * 255), Math.round(f(1) * 255)];
+}
+function rgbToHex(r: number, g: number, b: number): string {
+  return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+function hexToHsv(hex: string): [number, number, number] {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.slice(0, 2), 16) / 255;
+  const g = parseInt(c.slice(2, 4), 16) / 255;
+  const b = parseInt(c.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) { switch (max) { case r: h = ((g - b) / d + (g < b ? 6 : 0)) * 60; break; case g: h = ((b - r) / d + 2) * 60; break; default: h = ((r - g) / d + 4) * 60; } }
+  return [h, max ? d / max * 100 : 0, max * 100];
+}
+
+// ─── Canva-style inline color picker ─────────────────────────────────────────
+function BrandColorPicker({ hex, onChange, onDelete, onClose }: {
+  hex: string; onChange: (h: string) => void; onDelete: () => void; onClose: () => void;
+}) {
+  const init = /^#[0-9A-Fa-f]{6}$/i.test(hex) ? hex.toUpperCase() : "#3B82F6";
+  const hsvRef = useRef<[number, number, number]>(hexToHsv(init));
+  const [hsv, setHsvState] = useState<[number, number, number]>(hsvRef.current);
+  const [hexText, setHexText] = useState(init.replace("#", ""));
+  const gradRef = useRef<HTMLDivElement>(null);
+  const hueRef  = useRef<HTMLDivElement>(null);
+
+  const setHsv = (next: [number, number, number]) => { hsvRef.current = next; setHsvState(next); };
+
+  const emitHsv = (h: number, s: number, v: number) => {
+    const [r, g, b] = hsvToRgb(h, s, v);
+    const newHex = rgbToHex(r, g, b);
+    setHexText(newHex.replace("#", ""));
+    onChange(newHex);
+  };
+
+  const makeDrag = (onMove: (cx: number, cy: number) => void) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    onMove(e.clientX, e.clientY);
+    const mm = (ev: MouseEvent) => onMove(ev.clientX, ev.clientY);
+    const mu = () => { document.removeEventListener("mousemove", mm); document.removeEventListener("mouseup", mu); };
+    document.addEventListener("mousemove", mm);
+    document.addEventListener("mouseup", mu);
+  };
+
+  const onGradDrag = makeDrag((cx, cy) => {
+    if (!gradRef.current) return;
+    const r = gradRef.current.getBoundingClientRect();
+    const s = Math.max(0, Math.min(100, (cx - r.left) / r.width  * 100));
+    const v = Math.max(0, Math.min(100, 100 - (cy - r.top) / r.height * 100));
+    const next: [number, number, number] = [hsvRef.current[0], s, v];
+    setHsv(next); emitHsv(...next);
+  });
+
+  const onHueDrag = makeDrag((cx) => {
+    if (!hueRef.current) return;
+    const r = hueRef.current.getBoundingClientRect();
+    const h = Math.max(0, Math.min(360, (cx - r.left) / r.width * 360));
+    const next: [number, number, number] = [h, hsvRef.current[1], hsvRef.current[2]];
+    setHsv(next); emitHsv(...next);
+  });
+
+  const [h, s, v] = hsv;
+  const pureHue = `hsl(${h},100%,50%)`;
+
+  return (
+    <div style={{ marginTop: 14, borderRadius: 12, border: "1px solid var(--border-main)", background: "var(--bg-white)", padding: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.10)" }}>
+      {/* Close button */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        <button onClick={onClose} style={{ width: 24, height: 24, borderRadius: "50%", border: "none", background: "#f0f0f0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      {/* Gradient square */}
+      <div ref={gradRef} onMouseDown={onGradDrag} style={{ position: "relative", height: 156, borderRadius: 6, background: `linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,${pureHue})`, cursor: "crosshair", marginBottom: 10, userSelect: "none" }}>
+        <div style={{ position: "absolute", left: `${s}%`, top: `${100 - v}%`, transform: "translate(-50%,-50%)", width: 14, height: 14, borderRadius: "50%", border: "2px solid white", boxShadow: "0 0 0 1.5px rgba(0,0,0,0.35)", pointerEvents: "none" }} />
+      </div>
+
+      {/* Hue slider */}
+      <div ref={hueRef} onMouseDown={onHueDrag} style={{ height: 14, borderRadius: 7, position: "relative", background: "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)", cursor: "crosshair", marginBottom: 14, userSelect: "none" }}>
+        <div style={{ position: "absolute", left: `${h / 360 * 100}%`, top: "50%", transform: "translate(-50%,-50%)", width: 20, height: 20, borderRadius: "50%", background: pureHue, border: "2px solid white", boxShadow: "0 0 0 1.5px rgba(0,0,0,0.25)", pointerEvents: "none" }} />
+      </div>
+
+      {/* Bottom row: trash | hex input | eyedropper */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={onDelete} title="Remove colour" style={{ width: 36, height: 36, borderRadius: 6, border: "1px solid var(--border-main)", background: "var(--bg-white)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          {/* Trash icon — bin with lid */}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary,#555)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14H6L5 6"/>
+            <path d="M10 11v6M14 11v6"/>
+            <path d="M9 6V4h6v2"/>
+          </svg>
+        </button>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, border: "1px solid var(--border-main)", borderRadius: 6, padding: "0 10px", height: 36 }}>
+          <div style={{ width: 20, height: 20, borderRadius: "50%", background: `#${hexText || "aaaaaa"}`, border: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }} />
+          <span style={{ fontFamily: "monospace", fontSize: 13, color: "var(--text-tertiary)", userSelect: "none" }}>#</span>
+          <input
+            value={hexText.toUpperCase()}
+            maxLength={6}
+            placeholder="e.g. 36B19E"
+            onChange={e => {
+              const raw = e.target.value.replace(/[^0-9A-Fa-f]/g, "").slice(0, 6);
+              setHexText(raw);
+              if (raw.length === 6) { const newHsv = hexToHsv("#" + raw); setHsv(newHsv); onChange("#" + raw.toUpperCase()); }
+            }}
+            style={{ border: "none", outline: "none", background: "transparent", fontFamily: "monospace", fontSize: 13, color: "var(--text-primary)", width: 68, letterSpacing: "0.04em" }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ColorsTab({ draft, setDraft }: { draft: BrandKit; setDraft: React.Dispatch<React.SetStateAction<BrandKit>> }) {
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [activePicker, setActivePicker] = useState<{ group: keyof BrandKit["colors"]; idx: number } | null>(null);
+
+  const groups: { key: keyof BrandKit["colors"]; label: string; hint: string }[] = [
+    { key: "primary",    label: "Primary",    hint: "Main brand color" },
+    { key: "accent",     label: "Accent",     hint: "Highlight color" },
+    { key: "background", label: "Background", hint: "Scene background color for animations" },
+  ];
+
+  const removeColor = (group: keyof BrandKit["colors"], idx: number) => {
+    setDraft(d => ({ ...d, colors: { ...d.colors, [group]: d.colors[group].filter((_, i) => i !== idx) } }));
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
+      {groups.map(({ key, label, hint }) => {
+        const isPickerOpen = activePicker?.group === key;
+        return (
+          <div key={key}>
+            <div style={{ marginBottom: 4 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font)" }}>{label}</div>
+              <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginTop: 3 }}>{hint}</div>
+            </div>
+            <div style={{ height: 1, background: "var(--border-main)", margin: "12px 0 20px" }} />
+
+            {/* Swatches row */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "flex-start" }}>
+              {draft.colors[key].map((hex, idx) => {
+                const hk = `${key}-${idx}`;
+                const isHovered = hoveredKey === hk;
+                const isActive = isPickerOpen && activePicker?.idx === idx;
+                return (
+                  <div key={idx}
+                    style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}
+                    onMouseEnter={() => setHoveredKey(hk)}
+                    onMouseLeave={() => setHoveredKey(null)}
+                  >
+                    <div
+                      onClick={() => setActivePicker(isActive ? null : { group: key, idx })}
+                      style={{ width: 68, height: 68, borderRadius: "50%", background: hex, boxShadow: isActive ? `0 0 0 3px var(--bg-white), 0 0 0 5.5px ${hex}` : isHovered ? `0 0 0 3px var(--bg-white), 0 0 0 4px ${hex}99` : "none", transition: "box-shadow 0.15s", cursor: "pointer" }}
+                    />
+                    {isHovered && (
+                      <button
+                        onMouseDown={e => { e.stopPropagation(); removeColor(key, idx); if (isActive) setActivePicker(null); }}
+                        style={{ position: "absolute", top: -5, right: -5, width: 22, height: 22, borderRadius: "50%", background: "#2d2d2d", border: "2px solid var(--bg-white)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", padding: 0, zIndex: 2 }}
+                      >
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </button>
+                    )}
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "var(--font)" }}>{hex.toLowerCase()}</div>
+                  </div>
+                );
+              })}
+
+              {/* Add new — rainbow ring */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <div
+                  onClick={() => {
+                    const newIdx = draft.colors[key].length;
+                    setDraft(d => ({ ...d, colors: { ...d.colors, [key]: [...d.colors[key], "#3B82F6"] } }));
+                    setActivePicker({ group: key, idx: newIdx });
+                  }}
+                  style={{ width: 68, height: 68, borderRadius: "50%", background: "conic-gradient(#FF0000,#FF8800,#FFFF00,#00CC00,#00CCFF,#0044FF,#8800FF,#FF00CC,#FF0000)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                >
+                  <div style={{ width: 46, height: 46, borderRadius: "50%", background: "white", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" strokeWidth={2.5} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)" }}>Add new</div>
+              </div>
+            </div>
+
+            {/* Inline Canva-style picker */}
+            {isPickerOpen && activePicker !== null && draft.colors[key][activePicker.idx] !== undefined && (
+              <BrandColorPicker
+                key={`${key}-${activePicker.idx}`}
+                hex={draft.colors[key][activePicker.idx]}
+                onChange={hex => {
+                  const { group, idx } = activePicker;
+                  setDraft(d => ({ ...d, colors: { ...d.colors, [group]: d.colors[group].map((c, i) => i === idx ? hex : c) } }));
+                }}
+                onDelete={() => { removeColor(activePicker.group, activePicker.idx); setActivePicker(null); }}
+                onClose={() => setActivePicker(null)}
+              />
+            )}
+
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function FontsTab({ draft, setDraft }: { draft: BrandKit; setDraft: React.Dispatch<React.SetStateAction<BrandKit>> }) {
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load ALL fonts upfront (split into 2 batches to stay under URL length limits)
+  useEffect(() => {
+    const half = Math.ceil(ALL_FONT_NAMES.length / 2);
+    [ALL_FONT_NAMES.slice(0, half), ALL_FONT_NAMES.slice(half)].forEach((batch, i) => {
+      const id = `gf-all-brand-fonts-${i}`;
+      if (!document.getElementById(id)) {
+        const families = batch.map(f => `family=${encodeURIComponent(f)}:wght@400;700`).join("&");
+        const link = document.createElement("link");
+        link.id = id;
+        link.rel = "stylesheet";
+        link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
+        document.head.appendChild(link);
+      }
+    });
+  }, []);
+
+  // Close on click outside both the buttons and the portal dropdown
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current?.contains(e.target as Node)) return;
+      if (dropdownRef.current?.contains(e.target as Node)) return;
+      setOpenDropdown(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openDropdown]);
+
+  const roleConfig = {
+    heading: { label: "Heading", hint: "Titles and section headers", previewSize: 28, weight: 700 },
+    body:    { label: "Body",    hint: "Body text and descriptions",  previewSize: 15, weight: 400 },
+    accent:  { label: "Accent / Mono", hint: "Code, captions, or highlights", previewSize: 14, weight: 400 },
+  } as const;
+
+  function toggleDropdown(role: string, btn: HTMLButtonElement) {
+    if (openDropdown === role) {
+      setOpenDropdown(null);
+    } else {
+      const rect = btn.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+      setOpenDropdown(role);
+    }
+  }
+
+  return (
+    <div ref={wrapperRef} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "var(--font)" }}>Brand Fonts</div>
+
+      {(["heading", "body", "accent"] as const).map(role => {
+        const cfg = roleConfig[role];
+        const fontName = draft.fonts[role];
+        const isOpen = openDropdown === role;
+
+        return (
+          <div key={role} style={{ border: "1px solid var(--border-main)", borderRadius: 14, overflow: "hidden", background: "var(--bg-main)" }}>
+            {/* Header row */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px" }}>
+              {/* Custom font dropdown — renders each option in its own typeface */}
+              <button
+                onClick={e => toggleDropdown(role, e.currentTarget as HTMLButtonElement)}
+                style={{
+                  fontSize: 13,
+                  fontFamily: fontName ? `"${fontName}", sans-serif` : "var(--font)",
+                  border: "1px solid var(--border-main)", borderRadius: 8,
+                  padding: "7px 28px 7px 11px",
+                  background: "var(--bg-white)",
+                  color: fontName ? "var(--text-primary)" : "var(--text-tertiary)",
+                  outline: "none", cursor: "pointer",
+                  minWidth: 200, textAlign: "left", position: "relative",
+                }}
+              >
+                {fontName || "Select a font…"}
+                <span style={{ position: "absolute", right: 9, top: "50%", transform: isOpen ? "translateY(-50%) rotate(180deg)" : "translateY(-50%)", pointerEvents: "none", transition: "transform 0.15s" }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" strokeLinecap="round"><path d="M6 9l6 6 6-6"/></svg>
+                </span>
+              </button>
+
+              {isOpen && createPortal(
+                <div
+                  ref={dropdownRef}
+                  style={{
+                    position: "fixed",
+                    top: dropdownPos.top,
+                    right: dropdownPos.right,
+                    width: 260,
+                    maxHeight: 360,
+                    overflowY: "auto",
+                    background: "var(--bg-white)",
+                    border: "1px solid var(--border-main)",
+                    borderRadius: 10,
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+                    zIndex: 99999,
+                  }}
+                >
+                  <div
+                    onClick={() => { setDraft(d => ({ ...d, fonts: { ...d.fonts, [role]: "" } })); setOpenDropdown(null); }}
+                    style={{ padding: "8px 12px", fontSize: 12, color: "var(--text-tertiary)", fontFamily: "var(--font)", cursor: "pointer", borderBottom: "1px solid var(--border-main)" }}
+                  >
+                    — None —
+                  </div>
+                  {FONT_OPTIONS.map(group => (
+                    <div key={group.group}>
+                      <div style={{ padding: "6px 12px 2px", fontSize: 10, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: "var(--font)", background: "var(--bg-main)" }}>
+                        {group.group}
+                      </div>
+                      {group.fonts.map(f => (
+                        <div
+                          key={f}
+                          onClick={() => { setDraft(d => ({ ...d, fonts: { ...d.fonts, [role]: f } })); setOpenDropdown(null); }}
+                          style={{
+                            padding: "9px 12px",
+                            fontFamily: `"${f}", sans-serif`,
+                            fontSize: role === "heading" ? 16 : role === "body" ? 14 : 13,
+                            fontWeight: 400,
+                            color: f === fontName ? "var(--accent)" : "var(--text-primary)",
+                            background: f === fontName ? "color-mix(in srgb, var(--accent) 8%, transparent)" : "transparent",
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={e => { if (f !== fontName) (e.currentTarget as HTMLElement).style.background = "var(--bg-main)"; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = f === fontName ? "color-mix(in srgb, var(--accent) 8%, transparent)" : "transparent"; }}
+                        >
+                          {f}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>,
+                document.body
+              )}
+            </div>
+
+            {/* Live preview — always visible */}
+            <div style={{ padding: "20px 18px", background: "var(--bg-white)", borderTop: "1px solid var(--border-main)" }}>
+              <div style={{ fontFamily: fontName ? `"${fontName}", sans-serif` : "var(--font)", fontSize: cfg.previewSize, fontWeight: 400, color: "var(--text-primary)", lineHeight: 1.3 }}>
+                {cfg.label}: {cfg.hint}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave: (kit: BrandKit | null) => void; onClose: () => void }) {
+  const [tab, setTab] = useState<BKTab>("logos");
+  const [draft, setDraft] = useState<BrandKit>(() => kit ? deepCloneBrandKit(kit) : emptyBrandKit());
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const [dragOver, setDragOver] = useState<string | null>(null);
+  const primaryRef = useRef<HTMLInputElement>(null);
+
+  const preview = buildBrandGuideline(draft).replace("\n\n", "");
+  const hasContent = buildBrandGuideline(draft) !== "";
+
+  const readLogoFile = (file: File, logoType: keyof BrandKit["logos"]) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      setDraft(d => ({ ...d, logos: { ...d.logos, [logoType]: { name: file.name, dataUrl: ev.target?.result as string } } }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const logoZoneProps = (logoType: keyof BrandKit["logos"], inputRef: React.RefObject<HTMLInputElement | null>) => ({
+    onClick: () => inputRef.current?.click(),
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); setDragOver(logoType); },
+    onDragLeave: () => setDragOver(null),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault(); setDragOver(null);
+      const file = e.dataTransfer.files[0];
+      if (file) readLogoFile(file, logoType);
+    },
+  });
+
+  const sectionLabel = (text: string) => (
+    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12, fontFamily: "var(--font)" }}>{text}</div>
+  );
+
+  const fieldInput = (value: string, onChange: (v: string) => void, placeholder: string, mono?: boolean): React.ReactElement => (
+    <input type="text" value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)} style={{
+      width: "100%", boxSizing: "border-box",
+      fontSize: 13, fontFamily: mono ? "monospace" : "var(--font)",
+      border: "1px solid var(--border-main)", borderRadius: 8,
+      padding: "9px 12px", background: "var(--bg-main)",
+      color: "var(--text-primary)", outline: "none",
+    }} />
+  );
+
+  const tabs: { id: BKTab; label: string; icon: React.ReactElement }[] = [
+    {
+      id: "logos", label: "Logos",
+      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
+    },
+    {
+      id: "colors", label: "Colors",
+      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>,
+    },
+    {
+      id: "fonts", label: "Fonts",
+      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>,
+    },
+    {
+      id: "voice", label: "Style",
+      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+    },
+  ];
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(6px)" }}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ width: "min(900px, 96vw)", height: "min(88vh, 680px)", background: "var(--bg-white)", borderRadius: 20, boxShadow: "0 32px 100px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+        {/* ── Header ── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 26px", borderBottom: "1px solid var(--border-main)", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #7C3AED, #a855f7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.8} strokeLinecap="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 17, fontWeight: 400, color: "var(--text-primary)", fontFamily: "var(--font-display, var(--font))", letterSpacing: -0.3 }}>Brand Kit</div>
+              <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginTop: 1 }}>Define your visual identity — applied to every animation</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border-main)", background: "var(--bg-hover)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        {/* ── Body ── */}
+        <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+
+          {/* Left sidebar */}
+          <div style={{ width: 192, borderRight: "1px solid var(--border-main)", padding: "16px 10px", display: "flex", flexDirection: "column", gap: 2, flexShrink: 0, background: "var(--bg-main)" }}>
+            {tabs.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 9,
+                  padding: "9px 11px", borderRadius: 9, border: "none",
+                  background: tab === t.id ? "var(--bg-white)" : "transparent",
+                  color: tab === t.id ? "var(--text-primary)" : "var(--text-secondary)",
+                  fontWeight: tab === t.id ? 600 : 400, fontSize: 13,
+                  cursor: "pointer", fontFamily: "var(--font)", textAlign: "left", width: "100%",
+                  boxShadow: tab === t.id ? "0 1px 4px rgba(0,0,0,0.07)" : "none",
+                  transition: "background 0.1s",
+                }}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
+
+            <div style={{ marginTop: "auto", paddingTop: 12 }}>
+              {hasContent ? (
+                <div style={{ background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: 10, padding: "11px 12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)" }} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--accent)", fontFamily: "var(--font)" }}>Brand Kit Active</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", lineHeight: 1.4 }}>Brand guidelines applied to all prompts</div>
+                </div>
+              ) : (
+                <div style={{ background: "var(--bg-hover)", borderRadius: 10, padding: "11px 12px" }}>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", lineHeight: 1.4 }}>Fill in any section to activate brand guidelines</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right content */}
+          <div style={{ flex: 1, overflow: "auto", padding: "28px 32px" }}>
+
+            {/* ─ Logos tab ─ */}
+            {tab === "logos" && (
+              <div>
+                {sectionLabel("Brand Logos")}
+                <div style={{ fontSize: 13, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginBottom: 24, lineHeight: 1.5 }}>
+                  Upload your logo variants. These will be referenced in the prompt so the AI knows your brand assets.
+                </div>
+                <div style={{ maxWidth: 220 }}>
+                  <input ref={primaryRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) readLogoFile(f, "primary"); e.target.value = ""; }} />
+                  <div
+                    {...logoZoneProps("primary", primaryRef)}
+                    style={{
+                      border: `2px dashed ${dragOver === "primary" ? "var(--accent)" : "var(--border-main)"}`,
+                      borderRadius: 14,
+                      height: 150,
+                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer", position: "relative",
+                      background: dragOver === "primary" ? "rgba(124,58,237,0.04)" : "var(--bg-main)",
+                      transition: "border-color 0.15s, background 0.15s",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {draft.logos.primary ? (
+                      <>
+                        <img src={draft.logos.primary.dataUrl} alt={draft.logos.primary.name} style={{ maxWidth: "80%", maxHeight: "80%", objectFit: "contain" }} />
+                        <button
+                          onClick={e => { e.stopPropagation(); setDraft(d => ({ ...d, logos: { ...d.logos, primary: null } })); }}
+                          style={{ position: "absolute", top: 8, right: 8, width: 22, height: 22, borderRadius: "50%", background: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth={1.5} strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", fontFamily: "var(--font)", marginTop: 8 }}>Upload logo</div>
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginTop: 2 }}>PNG, SVG, JPG</div>
+                      </>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", fontFamily: "var(--font)" }}>Primary Logo</div>
+                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginTop: 1 }}>For light backgrounds</div>
+                    {draft.logos.primary && <div style={{ fontSize: 11, color: "var(--accent)", fontFamily: "var(--font)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{draft.logos.primary.name}</div>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ─ Colors tab ─ */}
+            {tab === "colors" && (
+              <ColorsTab draft={draft} setDraft={setDraft} />
+            )}
+
+            {/* ─ Fonts tab ─ */}
+            {tab === "fonts" && (
+              <FontsTab draft={draft} setDraft={setDraft} />
+            )}
+
+            {/* ─ Style tab ─ */}
+            {tab === "voice" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+                {sectionLabel("Style")}
+
+                {/* Style tags */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", fontFamily: "var(--font)", marginBottom: 10 }}>Visual Style Tags</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                    {STYLE_TAG_OPTIONS.map(tag => {
+                      const active = draft.styleTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          onClick={() => setDraft(d => ({ ...d, styleTags: active ? d.styleTags.filter(t => t !== tag) : [...d.styleTags, tag] }))}
+                          style={{
+                            padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: active ? 600 : 400,
+                            border: active ? "1.5px solid var(--accent)" : "1px solid var(--border-main)",
+                            background: active ? "rgba(124,58,237,0.08)" : "var(--bg-main)",
+                            color: active ? "var(--accent)" : "var(--text-secondary)",
+                            cursor: "pointer", fontFamily: "var(--font)", transition: "all 0.1s",
+                          }}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Style Notes */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", fontFamily: "var(--font)", marginBottom: 6 }}>Style Notes</div>
+                  <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginBottom: 10 }}>Additional visual directions, dos & don&apos;ts</div>
+                  <textarea
+                    value={draft.styleNotes}
+                    placeholder="e.g. Avoid gradients. Use geometric shapes. Dark backgrounds only. Keep animations snappy under 3s."
+                    onChange={e => setDraft(d => ({ ...d, styleNotes: e.target.value }))}
+                    rows={4}
+                    style={{ width: "100%", boxSizing: "border-box", fontSize: 13, fontFamily: "var(--font)", border: "1px solid var(--border-main)", borderRadius: 8, padding: "10px 12px", background: "var(--bg-main)", color: "var(--text-primary)", outline: "none", resize: "vertical", lineHeight: 1.6 }}
+                  />
+                </div>
+
+              </div>
+            )}
+
+          </div>
+        </div>
+
+        {/* ── Footer ── */}
+        <div style={{ borderTop: "1px solid var(--border-main)", padding: "14px 26px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, background: "var(--bg-main)", gap: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }} />
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={onClose}
+              style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", background: "var(--bg-hover)", border: "1px solid var(--border-main)", borderRadius: 9, padding: "8px 18px", cursor: "pointer", fontFamily: "var(--font)" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => setPreviewOpen(true)}
+              disabled={!preview}
+              style={{ fontSize: 13, fontWeight: 500, color: preview ? "var(--text-primary)" : "var(--text-tertiary)", background: "var(--bg-white)", border: "1px solid var(--border-main)", borderRadius: 9, padding: "8px 18px", cursor: preview ? "pointer" : "default", fontFamily: "var(--font)", opacity: preview ? 1 : 0.5 }}
+            >
+              Preview
+            </button>
+            <button
+              onClick={() => { onSave(hasContent ? draft : null); onClose(); }}
+              style={{ fontSize: 13, fontWeight: 600, color: "#fff", background: "var(--accent, #7C3AED)", border: "none", borderRadius: 9, padding: "8px 20px", cursor: "pointer", fontFamily: "var(--font)" }}
+            >
+              Save Brand Kit
+            </button>
+          </div>
+        </div>
+
+        {/* ── Preview popup ── */}
+        {previewOpen && createPortal(
+          <div
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10001 }}
+            onMouseDown={e => { if (e.target === e.currentTarget) setPreviewOpen(false); }}
+          >
+            <div style={{ width: "min(640px, 92vw)", maxHeight: "70vh", background: "var(--bg-white)", borderRadius: 16, boxShadow: "0 24px 80px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border-main)" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font)" }}>Prompt Preview</div>
+                <button onClick={() => setPreviewOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", fontSize: 20, lineHeight: 1, padding: 0, fontFamily: "var(--font)" }}>×</button>
+              </div>
+              <div style={{ padding: "20px", overflowY: "auto" }}>
+                <pre style={{ margin: 0, fontFamily: "monospace", fontSize: 12, color: "var(--text-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.7, background: "var(--bg-main)", padding: "16px", borderRadius: 8 }}>{preview}</pre>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+function BrandKitSelector({ kit, onChange, disabled }: { kit: BrandKit | null; onChange: (kit: BrandKit | null) => void; disabled?: boolean }) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const isActive = !!kit && buildBrandGuideline(kit) !== "";
+
+  return (
+    <>
+      <button
+        onClick={() => { if (!disabled) setModalOpen(true); }}
+        style={{
+          display: "flex", alignItems: "center", gap: 5,
+          background: isActive ? "rgba(124,58,237,0.08)" : "var(--bg-white)",
+          border: isActive ? "1px solid var(--accent)" : "1px solid var(--border-main)",
+          borderRadius: 20, padding: "4px 10px",
+          cursor: disabled ? "default" : "pointer",
+          fontFamily: "var(--font)", transition: "border-color 0.12s, background 0.12s",
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={isActive ? "var(--accent)" : "var(--text-tertiary)"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+        </svg>
+        <span style={{ fontSize: 13, fontWeight: 500, color: isActive ? "var(--accent)" : "var(--text-primary)" }}>Brand Kit</span>
+        {isActive && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", marginLeft: 1 }} />}
+      </button>
+      {modalOpen && <BrandKitModal kit={kit} onSave={onChange} onClose={() => setModalOpen(false)} />}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function usePreferredVoice() {
   const [voice, setVoice] = useState(DEFAULT_VOICE_ID);
@@ -1356,7 +2147,7 @@ export function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPen
         }
       }
 
-      const body: Record<string, unknown> = { prompt, model: state.model, aspect_ratio: aspectRatio };
+      const body: Record<string, unknown> = { prompt, model: state.model };
       if (uploadedImages && uploadedImages.length > 0) body.images = uploadedImages;
       body.session_id = activeSessionId;
       const isNewSession = !sessionId;
@@ -1737,6 +2528,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [aspectRatio, setAspectRatio] = usePreferredAspectRatio();
+  const [brandKit, setBrandKit] = useBrandKit();
   const {
     cloudAuthStatus,
     cloudAuthLoading,
@@ -1802,8 +2594,9 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     if (!trimmedPrompt && (!images || images.length === 0)) return;
     if (sessionCreationRef.current) return; // prevent double-submit
 
+    const promptWithBrandGuideline = `${trimmedPrompt}${buildBrandGuideline(brandKit)}`.trim();
     const id = crypto.randomUUID();
-    pendingWelcomePayloadRef.current.set(id, { prompt: trimmedPrompt, images });
+    pendingWelcomePayloadRef.current.set(id, { prompt: promptWithBrandGuideline, images });
 
     // Fire session creation in background; resolve to boolean for ChatPanel.
     // Timeout prevents indefinite stall on cold start / slow network.
@@ -1832,7 +2625,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
 
     // Navigate immediately — user sees their message + "Working..." without waiting
     router.push(`/?session=${id}`);
-  }, [router, aspectRatio]);
+  }, [router, aspectRatio, brandKit]);
 
   // Determine UX stage
   const isWelcome = !activeSessionId && !isLibraryActive;
@@ -1999,6 +2792,8 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
             initialPrompt={launchIntent?.prompt}
             initialModel={launchIntent?.model}
             initialVoice={launchIntent?.voiceId}
+            brandKit={brandKit}
+            onBrandKitChange={setBrandKit}
           />
         ) : (
           <ChatPanel
@@ -2031,6 +2826,8 @@ function WelcomeView({
   initialPrompt,
   initialModel,
   initialVoice,
+  brandKit,
+  onBrandKitChange,
 }: {
   onSend: (prompt: string, images?: File[], model?: string, voice?: string, ratioOverride?: AspectRatio) => void;
   onPrewarm?: () => void;
@@ -2040,6 +2837,8 @@ function WelcomeView({
   initialPrompt?: string;
   initialModel?: string;
   initialVoice?: string;
+  brandKit?: BrandKit | null;
+  onBrandKitChange?: (kit: BrandKit | null) => void;
 }) {
   const [model, setModel] = usePreferredModel();
   const [voice, setVoice] = usePreferredVoice();
@@ -2103,6 +2902,7 @@ function WelcomeView({
               <ModelSelector model={model} onChange={setModel} />
               <VoiceSelector voice={voice} onChange={setVoice} />
               <AspectRatioSelector ratio={aspectRatio} onChange={onAspectRatioChange} />
+              <BrandKitSelector kit={brandKit ?? null} onChange={onBrandKitChange ?? (() => {})} />
             </div>
           }
         />
