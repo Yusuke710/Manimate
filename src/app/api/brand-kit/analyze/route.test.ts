@@ -1,10 +1,10 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 
 const ORIGINAL_ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const TEST_IMAGE_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+KD1dAAAAAElFTkSuQmCC";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -16,14 +16,8 @@ afterEach(() => {
   }
 });
 
-async function buildImageDataUrl(filename: string): Promise<string> {
-  const imagePath = path.join(process.cwd(), filename);
-  const bytes = await readFile(imagePath);
-  return `data:image/png;base64,${bytes.toString("base64")}`;
-}
-
 describe("POST /api/brand-kit/analyze", () => {
-  it("returns normalized brand kit data for the local polarbear screenshot", async () => {
+  it("returns normalized brand kit data with explicit font roles", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
 
     const fetchMock = vi.fn().mockResolvedValue({
@@ -40,7 +34,11 @@ describe("POST /api/brand-kit/analyze", () => {
                 accent: ["#f4a340", "#c154ca", "#ffffff"],
                 background: ["#ffffff", "#f8f8f8", "#ececec"],
               },
-              fonts: ["Inter", "Nunito", "Not A Real Font"],
+              fonts: {
+                heading: "Inter",
+                body: "Nunito",
+                accent: "Not A Real Font",
+              },
             },
           },
         ],
@@ -53,7 +51,7 @@ describe("POST /api/brand-kit/analyze", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        imageDataUrl: await buildImageDataUrl("polarbear_test.png"),
+        imageDataUrl: TEST_IMAGE_DATA_URL,
       }),
     });
 
@@ -67,7 +65,11 @@ describe("POST /api/brand-kit/analyze", () => {
         accent: ["#f4a340", "#c154ca"],
         background: ["#ffffff", "#f8f8f8"],
       },
-      fonts: ["Inter", "Nunito"],
+      fonts: {
+        heading: "Inter",
+        body: "Nunito",
+        accent: null,
+      },
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -86,6 +88,7 @@ describe("POST /api/brand-kit/analyze", () => {
 
     expect(body.tools[0]?.name).toBe("extract_brand_kit");
     expect(body.messages[0]?.content[0]?.source?.media_type).toBe("image/png");
-    expect(body.messages[0]?.content[0]?.source?.data?.length).toBeGreaterThan(1000);
+    expect(body.messages[0]?.content[0]?.source?.data?.length).toBeGreaterThan(10);
+    expect(body.tools[0]?.input_schema?.properties?.fonts?.properties?.heading).toBeTruthy();
   });
 });

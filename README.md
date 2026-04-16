@@ -11,6 +11,7 @@ Run manimate.ai with your own claude code locally.
 - Node.js 22+
 - Claude Code CLI (`claude`) authenticated locally
 - Manim CE (`manim`) and `ffmpeg`
+- optional: `ANTHROPIC_API_KEY` for Brand Kit auto-fill
 - optional: `ELEVENLABS_API_KEY` for voiceover, or paste it in the Studio voice menu
 
 ## Install
@@ -31,11 +32,11 @@ manimate
 npm install
 ```
 
-Optional voiceover:
+Optional API features:
 
 ```bash
 cp .env.example .env.local
-# then set ELEVENLABS_API_KEY in .env.local
+# then set ANTHROPIC_API_KEY and/or ELEVENLABS_API_KEY in .env.local
 ```
 
 You can also open the voice menu in Studio and paste your ElevenLabs API key there. Manimate saves it locally in `~/.manimate/config.json`, so users do not need to edit `.env.local` by hand.

@@ -56,9 +56,23 @@ const BRAND_KIT_TOOL = {
         additionalProperties: false,
       },
       fonts: {
-        type: "array",
-        items: { type: "string" },
-        description: "1-2 font names chosen only from the provided allowed list",
+        type: "object",
+        properties: {
+          heading: {
+            type: ["string", "null"],
+            description: "Best-matching heading or headline font from the allowed list",
+          },
+          body: {
+            type: ["string", "null"],
+            description: "Best-matching body or UI text font from the allowed list",
+          },
+          accent: {
+            type: ["string", "null"],
+            description: "Optional decorative or emphasis font from the allowed list",
+          },
+        },
+        required: ["heading", "body", "accent"],
+        additionalProperties: false,
       },
     },
     required: ["colors", "fonts"],
@@ -70,9 +84,10 @@ function buildPrompt(): string {
   return [
     "Analyze this brand image and extract a compact brand kit.",
     "Return 1-3 primary colors, 0-2 accent colors, and 0-2 background or neutral colors as lowercase hex codes.",
-    "If text is visible, choose 1-2 font names only from this allowed list:",
+    "If text is visible, choose fonts only from this allowed list and map them to heading, body, and accent roles.",
     ALL_BRAND_KIT_FONT_NAMES.join(", "),
-    "If no readable text is visible, return an empty fonts array.",
+    "Heading should match titles or headlines. Body should match paragraph or UI copy. Accent should only be used for decorative or emphasis typography when clearly present.",
+    "Use null for any font role you cannot infer or do not see.",
     "Do not include explanations.",
   ].join("\n");
 }

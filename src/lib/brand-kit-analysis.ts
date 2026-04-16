@@ -1,6 +1,12 @@
+export interface BrandKitAnalysisFonts {
+  heading: string | null;
+  body: string | null;
+  accent: string | null;
+}
+
 export interface BrandKitAnalysisResult {
   colors: { primary: string[]; accent: string[]; background: string[] };
-  fonts: string[];
+  fonts: BrandKitAnalysisFonts;
 }
 
 export const BRAND_KIT_FONT_OPTIONS: { group: string; fonts: string[] }[] = [
@@ -93,6 +99,27 @@ function normalizeFontArray(value: unknown, maxItems: number): string[] {
   return normalized;
 }
 
+function normalizeFontRoles(value: unknown): BrandKitAnalysisFonts {
+  if (Array.isArray(value)) {
+    const legacyFonts = normalizeFontArray(value, 3);
+    return {
+      heading: legacyFonts[0] ?? null,
+      body: legacyFonts[1] ?? null,
+      accent: legacyFonts[2] ?? null,
+    };
+  }
+
+  const record = value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+
+  return {
+    heading: normalizeFont(record.heading),
+    body: normalizeFont(record.body),
+    accent: normalizeFont(record.accent),
+  };
+}
+
 export function normalizeBrandKitAnalysisResult(value: unknown): BrandKitAnalysisResult {
   const record = value && typeof value === "object"
     ? (value as Record<string, unknown>)
@@ -107,6 +134,6 @@ export function normalizeBrandKitAnalysisResult(value: unknown): BrandKitAnalysi
       accent: normalizeHexArray(colors.accent, 2),
       background: normalizeHexArray(colors.background, 2),
     },
-    fonts: normalizeFontArray(record.fonts, 2),
+    fonts: normalizeFontRoles(record.fonts),
   };
 }

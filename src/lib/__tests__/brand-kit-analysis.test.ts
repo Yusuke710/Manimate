@@ -19,7 +19,7 @@ describe("normalizeBrandKitImageMediaType", () => {
 });
 
 describe("normalizeBrandKitAnalysisResult", () => {
-  it("normalizes, deduplicates, and limits colors and fonts", () => {
+  it("normalizes colors and explicit font roles", () => {
     expect(
       normalizeBrandKitAnalysisResult({
         colors: {
@@ -27,7 +27,11 @@ describe("normalizeBrandKitAnalysisResult", () => {
           accent: ["#fff", "#FFF", "#111111", "#222222"],
           background: ["#eeeeee", "#DDDDDD", "#cccccc"],
         },
-        fonts: [" inter ", "ROBOTO MONO", "Unknown Font", "Inter"],
+        fonts: {
+          heading: " inter ",
+          body: "ROBOTO MONO",
+          accent: "Unknown Font",
+        },
       })
     ).toEqual({
       colors: {
@@ -35,14 +39,34 @@ describe("normalizeBrandKitAnalysisResult", () => {
         accent: ["#fff", "#111111"],
         background: ["#eeeeee", "#dddddd"],
       },
-      fonts: ["Inter", "Roboto Mono"],
+      fonts: {
+        heading: "Inter",
+        body: "Roboto Mono",
+        accent: null,
+      },
     });
   });
 
-  it("returns empty arrays for invalid shapes", () => {
+  it("supports the legacy font array shape", () => {
+    expect(
+      normalizeBrandKitAnalysisResult({
+        colors: {},
+        fonts: ["Inter", "Nunito", "Not A Real Font"],
+      })
+    ).toEqual({
+      colors: { primary: [], accent: [], background: [] },
+      fonts: {
+        heading: "Inter",
+        body: "Nunito",
+        accent: null,
+      },
+    });
+  });
+
+  it("returns empty values for invalid shapes", () => {
     expect(normalizeBrandKitAnalysisResult(null)).toEqual({
       colors: { primary: [], accent: [], background: [] },
-      fonts: [],
+      fonts: { heading: null, body: null, accent: null },
     });
 
     expect(
@@ -52,7 +76,7 @@ describe("normalizeBrandKitAnalysisResult", () => {
       })
     ).toEqual({
       colors: { primary: [], accent: [], background: [] },
-      fonts: [],
+      fonts: { heading: null, body: null, accent: null },
     });
   });
 });

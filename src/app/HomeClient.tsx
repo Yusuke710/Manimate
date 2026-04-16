@@ -855,9 +855,9 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
         background: result.colors.background.length > 0 ? result.colors.background : d.colors.background,
       },
       fonts: {
-        heading: result.fonts[0] ?? d.fonts.heading,
-        body: result.fonts[1] ?? result.fonts[0] ?? d.fonts.body,
-        accent: d.fonts.accent,
+        heading: result.fonts.heading ?? d.fonts.heading,
+        body: result.fonts.body ?? result.fonts.heading ?? d.fonts.body,
+        accent: result.fonts.accent ?? d.fonts.accent,
       },
     }));
   };
@@ -1013,7 +1013,7 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
                       <svg style={{ animation: "spin 1s linear infinite" }} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinecap="round">
                         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                       </svg>
-                      <div style={{ fontSize: 12, color: "var(--accent)", fontFamily: "var(--font)", marginTop: 8, fontWeight: 500 }}>Analyzing with Claude…</div>
+                      <div style={{ fontSize: 12, color: "var(--accent)", fontFamily: "var(--font)", marginTop: 8, fontWeight: 500 }}>Analyzing with Manimate…</div>
                     </div>
                   )}
                 </div>
@@ -1057,13 +1057,23 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
                     )}
 
                     {/* Fonts section */}
-                    {autoResult.fonts.length > 0 && (
+                    {Object.values(autoResult.fonts).some(Boolean) && (
                       <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border-main)" }}>
                         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font)", marginBottom: 10 }}>Fonts</div>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {autoResult.fonts.map(f => (
-                            <div key={f} style={{ padding: "5px 12px", borderRadius: 20, border: "1px solid var(--border-main)", fontSize: 12, color: "var(--text-primary)", fontFamily: "var(--font)", background: "var(--bg-main)" }}>{f}</div>
-                          ))}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {([
+                            ["heading", autoResult.fonts.heading],
+                            ["body", autoResult.fonts.body],
+                            ["accent", autoResult.fonts.accent],
+                          ] as const).map(([role, font]) => {
+                            if (!font) return null;
+                            return (
+                              <div key={role} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", width: 70, textTransform: "capitalize", flexShrink: 0 }}>{role}</div>
+                                <div style={{ padding: "5px 12px", borderRadius: 20, border: "1px solid var(--border-main)", fontSize: 12, color: "var(--text-primary)", fontFamily: "var(--font)", background: "var(--bg-main)" }}>{font}</div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
