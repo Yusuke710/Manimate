@@ -2656,13 +2656,15 @@ export function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPen
   }, [addActivity, sessionId, state.isLoading, state.isCancelling]);
 
   const handleRequestHqRender = useCallback(() => {
-    if (state.isLoading) return;
+    if (state.isLoading) return false;
     void handleSend("render in 1080@30fps");
+    return true;
   }, [handleSend, state.isLoading]);
 
   const handleRequest4kRender = useCallback(() => {
-    if (state.isLoading) return;
+    if (state.isLoading) return false;
     void handleSend("render in 4k@30fps");
+    return true;
   }, [handleSend, state.isLoading]);
 
   const hasArtifacts = !!(state.planContent || state.scriptContent || state.videoUrl);
@@ -2691,6 +2693,7 @@ export function ChatPanel({ sessionId, aspectRatio, onSessionAspectRatio, hasPen
       planContent={state.planContent}
       scriptContent={state.scriptContent}
       sessionModel={state.model}
+      isRendering={state.isLoading}
       onRequestHqRender={handleRequestHqRender}
       onRequest4kRender={handleRequest4kRender}
       onPreviewReady={handlePreviewReady}

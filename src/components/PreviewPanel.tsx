@@ -20,12 +20,13 @@ interface PreviewPanelProps {
   planContent?: string | null;
   scriptContent?: string | null;
   sessionModel?: string | null;
-  onRequestHqRender?: () => void;
-  onRequest4kRender?: () => void;
+  isRendering?: boolean;
+  onRequestHqRender?: () => boolean;
+  onRequest4kRender?: () => boolean;
   onPreviewReady?: (previewNonce: number) => void;
 }
 
-export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, onRequestHqRender, onRequest4kRender, onPreviewReady }: PreviewPanelProps) {
+export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, isRendering = false, onRequestHqRender, onRequest4kRender, onPreviewReady }: PreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>("plan");
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
   const [previewReadyKey, setPreviewReadyKey] = useState<string | null>(null);
@@ -117,7 +118,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
             <CodeTab content={scriptContent} />
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
-            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} sessionModel={sessionModel} isVisible={activeTab === "preview"} onRequestHqRender={onRequestHqRender} onRequest4kRender={onRequest4kRender} onCanPlay={() => {
+            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} sessionModel={sessionModel} isVisible={activeTab === "preview"} isRendering={isRendering} onRequestHqRender={onRequestHqRender} onRequest4kRender={onRequest4kRender} onCanPlay={() => {
               if (activePreviewKey && previewReadyKey !== activePreviewKey) {
                 setPreviewReadyKey(activePreviewKey);
                 onPreviewReady?.(videoUpdateNonce);
@@ -615,7 +616,7 @@ function toFilename(sessionId: string | null, model: string | null, suffix: stri
   return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
 }
 
-export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, sessionModel = null, isVisible = true, onRequestHqRender, onRequest4kRender, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; sessionModel?: string | null; isVisible?: boolean; onRequestHqRender?: () => void; onRequest4kRender?: () => void; onCanPlay?: () => void }) {
+export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, sessionModel = null, isVisible = true, isRendering = false, onRequestHqRender, onRequest4kRender, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; sessionModel?: string | null; isVisible?: boolean; isRendering?: boolean; onRequestHqRender?: () => boolean; onRequest4kRender?: () => boolean; onCanPlay?: () => void }) {
   // Compute full video URL first (before any hooks that use it)
   const fullVideoUrl = videoUrl?.startsWith("http") || videoUrl?.startsWith("/") ? videoUrl : null;
 
@@ -1065,8 +1066,13 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadQuality, setDownloadQuality] = useState<'current' | 'hq' | '4k'>('current');
+  const [pendingRenderDownload, setPendingRenderDownload] = useState<{
+    quality: 'hq' | '4k';
+    originPreviewKey: string;
+    renderStarted: boolean;
+  } | null>(null);
 
-  const downloadVideoBlob = async (url: string, filename: string) => {
+  const downloadVideoBlob = useCallback(async (url: string, filename: string) => {
     setIsDownloading(true);
     let blobUrl: string | null = null;
     try {
@@ -1086,20 +1092,61 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
       if (blobUrl) URL.revokeObjectURL(blobUrl);
       setIsDownloading(false);
     }
-  };
+  }, []);
 
   const downloadLockRef = useRef(false);
-  const triggerHqRenderInChat = useCallback(() => {
-    if (!onRequestHqRender) return;
-    onRequestHqRender();
-    setShowDownloadModal(false);
-  }, [onRequestHqRender]);
+  const queueRenderAndDownload = useCallback((quality: 'hq' | '4k') => {
+    const started = quality === '4k'
+      ? onRequest4kRender?.() ?? false
+      : onRequestHqRender?.() ?? false;
+    if (!started) return false;
 
-  const trigger4kRenderInChat = useCallback(() => {
-    if (!onRequest4kRender) return;
-    onRequest4kRender();
+    setPendingRenderDownload({
+      quality,
+      originPreviewKey: requestedVideoLoadKey,
+      renderStarted: false,
+    });
     setShowDownloadModal(false);
-  }, [onRequest4kRender]);
+    return true;
+  }, [onRequest4kRender, onRequestHqRender, requestedVideoLoadKey]);
+
+  useEffect(() => {
+    if (!isRendering) return;
+    setPendingRenderDownload((current) => {
+      if (!current || current.renderStarted) return current;
+      return { ...current, renderStarted: true };
+    });
+  }, [isRendering]);
+
+  useEffect(() => {
+    if (!pendingRenderDownload) return;
+
+    if (requestedVideoLoadKey !== pendingRenderDownload.originPreviewKey && fullVideoUrl) {
+      const suffix = pendingRenderDownload.quality === '4k' ? '-4k' : '-1080p';
+      setPendingRenderDownload(null);
+      void downloadVideoBlob(
+        fullVideoUrl,
+        toFilename(sessionId ?? null, sessionModel, suffix),
+      );
+      return;
+    }
+
+    if (pendingRenderDownload.renderStarted && !isRendering) {
+      setPendingRenderDownload(null);
+    }
+  }, [
+    downloadVideoBlob,
+    fullVideoUrl,
+    isRendering,
+    pendingRenderDownload,
+    requestedVideoLoadKey,
+    sessionId,
+    sessionModel,
+  ]);
+
+  useEffect(() => {
+    setPendingRenderDownload(null);
+  }, [sessionId]);
 
   const handleDownload = async () => {
     if (downloadLockRef.current) return;
@@ -1107,13 +1154,11 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
     try {
       if (downloadQuality === 'current') {
         if (!fullVideoUrl) return;
+        setPendingRenderDownload(null);
         await downloadVideoBlob(fullVideoUrl, toFilename(sessionId ?? null, sessionModel, ""));
         setShowDownloadModal(false);
-      } else if (downloadQuality === '4k') {
-        trigger4kRenderInChat();
       } else {
-        // HQ uses chat intent only.
-        triggerHqRenderInChat();
+        queueRenderAndDownload(downloadQuality);
       }
     } finally {
       downloadLockRef.current = false;
@@ -1664,6 +1709,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
                 className="w-9 h-9 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
                 onClick={() => setShowDownloadModal(true)}
                 title="Download"
+                data-testid="download-trigger"
               >
                 <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
                   <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
@@ -1706,6 +1752,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
                       borderColor: downloadQuality === 'current' ? "var(--accent)" : "rgba(255,255,255,0.1)",
                     }}
                     onClick={() => setDownloadQuality('current')}
+                    data-testid="download-quality-current"
                   >
                     <div className="w-5 h-5 border-2 rounded-full flex items-center justify-center" style={{ borderColor: downloadQuality === 'current' ? "var(--accent)" : "rgba(255,255,255,0.3)" }}>
                       {downloadQuality === 'current' && <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--accent)" }} />}
@@ -1723,12 +1770,14 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
                       borderColor: downloadQuality === 'hq' ? "var(--accent)" : "rgba(255,255,255,0.1)",
                     }}
                     onClick={() => setDownloadQuality('hq')}
+                    data-testid="download-quality-hq"
                   >
                     <div className="w-5 h-5 border-2 rounded-full flex items-center justify-center" style={{ borderColor: downloadQuality === 'hq' ? "var(--accent)" : "rgba(255,255,255,0.3)" }}>
                       {downloadQuality === 'hq' && <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--accent)" }} />}
                     </div>
                     <div className="flex-1">
                       <div className="text-sm font-medium text-white">High quality (1080p, 30fps)</div>
+                      <div className="text-xs text-zinc-400">Starts a new render, then downloads automatically</div>
                     </div>
                   </div>
                   {/* 4K option */}
@@ -1739,15 +1788,24 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
                       borderColor: downloadQuality === '4k' ? "var(--accent)" : "rgba(255,255,255,0.1)",
                     }}
                     onClick={() => setDownloadQuality('4k')}
+                    data-testid="download-quality-4k"
                   >
                     <div className="w-5 h-5 border-2 rounded-full flex items-center justify-center" style={{ borderColor: downloadQuality === '4k' ? "var(--accent)" : "rgba(255,255,255,0.3)" }}>
                       {downloadQuality === '4k' && <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--accent)" }} />}
                     </div>
                     <div className="flex-1">
                       <div className="text-sm font-medium text-white">4K (2160p, 30fps)</div>
+                      <div className="text-xs text-zinc-400">Starts a new render, then downloads automatically</div>
                     </div>
                   </div>
               </div>
+              {downloadQuality !== 'current' && (
+                <div className="mb-4 text-xs text-zinc-400">
+                  {isRendering
+                    ? "Finish the current render before starting another."
+                    : "The render will run in chat, and the new file will download automatically when ready."}
+                </div>
+              )}
               <div className="flex gap-3 justify-end">
                 <button
                   className="px-5 py-2.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
@@ -1761,13 +1819,16 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
                   onMouseEnter={(e) => { if (!isDownloading) e.currentTarget.style.background = "var(--accent-hover)"; }}
                   onMouseLeave={(e) => e.currentTarget.style.background = "var(--accent)"}
                   onClick={handleDownload}
-                  disabled={isDownloading}
+                  disabled={isDownloading || (downloadQuality !== 'current' && isRendering)}
+                  data-testid="download-confirm"
                 >
                   {isDownloading
                     ? "Downloading..."
                     : downloadQuality === 'current'
                       ? "Download"
-                      : "Render in Chat"}
+                      : isRendering
+                        ? "Render in progress"
+                        : "Render & download"}
                 </button>
               </div>
             </>
