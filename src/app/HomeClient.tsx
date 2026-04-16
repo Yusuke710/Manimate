@@ -34,6 +34,13 @@ import {
   shouldAcceptPolledPreviewUpdate,
   shouldShowBrowserPreviewBadge,
 } from "@/lib/preview-load";
+import {
+  ALL_BRAND_KIT_FONT_NAMES,
+  BRAND_KIT_FONT_OPTIONS,
+  isSupportedBrandKitImageType,
+  SUPPORTED_BRAND_KIT_IMAGE_TYPES,
+  type BrandKitAnalysisResult,
+} from "@/lib/brand-kit-analysis";
 import type { CloudAuthStatus } from "@/lib/studio-cloud-auth";
 import { useStudioCloudAuth } from "@/lib/useStudioCloudAuth";
 
@@ -338,19 +345,8 @@ function buildBrandGuideline(kit: BrandKit | null): string {
 
 type BKTab = "auto" | "colors" | "fonts" | "logos" | "voice";
 
-type BrandKitAnalysisResult = {
-  colors: { primary: string[]; accent: string[]; background: string[] };
-  fonts: string[];
-};
-
-const FONT_OPTIONS: { group: string; fonts: string[] }[] = [
-  { group: "Sans-serif", fonts: ["Inter", "DM Sans", "Poppins", "Roboto", "Open Sans", "Lato", "Montserrat", "Nunito", "Raleway", "Outfit", "Plus Jakarta Sans", "Space Grotesk", "Work Sans", "Barlow", "Josefin Sans", "Quicksand", "Karla", "Mulish", "Rubik", "Urbanist", "Jost", "Be Vietnam Pro"] },
-  { group: "Serif", fonts: ["Playfair Display", "DM Serif Display", "Merriweather", "Lora", "Crimson Text", "EB Garamond", "Cormorant Garamond", "Libre Baskerville", "PT Serif", "Spectral", "Fraunces", "Bodoni Moda", "Cardo"] },
-  { group: "Display", fonts: ["Syne", "Lexend", "Manrope", "Figtree", "Bebas Neue", "Righteous", "Comfortaa", "Fredoka One", "Exo 2", "Orbitron", "Rajdhani", "Russo One", "Alfa Slab One"] },
-  { group: "Handwriting", fonts: ["Dancing Script", "Caveat", "Satisfy", "Great Vibes", "Architects Daughter", "Kalam", "Patrick Hand", "Sacramento", "Permanent Marker"] },
-  { group: "Monospace", fonts: ["Roboto Mono", "JetBrains Mono", "Fira Code", "Source Code Pro", "IBM Plex Mono", "Space Mono", "Courier Prime", "Inconsolata", "DM Mono"] },
-];
-const ALL_FONT_NAMES = FONT_OPTIONS.flatMap(g => g.fonts);
+const FONT_OPTIONS = BRAND_KIT_FONT_OPTIONS;
+const ALL_FONT_NAMES = ALL_BRAND_KIT_FONT_NAMES;
 
 // ─── Color-space utilities ───────────────────────────────────────────────────
 function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
@@ -833,7 +829,12 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
   };
 
   const handleAutoFile = (file: File) => {
-    if (!file.type.startsWith("image/")) return;
+    if (!isSupportedBrandKitImageType(file.type)) {
+      setAutoImagePreview(null);
+      setAutoResult(null);
+      setAutoError("Auto-fill supports PNG, JPG, GIF, or WebP images.");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = ev => {
       const dataUrl = ev.target?.result as string;
@@ -969,21 +970,6 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
               </button>
             ))}
 
-            <div style={{ marginTop: "auto", paddingTop: 12 }}>
-              {hasContent ? (
-                <div style={{ background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: 10, padding: "11px 12px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)" }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--accent)", fontFamily: "var(--font)" }}>Brand Kit Active</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", lineHeight: 1.4 }}>Brand guidelines applied to all prompts</div>
-                </div>
-              ) : (
-                <div style={{ background: "var(--bg-hover)", borderRadius: 10, padding: "11px 12px" }}>
-                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", lineHeight: 1.4 }}>Fill in any section to activate brand guidelines</div>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Right content */}
@@ -994,11 +980,11 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
               <div>
                 {sectionLabel("Auto-fill from image")}
                 <div style={{ fontSize: 13, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginBottom: 20, lineHeight: 1.5 }}>
-                  Upload any brand image (product shot or screenshot) and Manimate will extract your colors and suggest matching fonts.
+                  Upload a brand image and Manimate will extract your colors and suggest matching fonts.
                 </div>
 
                 {/* Upload zone */}
-                <input ref={autoInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleAutoFile(f); e.target.value = ""; }} />
+                <input ref={autoInputRef} type="file" accept={SUPPORTED_BRAND_KIT_IMAGE_TYPES.join(",")} style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleAutoFile(f); e.target.value = ""; }} />
                 <div
                   onClick={() => !autoLoading && autoInputRef.current?.click()}
                   onDragOver={e => { e.preventDefault(); setAutoDragOver(true); }}
@@ -1019,7 +1005,7 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
                     <>
                       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(124,58,237,0.5)" strokeWidth={1.5} strokeLinecap="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"/></svg>
                       <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", fontFamily: "var(--font)", marginTop: 10 }}>Upload brand image</div>
-                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginTop: 3 }}>PNG, JPG, SVG — logo, screenshot, or any brand asset</div>
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginTop: 3 }}>PNG, JPG, GIF, or WebP — logo, screenshot, or product shot</div>
                     </>
                   )}
                   {autoLoading && (
