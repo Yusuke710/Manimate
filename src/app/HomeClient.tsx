@@ -999,29 +999,35 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
   );
 }
 
-function BrandKitSelector({ kit, onChange, disabled }: { kit: BrandKit | null; onChange: (kit: BrandKit | null) => void; disabled?: boolean }) {
+function BrandKitSelector({ kit, onChange, enabled, onToggleEnabled, disabled }: { kit: BrandKit | null; onChange: (kit: BrandKit | null) => void; enabled: boolean; onToggleEnabled: (v: boolean) => void; disabled?: boolean }) {
   const [modalOpen, setModalOpen] = useState(false);
-  const isActive = !!kit && buildBrandGuideline(kit) !== "";
+  const hasKit = !!kit && buildBrandGuideline(kit) !== "";
+  const isActive = hasKit && enabled;
 
   return (
     <>
-      <button
-        onClick={() => { if (!disabled) setModalOpen(true); }}
-        style={{
-          display: "flex", alignItems: "center", gap: 5,
-          background: isActive ? "rgba(124,58,237,0.08)" : "var(--bg-white)",
-          border: isActive ? "1px solid var(--accent)" : "1px solid var(--border-main)",
-          borderRadius: 20, padding: "4px 10px",
-          cursor: disabled ? "default" : "pointer",
-          fontFamily: "var(--font)", transition: "border-color 0.12s, background 0.12s",
-        }}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={isActive ? "var(--accent)" : "var(--text-tertiary)"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
-        </svg>
-        <span style={{ fontSize: 13, fontWeight: 500, color: isActive ? "var(--accent)" : "var(--text-primary)" }}>Brand Kit</span>
-        {isActive && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", marginLeft: 1 }} />}
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 0, background: isActive ? "rgba(124,58,237,0.08)" : "var(--bg-white)", border: isActive ? "1px solid var(--accent)" : "1px solid var(--border-main)", borderRadius: 20, transition: "border-color 0.12s, background 0.12s", overflow: "hidden" }}>
+        <button
+          onClick={() => { if (!disabled) setModalOpen(true); }}
+          style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", cursor: disabled ? "default" : "pointer", background: "none", border: "none", fontFamily: "var(--font)" }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={isActive ? "var(--accent)" : "var(--text-tertiary)"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+          </svg>
+          <span style={{ fontSize: 13, fontWeight: 500, color: isActive ? "var(--accent)" : "var(--text-primary)" }}>Brand Kit</span>
+        </button>
+        {hasKit && (
+          <button
+            onClick={() => onToggleEnabled(!enabled)}
+            title={enabled ? "Disable brand kit" : "Enable brand kit"}
+            style={{ display: "flex", alignItems: "center", padding: "4px 10px 4px 4px", background: "none", border: "none", cursor: "pointer" }}
+          >
+            <div style={{ width: 28, height: 16, borderRadius: 8, background: enabled ? "var(--accent)" : "var(--border-main)", position: "relative", transition: "background 0.15s" }}>
+              <div style={{ position: "absolute", top: 2, left: enabled ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "#fff", transition: "left 0.15s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+            </div>
+          </button>
+        )}
+      </div>
       {modalOpen && <BrandKitModal kit={kit} onSave={onChange} onClose={() => setModalOpen(false)} />}
     </>
   );
@@ -2528,7 +2534,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [aspectRatio, setAspectRatio] = usePreferredAspectRatio();
-  const [brandKit, setBrandKit] = useBrandKit();
+  const [brandKit, setBrandKit, brandKitEnabled, setBrandKitEnabled] = useBrandKit();
   const {
     cloudAuthStatus,
     cloudAuthLoading,
@@ -2594,7 +2600,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     if (!trimmedPrompt && (!images || images.length === 0)) return;
     if (sessionCreationRef.current) return; // prevent double-submit
 
-    const promptWithBrandGuideline = `${trimmedPrompt}${buildBrandGuideline(brandKit)}`.trim();
+    const promptWithBrandGuideline = `${trimmedPrompt}${brandKitEnabled ? buildBrandGuideline(brandKit) : ""}`.trim();
     const id = crypto.randomUUID();
     pendingWelcomePayloadRef.current.set(id, { prompt: promptWithBrandGuideline, images });
 
@@ -2794,6 +2800,8 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
             initialVoice={launchIntent?.voiceId}
             brandKit={brandKit}
             onBrandKitChange={setBrandKit}
+            brandKitEnabled={brandKitEnabled}
+            onToggleBrandKitEnabled={setBrandKitEnabled}
           />
         ) : (
           <ChatPanel
@@ -2828,6 +2836,8 @@ function WelcomeView({
   initialVoice,
   brandKit,
   onBrandKitChange,
+  brandKitEnabled = true,
+  onToggleBrandKitEnabled,
 }: {
   onSend: (prompt: string, images?: File[], model?: string, voice?: string, ratioOverride?: AspectRatio) => void;
   onPrewarm?: () => void;
@@ -2839,6 +2849,8 @@ function WelcomeView({
   initialVoice?: string;
   brandKit?: BrandKit | null;
   onBrandKitChange?: (kit: BrandKit | null) => void;
+  brandKitEnabled?: boolean;
+  onToggleBrandKitEnabled?: (v: boolean) => void;
 }) {
   const [model, setModel] = usePreferredModel();
   const [voice, setVoice] = usePreferredVoice();
@@ -2902,7 +2914,7 @@ function WelcomeView({
               <ModelSelector model={model} onChange={setModel} />
               <VoiceSelector voice={voice} onChange={setVoice} />
               <AspectRatioSelector ratio={aspectRatio} onChange={onAspectRatioChange} />
-              <BrandKitSelector kit={brandKit ?? null} onChange={onBrandKitChange ?? (() => {})} />
+              <BrandKitSelector kit={brandKit ?? null} onChange={onBrandKitChange ?? (() => {})} enabled={brandKitEnabled} onToggleEnabled={onToggleBrandKitEnabled ?? (() => {})} />
             </div>
           }
         />
