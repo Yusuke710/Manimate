@@ -258,7 +258,7 @@ function emptyBrandKit(): BrandKit {
   return {
     logos: { primary: null },
     colors: { primary: [], accent: [], background: [] },
-    fonts: { heading: "Inter", body: "Lato", accent: "Roboto Mono" },
+    fonts: { heading: "", body: "", accent: "" },
     voice: "", styleNotes: "", styleTags: [],
   };
 }
@@ -336,7 +336,12 @@ function buildBrandGuideline(kit: BrandKit | null): string {
   return `\n\nBrand Guideline: ${parts.join(". ")}.`;
 }
 
-type BKTab = "logos" | "colors" | "fonts" | "voice";
+type BKTab = "auto" | "colors" | "fonts" | "logos" | "voice";
+
+type BrandKitAnalysisResult = {
+  colors: { primary: string[]; accent: string[]; background: string[] };
+  fonts: string[];
+};
 
 const FONT_OPTIONS: { group: string; fonts: string[] }[] = [
   { group: "Sans-serif", fonts: ["Inter", "DM Sans", "Poppins", "Roboto", "Open Sans", "Lato", "Montserrat", "Nunito", "Raleway", "Outfit", "Plus Jakarta Sans", "Space Grotesk", "Work Sans", "Barlow", "Josefin Sans", "Quicksand", "Karla", "Mulish", "Rubik", "Urbanist", "Jost", "Be Vietnam Pro"] },
@@ -367,6 +372,58 @@ function hexToHsv(hex: string): [number, number, number] {
   return [h, max ? d / max * 100 : 0, max * 100];
 }
 
+// ─── Canvas-based dominant color extraction ───────────────────────────────────
+function extractDominantColors(dataUrl: string, count = 3): Promise<string[]> {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const SIZE = 80; // downsample to 80×80 for speed
+      const canvas = document.createElement("canvas");
+      canvas.width = SIZE; canvas.height = SIZE;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve([]); return; }
+      ctx.drawImage(img, 0, 0, SIZE, SIZE);
+      const { data } = ctx.getImageData(0, 0, SIZE, SIZE);
+
+      // Collect non-transparent, non-near-white, non-near-black pixels
+      const pixels: [number, number, number][] = [];
+      for (let i = 0; i < data.length; i += 4) {
+        const [r, g, b, a] = [data[i], data[i+1], data[i+2], data[i+3]];
+        if (a < 128) continue; // transparent
+        const brightness = (r + g + b) / 3;
+        if (brightness > 240) continue; // near-white
+        if (brightness < 15) continue; // near-black
+        pixels.push([r, g, b]);
+      }
+      if (pixels.length === 0) { resolve([]); return; }
+
+      // Simple k-means with k=count, 10 iterations
+      let centers: [number, number, number][] = [];
+      for (let k = 0; k < count; k++) {
+        centers.push(pixels[Math.floor(pixels.length * k / count)]);
+      }
+      for (let iter = 0; iter < 10; iter++) {
+        const sums: [number, number, number, number][] = Array.from({ length: count }, () => [0, 0, 0, 0]);
+        for (const [r, g, b] of pixels) {
+          let best = 0, bestDist = Infinity;
+          for (let k = 0; k < count; k++) {
+            const dr = r - centers[k][0], dg = g - centers[k][1], db = b - centers[k][2];
+            const d = dr*dr + dg*dg + db*db;
+            if (d < bestDist) { bestDist = d; best = k; }
+          }
+          sums[best][0] += r; sums[best][1] += g; sums[best][2] += b; sums[best][3]++;
+        }
+        for (let k = 0; k < count; k++) {
+          if (sums[k][3] > 0) centers[k] = [sums[k][0]/sums[k][3], sums[k][1]/sums[k][3], sums[k][2]/sums[k][3]];
+        }
+      }
+      resolve(centers.map(([r, g, b]) => rgbToHex(Math.round(r), Math.round(g), Math.round(b))));
+    };
+    img.onerror = () => resolve([]);
+    img.src = dataUrl;
+  });
+}
+
 // ─── Canva-style inline color picker ─────────────────────────────────────────
 function BrandColorPicker({ hex, onChange, onDelete, onClose }: {
   hex: string; onChange: (h: string) => void; onDelete: () => void; onClose: () => void;
@@ -377,6 +434,7 @@ function BrandColorPicker({ hex, onChange, onDelete, onClose }: {
   const [hexText, setHexText] = useState(init.replace("#", ""));
   const gradRef = useRef<HTMLDivElement>(null);
   const hueRef  = useRef<HTMLDivElement>(null);
+  const hexInputRef = useRef<HTMLInputElement>(null);
 
   const setHsv = (next: [number, number, number]) => { hsvRef.current = next; setHsvState(next); };
 
@@ -446,10 +504,11 @@ function BrandColorPicker({ hex, onChange, onDelete, onClose }: {
             <path d="M9 6V4h6v2"/>
           </svg>
         </button>
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, border: "1px solid var(--border-main)", borderRadius: 6, padding: "0 10px", height: 36 }}>
+        <div onClick={() => hexInputRef.current?.focus()} style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, border: "1px solid var(--border-main)", borderRadius: 6, padding: "0 10px", height: 36, cursor: "text" }}>
           <div style={{ width: 20, height: 20, borderRadius: "50%", background: `#${hexText || "aaaaaa"}`, border: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }} />
           <span style={{ fontFamily: "monospace", fontSize: 13, color: "var(--text-tertiary)", userSelect: "none" }}>#</span>
           <input
+            ref={hexInputRef}
             value={hexText.toUpperCase()}
             maxLength={6}
             placeholder="e.g. 36B19E"
@@ -458,7 +517,7 @@ function BrandColorPicker({ hex, onChange, onDelete, onClose }: {
               setHexText(raw);
               if (raw.length === 6) { const newHsv = hexToHsv("#" + raw); setHsv(newHsv); onChange("#" + raw.toUpperCase()); }
             }}
-            style={{ border: "none", outline: "none", background: "transparent", fontFamily: "monospace", fontSize: 13, color: "var(--text-primary)", width: 68, letterSpacing: "0.04em" }}
+            style={{ border: "none", outline: "none", background: "transparent", fontFamily: "monospace", fontSize: 13, color: "var(--text-primary)", flex: 1, minWidth: 0, letterSpacing: "0.04em" }}
           />
         </div>
       </div>
@@ -481,7 +540,7 @@ function ColorsTab({ draft, setDraft }: { draft: BrandKit; setDraft: React.Dispa
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {groups.map(({ key, label, hint }) => {
         const isPickerOpen = activePicker?.group === key;
         return (
@@ -490,7 +549,7 @@ function ColorsTab({ draft, setDraft }: { draft: BrandKit; setDraft: React.Dispa
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font)" }}>{label}</div>
               <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginTop: 3 }}>{hint}</div>
             </div>
-            <div style={{ height: 1, background: "var(--border-main)", margin: "12px 0 20px" }} />
+            <div style={{ height: 1, background: "var(--border-main)", margin: "10px 0 14px" }} />
 
             {/* Swatches row */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "flex-start" }}>
@@ -541,7 +600,7 @@ function ColorsTab({ draft, setDraft }: { draft: BrandKit; setDraft: React.Dispa
 
             {/* Inline Canva-style picker */}
             {isPickerOpen && activePicker !== null && draft.colors[key][activePicker.idx] !== undefined && (
-              <BrandColorPicker
+              <div style={{ maxWidth: "50%" }}><BrandColorPicker
                 key={`${key}-${activePicker.idx}`}
                 hex={draft.colors[key][activePicker.idx]}
                 onChange={hex => {
@@ -550,7 +609,7 @@ function ColorsTab({ draft, setDraft }: { draft: BrandKit; setDraft: React.Dispa
                 }}
                 onDelete={() => { removeColor(activePicker.group, activePicker.idx); setActivePicker(null); }}
                 onClose={() => setActivePicker(null)}
-              />
+              /></div>
             )}
 
           </div>
@@ -710,12 +769,21 @@ function FontsTab({ draft, setDraft }: { draft: BrandKit; setDraft: React.Dispat
 }
 
 function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave: (kit: BrandKit | null) => void; onClose: () => void }) {
-  const [tab, setTab] = useState<BKTab>("logos");
+  const [tab, setTab] = useState<BKTab>("auto");
   const [draft, setDraft] = useState<BrandKit>(() => kit ? deepCloneBrandKit(kit) : emptyBrandKit());
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const [dragOver, setDragOver] = useState<string | null>(null);
   const primaryRef = useRef<HTMLInputElement>(null);
+  const [extractedColors, setExtractedColors] = useState<string[] | null>(null);
+
+  // Auto-fill state
+  const autoInputRef = useRef<HTMLInputElement>(null);
+  const [autoDragOver, setAutoDragOver] = useState(false);
+  const [autoLoading, setAutoLoading] = useState(false);
+  const [autoResult, setAutoResult] = useState<BrandKitAnalysisResult | null>(null);
+  const [autoError, setAutoError] = useState<string | null>(null);
+  const [autoImagePreview, setAutoImagePreview] = useState<string | null>(null);
 
   const preview = buildBrandGuideline(draft).replace("\n\n", "");
   const hasContent = buildBrandGuideline(draft) !== "";
@@ -724,7 +792,11 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
     if (!file.type.startsWith("image/")) return;
     const reader = new FileReader();
     reader.onload = ev => {
-      setDraft(d => ({ ...d, logos: { ...d.logos, [logoType]: { name: file.name, dataUrl: ev.target?.result as string } } }));
+      const dataUrl = ev.target?.result as string;
+      setDraft(d => ({ ...d, logos: { ...d.logos, [logoType]: { name: file.name, dataUrl } } }));
+      extractDominantColors(dataUrl, 3).then(colors => {
+        if (colors.length > 0) setExtractedColors(colors);
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -740,6 +812,55 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
     },
   });
 
+  const analyzeImage = async (dataUrl: string) => {
+    setAutoLoading(true);
+    setAutoError(null);
+    setAutoResult(null);
+    try {
+      const res = await fetch("/api/brand-kit/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageDataUrl: dataUrl }),
+      });
+      const json = await res.json() as BrandKitAnalysisResult & { error?: string };
+      if (!res.ok || json.error) { setAutoError(json.error ?? "Analysis failed."); }
+      else { setAutoResult(json); }
+    } catch (e) {
+      setAutoError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setAutoLoading(false);
+    }
+  };
+
+  const handleAutoFile = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string;
+      setAutoImagePreview(dataUrl);
+      setAutoResult(null);
+      setAutoError(null);
+      analyzeImage(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const applyAutoResult = (result: BrandKitAnalysisResult) => {
+    setDraft(d => ({
+      ...d,
+      colors: {
+        primary: result.colors.primary.length > 0 ? result.colors.primary : d.colors.primary,
+        accent: result.colors.accent.length > 0 ? result.colors.accent : d.colors.accent,
+        background: result.colors.background.length > 0 ? result.colors.background : d.colors.background,
+      },
+      fonts: {
+        heading: result.fonts[0] ?? d.fonts.heading,
+        body: result.fonts[1] ?? result.fonts[0] ?? d.fonts.body,
+        accent: d.fonts.accent,
+      },
+    }));
+  };
+
   const sectionLabel = (text: string) => (
     <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12, fontFamily: "var(--font)" }}>{text}</div>
   );
@@ -754,11 +875,12 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
     }} />
   );
 
+  const autoTab = {
+    id: "auto" as BKTab, label: "Auto-fill",
+    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"/></svg>,
+  };
+
   const tabs: { id: BKTab; label: string; icon: React.ReactElement }[] = [
-    {
-      id: "logos", label: "Logos",
-      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
-    },
     {
       id: "colors", label: "Colors",
       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>,
@@ -766,6 +888,10 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
     {
       id: "fonts", label: "Fonts",
       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>,
+    },
+    {
+      id: "logos", label: "Logos",
+      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
     },
     {
       id: "voice", label: "Style",
@@ -783,7 +909,7 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
         {/* ── Header ── */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 26px", borderBottom: "1px solid var(--border-main)", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #7C3AED, #a855f7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #2BB5A0, #3dd9c2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.8} strokeLinecap="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
             </div>
             <div>
@@ -801,6 +927,28 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
 
           {/* Left sidebar */}
           <div style={{ width: 192, borderRight: "1px solid var(--border-main)", padding: "16px 10px", display: "flex", flexDirection: "column", gap: 2, flexShrink: 0, background: "var(--bg-main)" }}>
+            {/* Auto-fill tab — prominent at top */}
+            <button
+              onClick={() => setTab("auto")}
+              style={{
+                display: "flex", alignItems: "center", gap: 9,
+                padding: "9px 11px", borderRadius: 9, border: "none",
+                background: tab === "auto"
+                  ? "linear-gradient(135deg, rgba(124,58,237,0.12), rgba(168,85,247,0.12))"
+                  : "rgba(124,58,237,0.06)",
+                color: tab === "auto" ? "var(--accent)" : "rgba(124,58,237,0.7)",
+                fontWeight: tab === "auto" ? 700 : 500, fontSize: 13,
+                cursor: "pointer", fontFamily: "var(--font)", textAlign: "left", width: "100%",
+                boxShadow: tab === "auto" ? "0 1px 4px rgba(124,58,237,0.15)" : "none",
+                outline: tab === "auto" ? "1px solid rgba(124,58,237,0.3)" : "1px solid transparent",
+                transition: "all 0.1s",
+                marginBottom: 10,
+              }}
+            >
+              {autoTab.icon}
+              {autoTab.label}
+            </button>
+
             {tabs.map(t => (
               <button
                 key={t.id}
@@ -840,6 +988,119 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
 
           {/* Right content */}
           <div style={{ flex: 1, overflow: "auto", padding: "28px 32px" }}>
+
+            {/* ─ Auto-fill tab ─ */}
+            {tab === "auto" && (
+              <div>
+                {sectionLabel("Auto-fill from image")}
+                <div style={{ fontSize: 13, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginBottom: 20, lineHeight: 1.5 }}>
+                  Upload any brand image (product shot or screenshot) and Manimate will extract your colors and suggest matching fonts.
+                </div>
+
+                {/* Upload zone */}
+                <input ref={autoInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleAutoFile(f); e.target.value = ""; }} />
+                <div
+                  onClick={() => !autoLoading && autoInputRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); setAutoDragOver(true); }}
+                  onDragLeave={() => setAutoDragOver(false)}
+                  onDrop={e => { e.preventDefault(); setAutoDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleAutoFile(f); }}
+                  style={{
+                    border: `2px dashed ${autoDragOver ? "var(--accent)" : "var(--border-main)"}`,
+                    borderRadius: 14, height: autoImagePreview ? 120 : 160,
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    cursor: autoLoading ? "default" : "pointer", position: "relative",
+                    background: autoDragOver ? "rgba(124,58,237,0.04)" : autoImagePreview ? "var(--bg-main)" : "var(--bg-main)",
+                    transition: "all 0.15s", overflow: "hidden", marginBottom: 20,
+                  }}
+                >
+                  {autoImagePreview ? (
+                    <img src={autoImagePreview} alt="uploaded" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", opacity: autoLoading ? 0.4 : 1, transition: "opacity 0.2s" }} />
+                  ) : (
+                    <>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(124,58,237,0.5)" strokeWidth={1.5} strokeLinecap="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"/></svg>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", fontFamily: "var(--font)", marginTop: 10 }}>Upload brand image</div>
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", marginTop: 3 }}>PNG, JPG, SVG — logo, screenshot, or any brand asset</div>
+                    </>
+                  )}
+                  {autoLoading && (
+                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.85)" }}>
+                      <svg style={{ animation: "spin 1s linear infinite" }} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinecap="round">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                      </svg>
+                      <div style={{ fontSize: 12, color: "var(--accent)", fontFamily: "var(--font)", marginTop: 8, fontWeight: 500 }}>Analyzing with Claude…</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Error */}
+                {autoError && (
+                  <div style={{ padding: "12px 14px", borderRadius: 10, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)", marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, color: "#dc2626", fontFamily: "var(--font)", lineHeight: 1.4 }}>
+                      {autoError.includes("ANTHROPIC_API_KEY")
+                        ? "Set ANTHROPIC_API_KEY in your .env.local to use Auto-fill."
+                        : autoError}
+                    </div>
+                  </div>
+                )}
+
+                {/* Results */}
+                {autoResult && !autoLoading && (
+                  <div style={{ border: "1px solid var(--border-main)", borderRadius: 14, overflow: "hidden" }}>
+                    {/* Colors section */}
+                    {(autoResult.colors.primary.length + autoResult.colors.accent.length + autoResult.colors.background.length) > 0 && (
+                      <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border-main)" }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font)", marginBottom: 12 }}>Colors</div>
+                        {(["primary", "accent", "background"] as const).map(group => {
+                          const hexes = autoResult.colors[group];
+                          if (hexes.length === 0) return null;
+                          return (
+                            <div key={group} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                              <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)", width: 70, textTransform: "capitalize", flexShrink: 0 }}>{group}</div>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                {hexes.map(hex => (
+                                  <div key={hex} title={hex} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                                    <div style={{ width: 28, height: 28, borderRadius: 7, background: hex, border: "1px solid rgba(0,0,0,0.1)" }} />
+                                    <div style={{ fontSize: 9, color: "var(--text-tertiary)", fontFamily: "monospace" }}>{hex}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Fonts section */}
+                    {autoResult.fonts.length > 0 && (
+                      <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border-main)" }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font)", marginBottom: 10 }}>Fonts</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {autoResult.fonts.map(f => (
+                            <div key={f} style={{ padding: "5px 12px", borderRadius: 20, border: "1px solid var(--border-main)", fontSize: 12, color: "var(--text-primary)", fontFamily: "var(--font)", background: "var(--bg-main)" }}>{f}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Apply button */}
+                    <div style={{ padding: "14px 18px", display: "flex", gap: 10, alignItems: "center" }}>
+                      <button
+                        onClick={() => { applyAutoResult(autoResult); setTab("colors"); }}
+                        style={{ padding: "8px 18px", borderRadius: 9, background: "var(--accent)", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#fff", fontFamily: "var(--font)" }}
+                      >
+                        Apply all
+                      </button>
+                      <button
+                        onClick={() => { setAutoResult(null); setAutoImagePreview(null); setAutoError(null); }}
+                        style={{ padding: "8px 14px", borderRadius: 9, background: "transparent", border: "1px solid var(--border-main)", cursor: "pointer", fontSize: 12, color: "var(--text-tertiary)", fontFamily: "var(--font)" }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ─ Logos tab ─ */}
             {tab === "logos" && (
@@ -887,6 +1148,41 @@ function BrandKitModal({ kit, onSave, onClose }: { kit: BrandKit | null; onSave:
                     {draft.logos.primary && <div style={{ fontSize: 11, color: "var(--accent)", fontFamily: "var(--font)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{draft.logos.primary.name}</div>}
                   </div>
                 </div>
+
+                {/* Extracted colors banner */}
+                {extractedColors && extractedColors.length > 0 && (
+                  <div style={{ marginTop: 24, padding: "14px 16px", borderRadius: 12, border: "1px solid var(--border-main)", background: "var(--bg-main)", display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", fontFamily: "var(--font)", marginBottom: 8 }}>Colors extracted from logo</div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {extractedColors.map(hex => (
+                          <div key={hex} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                            <div style={{ width: 32, height: 32, borderRadius: 8, background: hex, border: "1px solid rgba(0,0,0,0.1)" }} />
+                            <div style={{ fontSize: 10, color: "var(--text-tertiary)", fontFamily: "monospace" }}>{hex.toLowerCase()}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <button
+                        onClick={() => {
+                          setDraft(d => ({ ...d, colors: { ...d.colors, primary: extractedColors } }));
+                          setExtractedColors(null);
+                          setTab("colors");
+                        }}
+                        style={{ padding: "7px 14px", borderRadius: 8, background: "var(--accent)", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#fff", fontFamily: "var(--font)", whiteSpace: "nowrap" }}
+                      >
+                        Apply colors
+                      </button>
+                      <button
+                        onClick={() => setExtractedColors(null)}
+                        style={{ padding: "5px 14px", borderRadius: 8, background: "transparent", border: "1px solid var(--border-main)", cursor: "pointer", fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font)" }}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
