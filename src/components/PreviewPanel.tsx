@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
+import ShareProjectButton from "@/components/ShareProjectButton";
 
 import {
   buildPreviewAssetLoadKey,
@@ -107,6 +108,8 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
 
           {/* Spacer */}
           <div style={{ flex: 1 }} />
+
+          <ShareProjectButton sessionId={sessionId} />
         </div>
 
         {/* Tab content - all tabs rendered but hidden for preloading */}
