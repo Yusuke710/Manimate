@@ -16,7 +16,6 @@ import {
   createLocalSession,
   createLocalRun,
   getLocalSession,
-  hasLocalMessages,
   insertLocalActivityEvent,
   insertLocalMessage,
   listLocalMessages,
@@ -24,6 +23,7 @@ import {
   updateLocalSession,
 } from "@/lib/local/db";
 import { queueLocalCloudSync } from "@/lib/local/cloud-sync";
+import { isSessionFeedbackMetadata } from "@/lib/local/feedback";
 import {
   beginLocalRunStart,
   endLocalRunStart,
@@ -302,7 +302,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           updateLocalSession(sessionId, { title: truncated });
         }
       }
-      const isFirstTurn = !hasLocalMessages(sessionId);
+      const conversationMessages = listLocalMessages(sessionId).filter(
+        (message) => !isSessionFeedbackMetadata(message.metadata)
+      );
+      const isFirstTurn = conversationMessages.length === 0;
 
       const userMessageId = insertLocalMessage({
         session_id: sessionId,
@@ -362,7 +365,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       let promptBody = rawPrompt;
       if (!resumeSessionId) {
         const recovered = buildConversationRecoveryContext({
-          messages: listLocalMessages(sessionId),
+          messages: conversationMessages,
           projectPath: projectDir,
           userId: "local-user",
           sessionId,

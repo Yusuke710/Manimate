@@ -11,6 +11,7 @@ type JsonLike = Record<string, unknown> | Array<unknown> | string | number | boo
 
 export interface LocalSession {
   id: string;
+  session_number: number;
   title: string;
   status: string;
   sandbox_id: string | null;
@@ -115,6 +116,7 @@ function getTableColumns(database: DatabaseSync, tableName: string): Set<string>
 function ensureSessionColumns(database: DatabaseSync): void {
   const existing = getTableColumns(database, "sessions");
   const required: Array<{ name: string; ddl: string }> = [
+    { name: "session_number", ddl: "session_number INTEGER" },
     { name: "voice_id", ddl: "voice_id TEXT" },
     { name: "chapters", ddl: "chapters TEXT" },
     {
@@ -137,6 +139,42 @@ function ensureSessionColumns(database: DatabaseSync): void {
   }
 }
 
+function backfillSessionNumbers(database: DatabaseSync): void {
+  const missingRows = database
+    .prepare(`
+      SELECT id
+      FROM sessions
+      WHERE session_number IS NULL
+      ORDER BY created_at ASC, id ASC
+    `)
+    .all() as Array<{ id?: unknown }>;
+
+  if (missingRows.length === 0) return;
+
+  const row = database
+    .prepare(`
+      SELECT COALESCE(MAX(session_number), 0) AS max_session_number
+      FROM sessions
+      WHERE session_number IS NOT NULL
+    `)
+    .get() as { max_session_number?: unknown } | undefined;
+
+  let nextSessionNumber =
+    typeof row?.max_session_number === "number" ? row.max_session_number + 1 : 1;
+
+  const updateStatement = database.prepare(`
+    UPDATE sessions
+    SET session_number = ?
+    WHERE id = ?
+  `);
+
+  for (const missingRow of missingRows) {
+    if (typeof missingRow.id !== "string" || missingRow.id.length === 0) continue;
+    updateStatement.run(nextSessionNumber, missingRow.id);
+    nextSessionNumber += 1;
+  }
+}
+
 function parseJson<T>(raw: unknown): T | null {
   if (typeof raw !== "string" || raw.length === 0) return null;
   try {
@@ -149,6 +187,10 @@ function parseJson<T>(raw: unknown): T | null {
 function mapSession(row: Record<string, unknown>): LocalSession {
   return {
     id: String(row.id),
+    session_number:
+      typeof row.session_number === "number" && Number.isFinite(row.session_number)
+        ? row.session_number
+        : Number(row.session_number) || 0,
     title: String(row.title),
     status: String(row.status),
     sandbox_id: row.sandbox_id ? String(row.sandbox_id) : null,
@@ -244,7 +286,8 @@ function openDb(): DatabaseSync {
       cloud_public_video_url TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      last_user_activity_at TEXT NOT NULL DEFAULT ''
+      last_user_activity_at TEXT NOT NULL DEFAULT '',
+      session_number INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -296,12 +339,13 @@ function openDb(): DatabaseSync {
   `);
 
   ensureSessionColumns(db);
+  backfillSessionNumbers(db);
 
   return db;
 }
 
 const SESSION_SUMMARY_COLS =
-  "id, title, status, sandbox_id, claude_session_id, model, aspect_ratio, voice_id, video_path, last_video_url, cloud_sync_status, cloud_last_synced_at, cloud_last_error, cloud_public_video_url, last_user_activity_at, created_at, updated_at";
+  "id, session_number, title, status, sandbox_id, claude_session_id, model, aspect_ratio, voice_id, video_path, last_video_url, cloud_sync_status, cloud_last_synced_at, cloud_last_error, cloud_public_video_url, last_user_activity_at, created_at, updated_at";
 
 export function listLocalSessions(): LocalSession[] {
   const rows = openDb()
@@ -348,11 +392,20 @@ export function createLocalSession(input: {
   const now = new Date().toISOString();
   const id = input.id || randomUUID();
   const sandboxId = getLocalSandboxId(id);
+  const nextSessionNumberRow = database
+    .prepare("SELECT COALESCE(MAX(session_number), 0) + 1 AS next_session_number FROM sessions")
+    .get() as { next_session_number?: unknown } | undefined;
+  const sessionNumber =
+    typeof nextSessionNumberRow?.next_session_number === "number" &&
+    Number.isFinite(nextSessionNumberRow.next_session_number)
+      ? nextSessionNumberRow.next_session_number
+      : 1;
 
   database
     .prepare(`
       INSERT INTO sessions (
         id,
+        session_number,
         title,
         status,
         sandbox_id,
@@ -374,12 +427,13 @@ export function createLocalSession(input: {
         updated_at,
         last_user_activity_at
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `)
     .run(
       id,
+      sessionNumber,
       "Untitled Animation",
       "active",
       sandboxId,

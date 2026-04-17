@@ -12,6 +12,10 @@ import {
   localFileToApiUrl,
 } from "@/lib/local/config";
 import {
+  isSessionFeedbackActivityType,
+  isSessionFeedbackMetadata,
+} from "@/lib/local/feedback";
+import {
   backfillLocalActivityTurnIds,
   createLocalSession,
   getLocalActiveRun,
@@ -63,19 +67,21 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     ensureLocalSessionLayout(session.id);
   }
 
-  const messages = listLocalMessages(sessionId).map((message) => {
-    const metadata = (message.metadata || null) as MessageMetadata | null;
-    if (metadata?.images && Array.isArray(metadata.images)) {
-      metadata.images = metadata.images.map((img) => ({
-        ...img,
-        url: localFileToApiUrl(sessionId, img.path),
-      }));
-    }
-    return {
-      ...message,
-      metadata,
-    };
-  });
+  const messages = listLocalMessages(sessionId)
+    .filter((message) => !isSessionFeedbackMetadata(message.metadata))
+    .map((message) => {
+      const metadata = (message.metadata || null) as MessageMetadata | null;
+      if (metadata?.images && Array.isArray(metadata.images)) {
+        metadata.images = metadata.images.map((img) => ({
+          ...img,
+          url: localFileToApiUrl(sessionId, img.path),
+        }));
+      }
+      return {
+        ...message,
+        metadata,
+      };
+    });
 
   let activeRun = getLocalActiveRun(sessionId);
   if (activeRun) {
@@ -92,7 +98,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
   }
 
   backfillLocalActivityTurnIds(sessionId);
-  const activityEvents = listLocalActivityEvents(sessionId);
+  const activityEvents = listLocalActivityEvents(sessionId).filter(
+    (event) => !isSessionFeedbackActivityType(event.type)
+  );
 
   let videoUrl = session.last_video_url;
   if (!videoUrl && session.video_path) {

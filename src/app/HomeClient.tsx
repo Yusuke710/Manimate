@@ -2839,7 +2839,9 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
 
   const activeSessionId = searchParams.get("session");
   const activeView = searchParams.get("view");
+  const feedbackSessionId = searchParams.get("feedback_session");
   const isLibraryActive = !activeSessionId && activeView === "library";
+  const isFeedbackActive = !activeSessionId && activeView === "feedback";
   const launchIntent = useMemo(() => {
     if (activeSessionId) return null;
     return parseUrlLaunchIntent(searchParamsString);
@@ -2865,6 +2867,13 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
   const handleLibraryClick = useCallback(() => {
     router.push("/?view=library");
   }, [router]);
+
+  const handleFeedbackClick = useCallback(() => {
+    const nextUrl = activeSessionId
+      ? `/?view=feedback&feedback_session=${encodeURIComponent(activeSessionId)}`
+      : "/?view=feedback";
+    router.push(nextUrl);
+  }, [activeSessionId, router]);
 
   const handleToggleSidebar = useCallback(() => {
     if (isMobile) {
@@ -2929,7 +2938,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
   }, [router, aspectRatio, brandKit]);
 
   // Determine UX stage
-  const isWelcome = !activeSessionId && !isLibraryActive;
+  const isWelcome = !activeSessionId && !isLibraryActive && !isFeedbackActive;
 
   useEffect(() => {
     if (isWelcome) return;
@@ -2976,6 +2985,11 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     handleLibraryClick();
   }, [handleLibraryClick]);
 
+  const handleMobileFeedbackClick = useCallback(() => {
+    setMobileSidebarOpen(false);
+    handleFeedbackClick();
+  }, [handleFeedbackClick]);
+
   if (cloudAuthStatus.status !== "connected") {
     return (
       <CloudAuthGate
@@ -3017,7 +3031,9 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
               isCollapsed={false}
               onToggleCollapse={() => setMobileSidebarOpen(false)}
               isLibraryActive={isLibraryActive}
+              isFeedbackActive={isFeedbackActive}
               onLibraryClick={handleMobileLibraryClick}
+              onFeedbackClick={handleMobileFeedbackClick}
               cloudAuthStatus={cloudAuthStatus}
               onStudioCloudReconnect={reconnectCloudAuth}
             />
@@ -3036,7 +3052,9 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
             isCollapsed={sidebarCollapsed}
             onToggleCollapse={handleToggleSidebar}
             isLibraryActive={isLibraryActive}
+            isFeedbackActive={isFeedbackActive}
             onLibraryClick={handleLibraryClick}
+            onFeedbackClick={handleFeedbackClick}
             cloudAuthStatus={cloudAuthStatus}
             onStudioCloudReconnect={reconnectCloudAuth}
           />
@@ -3081,8 +3099,12 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
           </div>
         )}
 
-        {isLibraryActive ? (
-          <LibraryView onSessionSelect={handleSessionSelect} />
+        {isLibraryActive || isFeedbackActive ? (
+          <LibraryView
+            mode={isFeedbackActive ? "feedback" : "videos"}
+            initialSelectedSessionId={isFeedbackActive ? feedbackSessionId : null}
+            onSessionSelect={handleSessionSelect}
+          />
         ) : isWelcome ? (
           <WelcomeView
             onSend={handleWelcomeSend}

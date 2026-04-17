@@ -28,12 +28,21 @@ type CloudSyncAttachment = {
   type?: string;
 };
 
+type CloudSyncSession = Omit<
+  NonNullable<ReturnType<typeof getLocalSession>>,
+  "session_number"
+>;
+
 type CloudSyncPayload = {
   version: 1;
   activity_events: ReturnType<typeof listLocalActivityEvents>;
   attachments: CloudSyncAttachment[];
   messages: ReturnType<typeof listLocalMessages>;
   runs: ReturnType<typeof listLocalRuns>;
+  session: CloudSyncSession;
+};
+
+type CloudSyncPayloadInput = Omit<CloudSyncPayload, "session"> & {
   session: NonNullable<ReturnType<typeof getLocalSession>>;
 };
 
@@ -196,8 +205,16 @@ function buildAttachmentManifest(messages: ReturnType<typeof listLocalMessages>)
   return manifest;
 }
 
+function toCloudSyncSession(
+  session: NonNullable<ReturnType<typeof getLocalSession>>
+): CloudSyncSession {
+  const cloudSession = { ...session };
+  delete (cloudSession as { session_number?: number }).session_number;
+  return cloudSession;
+}
+
 async function prepareSessionSnapshot(
-  payload: Omit<CloudSyncPayload, "attachments" | "version">
+  payload: Omit<CloudSyncPayloadInput, "attachments" | "version">
 ): Promise<PreparedCloudSyncSnapshot> {
   const attachmentManifest = buildAttachmentManifest(payload.messages);
   const uploadedAttachments: CloudSyncAttachment[] = [];
@@ -220,6 +237,7 @@ async function prepareSessionSnapshot(
     snapshot: {
       version: 1,
       ...payload,
+      session: toCloudSyncSession(payload.session),
       attachments: uploadedAttachments,
     },
     videoFile: await getReadableUploadFile(
@@ -404,7 +422,7 @@ async function finalizeSessionSnapshotMultipart(
   return data as { public_video_url?: string | null };
 }
 
-async function postSessionSnapshot(payload: CloudSyncPayload): Promise<{
+async function postSessionSnapshot(payload: CloudSyncPayloadInput): Promise<{
   public_video_url?: string | null;
 }> {
   const settings = getCloudSyncSettings();
