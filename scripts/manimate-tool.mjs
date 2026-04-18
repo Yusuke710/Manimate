@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import readline from "node:readline/promises";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -31,6 +32,13 @@ const REMOVED_SUBCOMMANDS = new Map([
   ["generate", "Pass the prompt directly: `manimate \"your prompt\"`."],
   ["open", "Run `manimate` with no prompt to launch the app."],
 ]);
+const UPGRADE_BASE_URL = (process.env.MANIMATE_INSTALL_BASE_URL || "https://manimate.ai").replace(/\/+$/, "");
+const UPGRADE_MANIFEST_URL = process.env.MANIMATE_RELEASE_ENV_URL || `${UPGRADE_BASE_URL}/releases/latest.env`;
+const UPGRADE_INSTALLER_URL = `${UPGRADE_BASE_URL}/install.sh`;
+const UPGRADE_CHECK_TIMEOUT_MS = 1500;
+const UPGRADE_CACHE_TTL_MS = 60 * 60 * 1000;
+const UPGRADE_CACHE_PATH = path.join(os.homedir(), ".manimate", "upgrade-check.json");
+const UPGRADE_SKIP_ENV = "MANIMATE_SKIP_UPGRADE_CHECK";
 
 function parsePositiveInteger(value, fallback) {
   const parsed = Number.parseInt(value || "", 10);
@@ -68,6 +76,7 @@ Open Options:
   --timeout <seconds>      Wait time for local app startup (default: ${DEFAULT_OPEN_TIMEOUT_SECONDS})
   --restart                Restart an existing local Manimate server on this port
   --no-open                Start local app without opening the browser
+  --no-upgrade-check       Skip the release upgrade check (also: MANIMATE_SKIP_UPGRADE_CHECK=1)
 
 Stop Options:
   --base-url <url>         Local app URL to stop (default: ${DEFAULT_BASE_URL})
@@ -217,6 +226,7 @@ function parseOpenArgs(argv) {
     mode: "auto",
     noOpen: false,
     restart: false,
+    skipUpgradeCheck: false,
     timeoutSeconds: DEFAULT_OPEN_TIMEOUT_SECONDS,
     portAdjusted: false,
     portAdjustedReason: null,
@@ -259,6 +269,9 @@ function parseOpenArgs(argv) {
         break;
       case "--no-open":
         options.noOpen = true;
+        break;
+      case "--no-upgrade-check":
+        options.skipUpgradeCheck = true;
         break;
       case "--help":
         usage(0);
@@ -1026,6 +1039,148 @@ async function stopExistingLocalApp(options, config = {}) {
   return { stoppedPids: stoppablePids };
 }
 
+export function compareSemverVersions(a, b) {
+  const toNumericParts = (value) => String(value || "")
+    .split("-")[0]
+    .split(".")
+    .map((segment) => {
+      const parsed = Number.parseInt(segment, 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    });
+  const pa = toNumericParts(a);
+  const pb = toNumericParts(b);
+  const length = Math.max(pa.length, pb.length);
+  for (let i = 0; i < length; i += 1) {
+    const ai = pa[i] ?? 0;
+    const bi = pb[i] ?? 0;
+    if (ai !== bi) return ai < bi ? -1 : 1;
+  }
+  const preA = String(a || "").split("-").slice(1).join("-");
+  const preB = String(b || "").split("-").slice(1).join("-");
+  if (preA === preB) return 0;
+  if (!preA) return 1;
+  if (!preB) return -1;
+  return preA < preB ? -1 : 1;
+}
+
+async function isDevelopmentCheckout() {
+  return fileExists(path.join(PROJECT_ROOT, ".git"));
+}
+
+export function parseManifestVersion(text) {
+  for (const rawLine of String(text || "").split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const match = /^MANIMATE_RELEASE_VERSION=(.+)$/.exec(line);
+    if (match) {
+      return match[1].trim().replace(/^"(.*)"$/, "$1");
+    }
+  }
+  return null;
+}
+
+async function readUpgradeCache() {
+  try {
+    const raw = await fs.readFile(UPGRADE_CACHE_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (typeof parsed.latestVersion !== "string") return null;
+    if (typeof parsed.timestamp !== "number") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writeUpgradeCache(latestVersion) {
+  try {
+    await fs.mkdir(path.dirname(UPGRADE_CACHE_PATH), { recursive: true });
+    await fs.writeFile(
+      UPGRADE_CACHE_PATH,
+      JSON.stringify({ timestamp: Date.now(), latestVersion })
+    );
+  } catch {}
+}
+
+async function fetchLatestReleaseVersion() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPGRADE_CHECK_TIMEOUT_MS);
+  try {
+    const response = await fetch(UPGRADE_MANIFEST_URL, {
+      signal: controller.signal,
+      headers: { accept: "text/plain" },
+    });
+    if (!response.ok) return null;
+    const text = await response.text();
+    return parseManifestVersion(text);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function resolveLatestReleaseVersion() {
+  const cached = await readUpgradeCache();
+  if (cached && Date.now() - cached.timestamp < UPGRADE_CACHE_TTL_MS) {
+    return cached.latestVersion;
+  }
+  const latest = await fetchLatestReleaseVersion();
+  if (latest) {
+    await writeUpgradeCache(latest);
+  }
+  return latest;
+}
+
+function runManimateInstaller() {
+  if (process.platform === "win32") {
+    return { ok: false, reason: "unsupported-platform" };
+  }
+  const result = spawnSync("bash", ["-c", `curl -fsSL ${UPGRADE_INSTALLER_URL} | bash`], {
+    stdio: "inherit",
+  });
+  return { ok: result.status === 0, reason: result.error?.message || null };
+}
+
+async function performUpgradeCheck({ skip } = {}) {
+  if (skip) return;
+  if (process.env[UPGRADE_SKIP_ENV]) return;
+  if (!CLI_VERSION) return;
+  if (await isDevelopmentCheckout()) return;
+
+  const latest = await resolveLatestReleaseVersion();
+  if (!latest) return;
+  if (compareSemverVersions(latest, CLI_VERSION) <= 0) return;
+
+  const upgradeCommand = `curl -fsSL ${UPGRADE_INSTALLER_URL} | bash`;
+
+  if (!isInteractivePrompt()) {
+    console.error(
+      `[manimate] New release available: v${CLI_VERSION} -> v${latest}. ` +
+      `Run \`${upgradeCommand}\` to upgrade.`
+    );
+    return;
+  }
+
+  const shouldUpgrade = await promptYesNo(
+    `New Manimate release available: v${CLI_VERSION} -> v${latest}. Upgrade now?`,
+    true
+  );
+  if (!shouldUpgrade) return;
+
+  console.error(`[manimate] Running installer...`);
+  const outcome = runManimateInstaller();
+  if (!outcome.ok) {
+    console.error(
+      `[manimate] Upgrade failed${outcome.reason ? ` (${outcome.reason})` : ""}. ` +
+      `Continuing with v${CLI_VERSION}. Run \`${upgradeCommand}\` manually to retry.`
+    );
+    return;
+  }
+  console.error(`[manimate] Upgraded to v${latest}. Run \`manimate\` again to launch the new version.`);
+  process.exit(0);
+}
+
 function resolveStatusUrl(baseUrl) {
   return new URL(STATUS_ENDPOINT_PATH, `${baseUrl}/`).toString();
 }
@@ -1298,6 +1453,7 @@ async function startLocalApp(options) {
 }
 
 async function openLocalApp(options) {
+  await performUpgradeCheck({ skip: options.skipUpgradeCheck });
   await resolveAutomaticOpenTarget(options);
 
   let stoppedPids = [];

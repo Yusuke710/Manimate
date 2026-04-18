@@ -20,7 +20,7 @@ export interface SessionFeedbackMetadata {
 }
 
 export function isSessionFeedbackMetadata(
-  metadata: Record<string, unknown> | null | undefined
+  metadata: unknown
 ): metadata is SessionFeedbackMetadata {
   if (!isRecord(metadata)) return false;
   return (

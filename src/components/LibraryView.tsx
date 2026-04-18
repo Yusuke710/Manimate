@@ -22,6 +22,21 @@ type FeedbackSubmissionResponse = {
   submitted_at: string;
 };
 
+function getFeedbackSubmissionError(
+  value: FeedbackSubmissionResponse | { error?: string } | null,
+): string | null {
+  if (
+    value &&
+    typeof value === "object" &&
+    "error" in value &&
+    typeof value.error === "string"
+  ) {
+    return value.error;
+  }
+
+  return null;
+}
+
 const ASPECT_PADDING_BY_RATIO: Record<string, string> = {
   "9:16": "177.78%",
   "1:1": "100%",
@@ -262,11 +277,7 @@ function FeedbackPanel({
           | null;
 
         if (!response.ok) {
-          throw new Error(
-            data && typeof data.error === "string"
-              ? data.error
-              : "Failed to save feedback."
-          );
+          throw new Error(getFeedbackSubmissionError(data) ?? "Failed to save feedback.");
         }
 
         setReceipt(data as FeedbackSubmissionResponse);
