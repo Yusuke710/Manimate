@@ -302,6 +302,7 @@ describe("PreviewTab canplay hydration", () => {
     await flushEffects();
 
     expect(container?.querySelector('[data-testid="capture-frame-button"]')).not.toBeNull();
+    expect(container?.querySelector('[data-testid="capture-frame-button"]')?.textContent).toContain("Capture");
     expect(container?.textContent).not.toContain("Single Scene");
   });
 
@@ -340,6 +341,7 @@ describe("PreviewTab canplay hydration", () => {
     await flushEffects();
 
     expect(container?.querySelector('[data-testid="capture-frame-button"]')).not.toBeNull();
+    expect(container?.querySelector('[data-testid="capture-frame-button"]')?.textContent).toContain("Capture");
     expect(container?.textContent).not.toContain("Single Scene");
   });
 });

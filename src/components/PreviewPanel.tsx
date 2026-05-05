@@ -1483,7 +1483,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
               )}
               <button
                 data-testid="capture-frame-button"
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
+                className="h-7 px-2 inline-flex items-center gap-1.5 rounded hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
                 onClick={() => captureFrameAndInsert((t) => (
                   currentChapter && useSegmentedTimeline
                     ? `[${formatTime(t)}] ${currentChapter.name}: `
@@ -1492,9 +1492,10 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
                 title="Capture frame + timestamp to chat"
                 aria-label="Capture frame and timestamp to chat"
               >
-                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current shrink-0">
                   <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
                 </svg>
+                <span className="text-xs font-medium leading-none">Capture</span>
               </button>
             </div>
           )}
@@ -1506,7 +1507,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
             <div className="flex items-center gap-1">
               <button
                 data-testid="capture-frame-button"
-                className="w-9 h-9 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-zinc-300 hover:text-white"
+                className="h-9 px-2.5 inline-flex items-center gap-1.5 rounded hover:bg-white/10 transition-colors text-zinc-300 hover:text-white"
                 onClick={() => captureFrameAndInsert((t) => (
                   currentChapter && useSegmentedTimeline
                     ? `[${formatTime(t)}] ${currentChapter.name}: `
@@ -1515,9 +1516,10 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
                 title="Capture frame + timestamp to chat"
                 aria-label="Capture frame and timestamp to chat"
               >
-                <svg viewBox="0 0 24 24" className="w-4.5 h-4.5 fill-current">
+                <svg viewBox="0 0 24 24" className="w-4.5 h-4.5 fill-current shrink-0">
                   <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
                 </svg>
+                <span className="text-xs font-medium leading-none">Capture</span>
               </button>
               <div className="relative">
               <button
