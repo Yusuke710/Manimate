@@ -70,16 +70,20 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
   const messages = listLocalMessages(sessionId)
     .filter((message) => !isSessionFeedbackMetadata(message.metadata))
     .map((message) => {
-      const metadata = (message.metadata || null) as MessageMetadata | null;
-      if (metadata?.images && Array.isArray(metadata.images)) {
-        metadata.images = metadata.images.map((img) => ({
+      const storedMetadata = (message.metadata || null) as MessageMetadata | null;
+      const metadata: MessageMetadata = {};
+      if (storedMetadata?.images && Array.isArray(storedMetadata.images)) {
+        metadata.images = storedMetadata.images.map((img) => ({
           ...img,
           url: localFileToApiUrl(sessionId, img.path),
         }));
       }
+      if (typeof storedMetadata?.video_url === "string") {
+        metadata.video_url = storedMetadata.video_url;
+      }
       return {
         ...message,
-        metadata,
+        metadata: Object.keys(metadata).length > 0 ? metadata : null,
       };
     });
 

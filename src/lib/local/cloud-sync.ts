@@ -180,9 +180,12 @@ function buildAttachmentManifest(messages: ReturnType<typeof listLocalMessages>)
 
   for (const message of messages) {
     const metadata = message.metadata;
-    if (!isRecord(metadata) || !Array.isArray(metadata.images)) continue;
+    if (!isRecord(metadata)) continue;
 
-    for (const rawImage of metadata.images) {
+    const rawImages = metadata.images;
+    if (!Array.isArray(rawImages)) continue;
+
+    for (const rawImage of rawImages) {
       if (!isRecord(rawImage)) continue;
       const id = typeof rawImage.id === "string" ? rawImage.id : "";
       const localPath = typeof rawImage.path === "string" ? rawImage.path : "";

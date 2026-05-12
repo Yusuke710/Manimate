@@ -257,8 +257,9 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
 
       const promptStr = typeof body.prompt === "string" ? body.prompt : "";
       const rawPrompt = promptStr.trim();
-      const hasImages = Array.isArray(body.images) && body.images.length > 0;
-      if (!rawPrompt && !hasImages) {
+      const visibleRequestImages = Array.isArray(body.images) ? body.images : [];
+      const hasVisibleImages = visibleRequestImages.length > 0;
+      if (!rawPrompt && !hasVisibleImages) {
         await sendEvent({
           type: "error",
           state: "error",
@@ -306,12 +307,14 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         (message) => !isSessionFeedbackMetadata(message.metadata)
       );
       const isFirstTurn = conversationMessages.length === 0;
+      const userMessageMetadata: Record<string, unknown> = {};
+      if (hasVisibleImages) userMessageMetadata.images = visibleRequestImages;
 
       const userMessageId = insertLocalMessage({
         session_id: sessionId,
         role: "user",
         content: rawPrompt,
-        metadata: hasImages ? { images: body.images } : null,
+        metadata: Object.keys(userMessageMetadata).length > 0 ? userMessageMetadata : null,
       });
       currentTurnId = userMessageId;
 
@@ -338,10 +341,9 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       });
 
       const promptImages: Array<{ path: string; originalName: string }> = [];
-      const requestImages = Array.isArray(body.images) ? body.images : [];
-      const requestedImageCount = requestImages.length;
+      const requestedImageCount = visibleRequestImages.length;
       const seenRequestImagePaths = new Set<string>();
-      for (const image of requestImages) {
+      for (const image of visibleRequestImages) {
         if (
           !image ||
           typeof image.path !== "string" ||

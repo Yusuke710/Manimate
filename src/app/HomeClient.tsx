@@ -1035,6 +1035,11 @@ interface SessionMessagesResponse {
   activeRun?: ActiveRun | null;
 }
 
+interface PendingWelcomePayload {
+  prompt: string;
+  images?: File[];
+}
+
 interface ChatPanelProps {
   sessionId: string | null;
   onSessionAspectRatio?: (ratio: AspectRatio) => void;
@@ -1297,12 +1302,15 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
     const currentSandboxId = sandboxIdRef.current;
     const currentClaudeSessionId = claudeSessionIdRef.current;
     const turnId = crypto.randomUUID();
+    const visibleFiles = images ?? [];
 
-    const imagePreviewAttachments: ImageAttachment[] | undefined = images?.map((file) => ({
-      id: crypto.randomUUID(), path: "", name: file.name, size: file.size, type: file.type, url: URL.createObjectURL(file),
-    }));
+    const imagePreviewAttachments: ImageAttachment[] | undefined = visibleFiles.length > 0
+      ? visibleFiles.map((file) => ({
+          id: crypto.randomUUID(), path: "", name: file.name, size: file.size, type: file.type, url: URL.createObjectURL(file),
+        }))
+      : undefined;
 
-    if (prompt.trim() || (images && images.length > 0)) {
+    if (prompt.trim() || visibleFiles.length > 0) {
       dispatch({ type: "ADD_USER_MESSAGE", message: { id: turnId, role: "user", content: prompt, images: imagePreviewAttachments } });
     }
 
@@ -1330,11 +1338,11 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
 
     try {
       let uploadedImages: ImageAttachment[] | undefined;
-      if (images && images.length > 0 && activeSessionId) {
+      if (visibleFiles.length > 0 && activeSessionId) {
         try {
           const formData = new FormData();
           formData.append("session_id", activeSessionId);
-          for (const file of images) formData.append("images", file);
+          for (const file of visibleFiles) formData.append("images", file);
           const uploadResponse = await fetch("/api/chat/uploads", { method: "POST", body: formData });
           if (!uploadResponse.ok) {
             throw new Error(await readUploadErrorResponse(uploadResponse, "Upload failed"));
@@ -1763,7 +1771,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
   // Optimistic session creation: keyed by session ID, stores Promise<boolean>
   const sessionCreationRef = useRef<{ id: string; ready: Promise<boolean> } | null>(null);
   const [pendingSessionReady, setPendingSessionReady] = useState<{ id: string; ready: Promise<boolean> } | null>(null);
-  const pendingWelcomePayloadRef = useRef<Map<string, { prompt: string; images?: File[] }>>(new Map());
+  const pendingWelcomePayloadRef = useRef<Map<string, PendingWelcomePayload>>(new Map());
   const appliedLaunchAspectRef = useRef<string | null>(null);
   const consumedLaunchAutoSendRef = useRef<string | null>(null);
 
