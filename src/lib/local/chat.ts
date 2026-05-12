@@ -49,6 +49,7 @@ type LocalChatRequest = {
   session_id?: string;
   model?: string;
   aspect_ratio?: string;
+  voice_id?: string;
   claude_session_id?: string;
   images?: Array<{ id: string; path: string; name: string; size: number; type: string }>;
 };
@@ -154,6 +155,16 @@ const TOOL_RESULT_MAX_CHARS = 6000;
 const TOOL_RESULT_MESSAGE_MAX_CHARS = 280;
 const CLI_ERROR_OUTPUT_TAIL_MAX_CHARS = 64_000;
 
+type RenderProfile = "iterate_480" | "hq_1080_30" | "uhd_4k_30";
+
+type ManimateRuntimeConfig = {
+  aspect_ratio: string;
+  voice_id: string | null;
+  render_profile: RenderProfile;
+  output_file: "video.mp4";
+  tts_enabled: boolean;
+};
+
 function truncateText(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
   return `${value.slice(0, maxChars)}\n…(truncated)`;
@@ -176,19 +187,45 @@ function getMessageBlocks(obj: Record<string, unknown>): Array<Record<string, un
 export function buildPrompt(input: {
   projectDir: string;
   prompt: string;
-  aspectRatio: string;
-  voiceId: string;
-  includeSessionConfig: boolean;
   images: Array<{ path: string; originalName: string }>;
 }): string {
   const imageSection = input.images.length
     ? `\n\nAttached files (use Read tool to inspect them as needed):\n${input.images.map((image) => `- ${image.path} (${image.originalName})`).join("\n")}`
     : "";
-  const voiceSection = input.voiceId === NONE_VOICE_ID ? "" : `\n\n**Voice ID**: ${input.voiceId}`;
-  const sessionConfigSection = input.includeSessionConfig
-    ? `\n\n**Aspect Ratio**: ${input.aspectRatio}${voiceSection}`
-    : "";
-  return `**Project Directory**: \`${input.projectDir}\` (cwd is already set)${sessionConfigSection}\n\n${input.prompt}${imageSection}`;
+  return `**Project Directory**: \`${input.projectDir}\` (cwd is already set)\n\n${input.prompt}${imageSection}`;
+}
+
+function inferRenderProfile(prompt: string): RenderProfile {
+  const normalized = prompt.toLowerCase();
+  if (/\b(4k|2160p|uhd)\b/.test(normalized)) return "uhd_4k_30";
+  if (/\b(1080p|1080|high quality|hq)\b/.test(normalized)) return "hq_1080_30";
+  return "iterate_480";
+}
+
+export function buildManimateRuntimeConfig(input: {
+  aspectRatio: string;
+  voiceId: string;
+  prompt: string;
+}): ManimateRuntimeConfig {
+  const voiceId = input.voiceId === NONE_VOICE_ID ? null : input.voiceId;
+  return {
+    aspect_ratio: input.aspectRatio,
+    voice_id: voiceId,
+    render_profile: inferRenderProfile(input.prompt),
+    output_file: "video.mp4",
+    tts_enabled: voiceId !== null,
+  };
+}
+
+async function writeManimateRuntimeConfig(
+  projectDir: string,
+  config: ManimateRuntimeConfig,
+): Promise<void> {
+  await fsp.writeFile(
+    path.join(projectDir, "manimate.json"),
+    `${JSON.stringify(config, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 export async function handleLocalChatRequest(request: Request): Promise<Response> {
@@ -308,7 +345,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       const conversationMessages = listLocalMessages(sessionId).filter(
         (message) => !isSessionFeedbackMetadata(message.metadata)
       );
-      const isFirstTurn = conversationMessages.length === 0;
       const userMessageMetadata: Record<string, unknown> = {};
       if (hasVisibleImages) userMessageMetadata.images = visibleRequestImages;
 
@@ -408,13 +444,21 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         : isAspectRatio(session.aspect_ratio)
           ? session.aspect_ratio
           : DEFAULT_ASPECT_RATIO;
-      const voiceId = session.voice_id || DEFAULT_VOICE_ID;
+      const voiceId =
+        typeof body.voice_id === "string" && body.voice_id.trim()
+          ? body.voice_id.trim()
+          : session.voice_id || DEFAULT_VOICE_ID;
+      await writeManimateRuntimeConfig(
+        projectDir,
+        buildManimateRuntimeConfig({
+          aspectRatio,
+          voiceId,
+          prompt: rawPrompt,
+        }),
+      );
       const prompt = buildPrompt({
         projectDir,
         prompt: promptBody,
-        aspectRatio,
-        voiceId,
-        includeSessionConfig: isFirstTurn,
         images: promptImages,
       });
 

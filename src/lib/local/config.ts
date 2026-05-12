@@ -69,6 +69,18 @@ const SUBTITLE_LINTER_PATH = path.join(
   "lint-subtitles.py"
 );
 
+function copyFileIfMissingOrChanged(sourcePath: string, destPath: string): void {
+  try {
+    const nextContent = fs.readFileSync(sourcePath);
+    const currentContent = fs.existsSync(destPath) ? fs.readFileSync(destPath) : null;
+    if (!currentContent || !currentContent.equals(nextContent)) {
+      fs.writeFileSync(destPath, nextContent);
+    }
+  } catch {
+    // Non-fatal: Claude can still run, but may miss optional bundled helpers.
+  }
+}
+
 export function ensureLocalSessionLayout(sessionId: string): {
   sessionRoot: string;
   projectDir: string;
@@ -80,16 +92,10 @@ export function ensureLocalSessionLayout(sessionId: string): {
   fs.mkdirSync(paths.projectDir, { recursive: true });
   fs.mkdirSync(paths.artifactsDir, { recursive: true });
 
-  // Copy the Manim expert prompt into the project dir (only if missing).
+  // Keep the Manim expert prompt in sync with the bundled app version.
   // Claude CLI auto-discovers CLAUDE.md in cwd and uses it as system context.
   const destClaudeMd = path.join(paths.projectDir, "CLAUDE.md");
-  if (!fs.existsSync(destClaudeMd)) {
-    try {
-      fs.copyFileSync(MANIM_PROMPT_PATH, destClaudeMd);
-    } catch {
-      // Non-fatal: Claude will still work, just without the expert prompt.
-    }
-  }
+  copyFileIfMissingOrChanged(MANIM_PROMPT_PATH, destClaudeMd);
 
   // Copy TTS generator into project dir so Claude Code can run:
   // `python tts-generate.py --plan plan.md`
