@@ -28,6 +28,8 @@ manimate
 ## From Source
 
 ```bash
+git clone https://github.com/Yusuke710/Manimate.git
+cd Manimate
 npm install
 ```
 
