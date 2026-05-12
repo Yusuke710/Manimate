@@ -1765,7 +1765,10 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
   }, [activeSessionId, searchParamsString]);
   useEffect(() => {
     if (isMobile) return;
-    setSidebarCollapsed(Boolean(activeSessionId));
+    const timer = window.setTimeout(() => {
+      setSidebarCollapsed(Boolean(activeSessionId));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [activeSessionId, isMobile]);
 
   // Optimistic session creation: keyed by session ID, stores Promise<boolean>
