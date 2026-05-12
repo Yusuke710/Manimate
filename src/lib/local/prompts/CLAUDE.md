@@ -134,7 +134,7 @@ Write Manim Community Edition code in script.py.
    - Set explicit `run_time=` on every `play()` call.
    - Keep total scheduled time within `duration_s`, including `wait()`, `move_camera()`, and any later `play()` such as `FadeOut`.
    - End each segment with `self.wait(max(0, duration_s - used_time))`. Always clamp to avoid negative waits.
-4. **For text, use `Tex(...)` instead of `Text(...)`** — Otherwise the rendered text can have weird spacing between letters.
+4. **Use TeX for text rendering** — You MUST use `Tex(...)` for normal text and `MathTex(...)` for formulas. Avoid `Text(...)` unless there is a specific non-TeX reason, because Manim's text renderer can produce strange letter spacing.
 
 Example:
 
@@ -143,7 +143,7 @@ from manim import *
 
 class Scene1_Introduction(Scene):
     def construct(self):
-        title = Text("My Topic", font_size=48, color=BLUE)
+        title = Tex("My Topic", font_size=48, color=BLUE)
 
         dur = 2.8                              
         text = "Introduction to My Topic"    
