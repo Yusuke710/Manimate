@@ -54,7 +54,7 @@ type LocalChatRequest = {
 };
 
 type LocalSSEEvent = {
-  type: "progress" | "complete" | "error" | "tool_use" | "tool_result" | "assistant_text" | "system_init";
+  type: "progress" | "complete" | "error" | "tool_use" | "tool_result" | "assistant_text" | "system_init" | "artifact_update";
   state?: "planning" | "coding" | "rendering" | "complete" | "error";
   message: string;
   session_id?: string;
@@ -62,6 +62,8 @@ type LocalSSEEvent = {
   claude_session_id?: string;
   run_id?: string;
   video_url?: string;
+  plan_content?: string | null;
+  script_content?: string | null;
   progress?: number;
   tool_name?: string;
   tool_input?: Record<string, unknown>;
@@ -440,6 +442,14 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           script_content: nextScriptContent,
           ...(midRunPlanTitle ? { title: midRunPlanTitle } : {}),
         });
+        await sendEvent({
+          type: "artifact_update",
+          message: "Artifacts updated",
+          sandbox_id: sandboxId || undefined,
+          claude_session_id: claudeSessionId || undefined,
+          plan_content: nextPlanContent,
+          script_content: nextScriptContent,
+        });
       };
 
       const process = spawnLocalClaudeProcess({
@@ -690,6 +700,14 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
             : {}),
         });
         await sendEvent({
+          type: "artifact_update",
+          message: "Artifacts updated",
+          sandbox_id: sandboxId,
+          claude_session_id: claudeSessionId || undefined,
+          plan_content: planContent,
+          script_content: scriptContent,
+        });
+        await sendEvent({
           type: "complete",
           state: "complete",
           message: "Stopped by user",
@@ -730,6 +748,14 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           subtitles_content: subtitlesContent,
         });
         await sendEvent({
+          type: "artifact_update",
+          message: "Artifacts updated",
+          sandbox_id: sandboxId,
+          claude_session_id: claudeSessionId || undefined,
+          plan_content: planContent,
+          script_content: scriptContent,
+        });
+        await sendEvent({
           type: "error",
           state: "error",
           message,
@@ -761,6 +787,14 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         chapters: videoChanged ? serializedChapters : session.chapters,
         video_path: videoChanged && postRunVideo ? postRunVideo.path : session.video_path,
         last_video_url: videoUrl || session.last_video_url,
+      });
+      await sendEvent({
+        type: "artifact_update",
+        message: "Artifacts updated",
+        sandbox_id: sandboxId,
+        claude_session_id: claudeSessionId || undefined,
+        plan_content: planContent,
+        script_content: scriptContent,
       });
 
       updateLocalRun(runId, {

@@ -1035,6 +1035,13 @@ interface SessionMessagesResponse {
   activeRun?: ActiveRun | null;
 }
 
+export function shouldApplyArtifactSnapshot(
+  nextContent: string | null,
+  currentContent: string | null,
+): boolean {
+  return nextContent !== currentContent;
+}
+
 interface PendingWelcomePayload {
   prompt: string;
   images?: File[];
@@ -1067,15 +1074,6 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   const reconnectedRunIdRef = useRef<string | null>(null);
   const expectedPreviewNonceRef = useRef<number | null>(null);
   const [showPreviewReadyBadge, setShowPreviewReadyBadge] = useState(false);
-  const resolveArtifactType = useCallback((filePath?: string): "plan" | "script" | null => {
-    if (!filePath) return null;
-    const normalized = filePath.replace(/\\/g, "/").trim().toLowerCase();
-    if (!normalized) return null;
-    const name = normalized.split("/").pop();
-    if (name === "plan.md") return "plan";
-    if (name === "script.py") return "script";
-    return null;
-  }, []);
 
   // Sync refs with state
   useEffect(() => { sandboxIdRef.current = state.sandboxId; }, [state.sandboxId]);
@@ -1106,12 +1104,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   }, [showPendingPreviewReadyBadge]);
 
   const applyFetchedSessionData = useCallback(
-    (
-      data: SessionMessagesResponse,
-      options?: { preserveExistingArtifacts?: boolean },
-    ) => {
-      const preserveExistingArtifacts = options?.preserveExistingArtifacts ?? false;
-
+    (data: SessionMessagesResponse) => {
       const messages: Message[] = data.messages.map((msg) => ({
         id: msg.id,
         role: msg.role as "user" | "assistant",
@@ -1134,16 +1127,10 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
         onSessionAspectRatio?.(data.session.aspect_ratio);
       }
 
-      if (
-        data.session.plan_content &&
-        (!preserveExistingArtifacts || !planContentRef.current)
-      ) {
+      if (shouldApplyArtifactSnapshot(data.session.plan_content, planContentRef.current)) {
         dispatch({ type: "SET_PLAN_CONTENT", content: data.session.plan_content });
       }
-      if (
-        data.session.script_content &&
-        (!preserveExistingArtifacts || !scriptContentRef.current)
-      ) {
+      if (shouldApplyArtifactSnapshot(data.session.script_content, scriptContentRef.current)) {
         dispatch({
           type: "SET_SCRIPT_CONTENT",
           content: data.session.script_content,
@@ -1215,7 +1202,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
         if (!response.ok) return;
 
         const data = (await response.json()) as SessionMessagesResponse;
-        applyFetchedSessionData(data, { preserveExistingArtifacts: true });
+        applyFetchedSessionData(data);
         const runStillActive = Boolean(
           data.activeRun &&
           (data.activeRun.status === "running" || data.activeRun.status === "queued"),
@@ -1434,34 +1421,25 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
               addActivity({ type: "assistant_text", message: event.message }, turnId);
             } else if (event.type === "tool_use") {
               addActivity({ type: "tool_use", message: event.message, toolName: event.tool_name, toolInput: event.tool_input }, turnId);
-
-              const toolInput = event.tool_input as { file_path?: string; content?: string } | undefined;
-              const filePath = toolInput?.file_path || "";
-              const artifactType = resolveArtifactType(filePath);
-              if (event.tool_name === "Write" && toolInput?.content) {
-                if (artifactType === "plan") dispatch({ type: "SET_PLAN_CONTENT", content: toolInput.content });
-                else if (artifactType === "script") dispatch({ type: "SET_SCRIPT_CONTENT", content: toolInput.content });
-              } else if (event.tool_name === "Edit" && artifactType) {
-                const sid = event.sandbox_id || sandboxIdRef.current;
-                if (sid) {
-                  const capturedSid = sid;
-                  fetch(`/api/files?sandbox_id=${encodeURIComponent(sid)}&path=${encodeURIComponent(filePath)}`)
-                    .then(r => r.ok ? r.text() : null)
-                    .then(text => {
-                      if (text !== null && sandboxIdRef.current === capturedSid) {
-                        if (artifactType === "plan") dispatch({ type: "SET_PLAN_CONTENT", content: text });
-                        else dispatch({ type: "SET_SCRIPT_CONTENT", content: text });
-                      }
-                    })
-                    .catch(() => {});
-                }
-              }
             } else if (event.type === "tool_result") {
               const toolOutput =
                 typeof event.tool_result === "string" && event.tool_result.trim()
                   ? event.tool_result
                   : event.message;
               addActivity({ type: "tool_result", message: toolOutput, toolResult: event.tool_result, isError: event.is_error }, turnId);
+            } else if (event.type === "artifact_update") {
+              if (
+                event.plan_content !== undefined &&
+                shouldApplyArtifactSnapshot(event.plan_content, planContentRef.current)
+              ) {
+                dispatch({ type: "SET_PLAN_CONTENT", content: event.plan_content });
+              }
+              if (
+                event.script_content !== undefined &&
+                shouldApplyArtifactSnapshot(event.script_content, scriptContentRef.current)
+              ) {
+                dispatch({ type: "SET_SCRIPT_CONTENT", content: event.script_content });
+              }
             }
 
             if (event.type === "progress") {
@@ -1523,7 +1501,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
       abortControllerRef.current = null;
       currentAssistantMessageIdRef.current = null;
     }
-  }, [addActivity, sessionId, state.model, sessionReady, resolveArtifactType, showPendingPreviewReadyBadge]);
+  }, [addActivity, sessionId, state.model, sessionReady, showPendingPreviewReadyBadge]);
 
   // Auto-send pending welcome payload when a new session loads
   const welcomeSentRef = useRef(false);
