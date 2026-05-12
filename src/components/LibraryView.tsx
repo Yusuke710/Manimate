@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, useCallback, useMemo, useRef, type FormEvent } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, type FormEvent, type MouseEvent } from "react";
 
 type LibrarySession = {
   id: string;
@@ -73,21 +73,56 @@ function Spinner({ size = 28, borderWidth = 2.5 }: { size?: number; borderWidth?
 
 function VideoCard({
   session,
+  href,
   onClick,
+  onDoubleClick,
 }: {
   session: LibrarySession;
+  href: string;
   onClick: () => void;
+  onDoubleClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const clickTimerRef = useRef<number | null>(null);
   const isRunning = session.status === "running" || session.status === "queued";
   const aspectPadding = ASPECT_PADDING_BY_RATIO[session.aspect_ratio ?? ""] ?? "56.25%";
 
+  const clearClickTimer = useCallback(() => {
+    if (clickTimerRef.current === null) return;
+    window.clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = null;
+  }, []);
+
+  useEffect(() => clearClickTimer, [clearClickTimer]);
+
+  const handleClick = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.defaultPrevented) return;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    event.preventDefault();
+    clearClickTimer();
+    clickTimerRef.current = window.setTimeout(() => {
+      clickTimerRef.current = null;
+      onClick();
+    }, 220);
+  }, [clearClickTimer, onClick]);
+
+  const handleDoubleClick = useCallback(() => {
+    clearClickTimer();
+    onDoubleClick();
+  }, [clearClickTimer, onDoubleClick]);
+
   return (
-    <button
-      onClick={onClick}
+    <a
+      href={href}
+      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      title="Click to open. Double-click to open in a new tab."
       style={{
         display: "flex",
         flexDirection: "column",
@@ -98,6 +133,7 @@ function VideoCard({
         overflow: "hidden",
         cursor: "pointer",
         textAlign: "left",
+        textDecoration: "none",
         fontFamily: "var(--font)",
         transition: "box-shadow 0.15s, border-color 0.15s",
         boxShadow: hovered ? "0 4px 16px rgba(0,0,0,0.08)" : "0 1px 4px rgba(0,0,0,0.04)",
@@ -198,7 +234,7 @@ function VideoCard({
           {formatDate(session.created_at)}
         </div>
       </div>
-    </button>
+    </a>
   );
 }
 
@@ -566,6 +602,14 @@ export function LibraryView({
     [allSessions]
   );
 
+  const handleSessionOpenInNewTab = useCallback((sessionId: string) => {
+    window.open(`/?session=${encodeURIComponent(sessionId)}`, "_blank", "noopener,noreferrer");
+  }, []);
+
+  const getSessionHref = useCallback((sessionId: string) => (
+    `/?session=${encodeURIComponent(sessionId)}`
+  ), []);
+
   useEffect(() => {
     fetchSessions();
     const timer = setInterval(fetchSessions, 5000);
@@ -647,7 +691,12 @@ export function LibraryView({
         >
           {videoSessions.map((session) => (
             <div key={`${session.id}:${session.updated_at}`} style={{ breakInside: "avoid", marginBottom: 14 }}>
-              <VideoCard session={session} onClick={() => onSessionSelect(session.id)} />
+              <VideoCard
+                session={session}
+                href={getSessionHref(session.id)}
+                onClick={() => onSessionSelect(session.id)}
+                onDoubleClick={() => handleSessionOpenInNewTab(session.id)}
+              />
             </div>
           ))}
         </div>
