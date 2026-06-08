@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
+import { useRouter } from "next/navigation";
+import HandoffButton from "@/components/HandoffButton";
 import ShareProjectButton from "@/components/ShareProjectButton";
 
 import {
@@ -28,6 +30,7 @@ interface PreviewPanelProps {
 }
 
 export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, isRendering = false, onRequestHqRender, onRequest4kRender, onPreviewReady }: PreviewPanelProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("plan");
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
   const [previewReadyKey, setPreviewReadyKey] = useState<string | null>(null);
@@ -109,6 +112,13 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
           {/* Spacer */}
           <div style={{ flex: 1 }} />
 
+          <HandoffButton
+            sessionId={sessionId}
+            hasPlan={Boolean(planContent)}
+            hasCode={Boolean(scriptContent)}
+            hasVideo={Boolean(effectiveVideoUrl)}
+            onCreated={(nextSessionId) => router.push(`/?session=${nextSessionId}`)}
+          />
           <ShareProjectButton sessionId={sessionId} />
         </div>
 

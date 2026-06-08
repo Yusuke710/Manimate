@@ -470,6 +470,20 @@ export function getLocalSession(sessionId: string): LocalSession | null {
   return row ? mapSession(row) : null;
 }
 
+export function findLocalSessionWithChaptersByTitle(title: string): LocalSession | null {
+  const row = openDb()
+    .prepare(`
+      SELECT *
+      FROM sessions
+      WHERE title = ?
+        AND COALESCE(chapters, '') <> ''
+      ORDER BY updated_at DESC, created_at DESC
+      LIMIT 1
+    `)
+    .get(title) as Record<string, unknown> | undefined;
+  return row ? mapSession(row) : null;
+}
+
 export function updateLocalSession(sessionId: string, updates: SessionUpdateInput): void {
   const allowedColumns = new Set<keyof SessionUpdateInput>([
     "title",
