@@ -1736,10 +1736,9 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
   const activeView = searchParams.get("view");
   const feedbackSessionId = searchParams.get("feedback_session");
   const shareToken = searchParams.get("share");
-  const shareUrl = searchParams.get("share_url");
   const isLibraryActive = !activeSessionId && activeView === "library";
   const isFeedbackActive = !activeSessionId && activeView === "feedback";
-  const isSharedImportActive = !activeSessionId && !isLibraryActive && !isFeedbackActive && Boolean(shareToken || shareUrl);
+  const isSharedImportActive = !activeSessionId && !isLibraryActive && !isFeedbackActive && Boolean(shareToken);
   const launchIntent = useMemo(() => {
     if (activeSessionId) return null;
     return parseUrlLaunchIntent(searchParamsString);
@@ -1897,7 +1896,6 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     return (
       <SharedImportView
         token={shareToken}
-        shareUrl={shareUrl}
         onCreated={(sessionId) => router.replace(`/?session=${encodeURIComponent(sessionId)}`)}
         onCancel={() => router.replace("/")}
       />
@@ -2052,12 +2050,10 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
 
 function SharedImportView({
   token,
-  shareUrl,
   onCreated,
   onCancel,
 }: {
   token: string | null;
-  shareUrl: string | null;
   onCreated: (sessionId: string) => void;
   onCancel: () => void;
 }) {
@@ -2073,10 +2069,7 @@ function SharedImportView({
       const response = await fetch("/api/share-handoff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...(token ? { token } : {}),
-          ...(shareUrl ? { share_url: shareUrl } : {}),
-        }),
+        body: JSON.stringify({ token }),
       });
       const payload = await response.json().catch(() => ({}));
 
@@ -2098,7 +2091,7 @@ function SharedImportView({
           : "Failed to continue shared session locally",
       );
     }
-  }, [onCreated, shareUrl, token]);
+  }, [onCreated, token]);
 
   useEffect(() => {
     if (startedRef.current) return;

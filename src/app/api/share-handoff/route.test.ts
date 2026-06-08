@@ -41,14 +41,12 @@ describe("POST /api/share-handoff", () => {
   });
 
   it("loads a hosted shared snapshot and creates a local handoff session", async () => {
-    const response = await POST(buildRequest({
-      share_url: "https://manimate.ai/share/abc123_DEF456ghi789",
-    }));
+    const response = await POST(buildRequest({ token: "abc123_DEF456ghi789" }));
     const payload = await response.json();
 
     expect(response.status).toBe(200);
     expect(fetch).toHaveBeenCalledWith(
-      "https://manimate.ai/api/share/abc123_DEF456ghi789/handoff",
+      "https://www.manimate.ai/api/share/abc123_DEF456ghi789/handoff",
       { cache: "no-store" },
     );
     expect(mockCreateHandoffFromSharedSnapshot).toHaveBeenCalledWith(
@@ -62,23 +60,12 @@ describe("POST /api/share-handoff", () => {
     expect(payload.session.id).toBe("local-session-1");
   });
 
-  it("uses the configured Manimate host when called with a token", async () => {
-    await POST(buildRequest({ token: "abc123_DEF456ghi789" }));
-
-    expect(fetch).toHaveBeenCalledWith(
-      "https://www.manimate.ai/api/share/abc123_DEF456ghi789/handoff",
-      { cache: "no-store" },
-    );
-  });
-
-  it("rejects non-Manimate share URLs", async () => {
-    const response = await POST(buildRequest({
-      share_url: "https://example.com/share/abc123_DEF456ghi789",
-    }));
+  it("rejects missing or invalid share tokens", async () => {
+    const response = await POST(buildRequest({ token: "bad" }));
     const payload = await response.json();
 
     expect(response.status).toBe(400);
-    expect(payload.error).toContain("Only Manimate share links");
+    expect(payload.error).toContain("Missing or invalid share token");
     expect(mockCreateHandoffFromSharedSnapshot).not.toHaveBeenCalled();
   });
 });
