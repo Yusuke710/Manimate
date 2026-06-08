@@ -1735,8 +1735,11 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
   const activeSessionId = searchParams.get("session");
   const activeView = searchParams.get("view");
   const feedbackSessionId = searchParams.get("feedback_session");
+  const shareToken = searchParams.get("share");
+  const shareUrl = searchParams.get("share_url");
   const isLibraryActive = !activeSessionId && activeView === "library";
   const isFeedbackActive = !activeSessionId && activeView === "feedback";
+  const isSharedImportActive = !activeSessionId && !isLibraryActive && !isFeedbackActive && Boolean(shareToken || shareUrl);
   const launchIntent = useMemo(() => {
     if (activeSessionId) return null;
     return parseUrlLaunchIntent(searchParamsString);
@@ -1890,6 +1893,17 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     handleFeedbackClick();
   }, [handleFeedbackClick]);
 
+  if (isSharedImportActive) {
+    return (
+      <SharedImportView
+        token={shareToken}
+        shareUrl={shareUrl}
+        onCreated={(sessionId) => router.replace(`/?session=${encodeURIComponent(sessionId)}`)}
+        onCancel={() => router.replace("/")}
+      />
+    );
+  }
+
   if (cloudAuthStatus.status !== "connected") {
     return (
       <CloudAuthGate
@@ -2030,6 +2044,186 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
                 : null
             }
           />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SharedImportView({
+  token,
+  shareUrl,
+  onCreated,
+  onCancel,
+}: {
+  token: string | null;
+  shareUrl: string | null;
+  onCreated: (sessionId: string) => void;
+  onCancel: () => void;
+}) {
+  const [state, setState] = useState<"loading" | "error">("loading");
+  const [message, setMessage] = useState("Copying shared session...");
+  const startedRef = useRef(false);
+
+  const startImport = useCallback(async () => {
+    setState("loading");
+    setMessage("Copying shared session...");
+
+    try {
+      const response = await fetch("/api/share-handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(token ? { token } : {}),
+          ...(shareUrl ? { share_url: shareUrl } : {}),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || typeof payload.session?.id !== "string") {
+        throw new Error(
+          typeof payload.error === "string"
+            ? payload.error
+            : "Failed to continue shared session locally",
+        );
+      }
+
+      setMessage("Opening local session...");
+      onCreated(payload.session.id);
+    } catch (error) {
+      setState("error");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to continue shared session locally",
+      );
+    }
+  }, [onCreated, shareUrl, token]);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void startImport();
+  }, [startImport]);
+
+  return (
+    <div
+      style={{
+        minHeight: "100dvh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--bg-main)",
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          width: "min(420px, 100%)",
+          border: "1px solid var(--border-main)",
+          borderRadius: 16,
+          background: "var(--bg-white)",
+          boxShadow: "0 20px 46px rgba(15, 23, 42, 0.10)",
+          padding: 22,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span
+            aria-hidden="true"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: state === "loading" ? "rgba(43,181,160,0.12)" : "rgba(220,38,38,0.10)",
+              color: state === "loading" ? "var(--accent)" : "#b91c1c",
+              flexShrink: 0,
+            }}
+          >
+            {state === "loading" ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M7 7h10v10H7z" />
+                <path d="M4 4h10" />
+                <path d="M4 4v10" />
+                <path d="M20 10v10" />
+                <path d="M10 20h10" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 9v4" />
+                <path d="M12 17h.01" />
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+              </svg>
+            )}
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 18, lineHeight: 1.2, fontFamily: "var(--font-display)", color: "var(--text-primary)" }}>
+              Continue locally
+            </div>
+            <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.45, color: state === "error" ? "#b91c1c" : "var(--text-secondary)" }}>
+              {message}
+            </div>
+          </div>
+        </div>
+
+        {state === "loading" ? (
+          <div
+            aria-hidden="true"
+            style={{
+              marginTop: 18,
+              height: 4,
+              borderRadius: 999,
+              overflow: "hidden",
+              background: "var(--bg-hover)",
+            }}
+          >
+            <div
+              style={{
+                width: "45%",
+                height: "100%",
+                borderRadius: 999,
+                background: "var(--accent)",
+              }}
+            />
+          </div>
+        ) : (
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{
+                border: "1px solid var(--border-main)",
+                background: "var(--bg-white)",
+                color: "var(--text-secondary)",
+                borderRadius: 9,
+                padding: "8px 12px",
+                fontSize: 13,
+                fontFamily: "var(--font)",
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => { void startImport(); }}
+              style={{
+                border: "1px solid rgba(43,181,160,0.28)",
+                background: "var(--accent)",
+                color: "white",
+                borderRadius: 9,
+                padding: "8px 12px",
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: "var(--font)",
+                cursor: "pointer",
+              }}
+            >
+              Try again
+            </button>
+          </div>
         )}
       </div>
     </div>
