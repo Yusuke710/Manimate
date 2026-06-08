@@ -10,14 +10,26 @@ Run manimate.ai with your own claude code locally.
 
 - Node.js 22+
 - Claude Code CLI (`claude`) authenticated locally
-- Manim CE (`manim`) and `ffmpeg`
+- Manim CE (`manim`), `ffmpeg`, LaTeX, and `dvisvgm`
 - optional: `ELEVENLABS_API_KEY` for voiceover, or paste it in the Studio voice menu
 
 ## Install
 
+Recommended full install:
+
 ```bash
 curl -fsSL https://manimate.ai/install.sh | bash
 ```
+
+This installs Manimate plus local rendering dependencies when possible.
+
+CLI-only npm install:
+
+```bash
+npm install -g manimate
+```
+
+Use npm if you already have the native rendering dependencies installed.
 
 Then run:
 
