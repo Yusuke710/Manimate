@@ -97,7 +97,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
   }
 
-  ensureLocalSessionLayout(session.id);
+  ensureLocalSessionLayout(session.id, { model: requestedModel ?? session.model });
 
   const chatBody: Record<string, unknown> = {
     prompt,

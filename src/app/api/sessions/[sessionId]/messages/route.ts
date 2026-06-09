@@ -64,7 +64,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
       aspect_ratio: null,
       voice_id: null,
     });
-    ensureLocalSessionLayout(session.id);
+    ensureLocalSessionLayout(session.id, { model: session.model });
   }
 
   const messages = listLocalMessages(sessionId)

@@ -355,7 +355,9 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       agentSessionId = resumeSessionId || "";
 
       sandboxId = session.sandbox_id || getLocalSandboxId(sessionId);
-      const { projectDir, sessionRoot } = ensureLocalSessionLayout(sessionId);
+      const { projectDir, sessionRoot } = ensureLocalSessionLayout(sessionId, {
+        model: modelForRun,
+      });
 
       // Prevent double-spawn: reject if a process is running OR we're mid-initialization.
       if (!beginLocalRunStart(sessionId)) {

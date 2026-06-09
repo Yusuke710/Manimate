@@ -84,7 +84,32 @@ function copyFileIfMissingOrChanged(sourcePath: string, destPath: string): void 
   }
 }
 
-export function ensureLocalSessionLayout(sessionId: string): {
+function removeFileIfExists(filePath: string): void {
+  try {
+    fs.rmSync(filePath, { force: true });
+  } catch {
+    // Non-fatal: stale prompt cleanup should not block the run.
+  }
+}
+
+function syncRuntimePrompt(projectDir: string, model: string): void {
+  const destClaudeMd = path.join(projectDir, "CLAUDE.md");
+  const destAgentsMd = path.join(projectDir, "AGENTS.md");
+
+  if (model === "codex") {
+    copyFileIfMissingOrChanged(AGENTS_PROMPT_PATH, destAgentsMd);
+    removeFileIfExists(destClaudeMd);
+    return;
+  }
+
+  copyFileIfMissingOrChanged(CLAUDE_PROMPT_PATH, destClaudeMd);
+  removeFileIfExists(destAgentsMd);
+}
+
+export function ensureLocalSessionLayout(
+  sessionId: string,
+  options?: { model?: string | null }
+): {
   sessionRoot: string;
   projectDir: string;
   artifactsDir: string;
@@ -95,13 +120,11 @@ export function ensureLocalSessionLayout(sessionId: string): {
   fs.mkdirSync(paths.projectDir, { recursive: true });
   fs.mkdirSync(paths.artifactsDir, { recursive: true });
 
-  // Keep runtime-specific prompt files in sync with the bundled app version.
-  const destClaudeMd = path.join(paths.projectDir, "CLAUDE.md");
-  copyFileIfMissingOrChanged(CLAUDE_PROMPT_PATH, destClaudeMd);
-  const destAgentsMd = path.join(paths.projectDir, "AGENTS.md");
-  copyFileIfMissingOrChanged(AGENTS_PROMPT_PATH, destAgentsMd);
+  if (options?.model) {
+    syncRuntimePrompt(paths.projectDir, options.model);
+  }
 
-  // Copy TTS generator into project dir so Claude Code can run:
+  // Copy TTS generator into project dir so the selected agent can run:
   // `python tts-generate.py --plan plan.md`
   const destTtsGenerate = path.join(paths.projectDir, "tts-generate.py");
   if (!fs.existsSync(destTtsGenerate)) {
@@ -112,7 +135,7 @@ export function ensureLocalSessionLayout(sessionId: string): {
     }
   }
 
-  // Copy subtitle linter into project dir so Claude Code can run:
+  // Copy subtitle linter into project dir so the selected agent can run:
   // `python lint-subtitles.py script.py`
   const destSubtitleLinter = path.join(paths.projectDir, "lint-subtitles.py");
   if (!fs.existsSync(destSubtitleLinter)) {

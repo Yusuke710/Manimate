@@ -177,7 +177,9 @@ export async function createHandoffFromLocalSession(
     aspect_ratio: sourceSession.aspect_ratio,
     voice_id: sourceSession.voice_id,
   });
-  const targetPaths = ensureLocalSessionLayout(handoffSession.id);
+  const targetPaths = ensureLocalSessionLayout(handoffSession.id, {
+    model: handoffSession.model,
+  });
 
   const [planContent, scriptContent, subtitlesContent, videoArtifact] = await Promise.all([
     copyTextArtifact({
@@ -241,7 +243,9 @@ export async function createHandoffFromSharedSnapshot(
     aspect_ratio: snapshot.aspectRatio || null,
     voice_id: snapshot.voiceId || null,
   });
-  const targetPaths = ensureLocalSessionLayout(handoffSession.id);
+  const targetPaths = ensureLocalSessionLayout(handoffSession.id, {
+    model: handoffSession.model,
+  });
 
   const [planContent, scriptContent, subtitlesContent, videoArtifact] = await Promise.all([
     writeTextArtifact({

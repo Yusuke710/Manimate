@@ -73,7 +73,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (clientId) {
       const existing = getLocalSession(clientId);
       if (existing) {
-        ensureLocalSessionLayout(existing.id);
+        ensureLocalSessionLayout(existing.id, { model: existing.model });
         return NextResponse.json({ session: existing });
       }
     }
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       voice_id: voiceId ?? null,
     });
 
-    ensureLocalSessionLayout(session.id);
+    ensureLocalSessionLayout(session.id, { model: session.model });
 
     return NextResponse.json({ session });
   } catch (error) {
