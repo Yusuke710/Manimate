@@ -616,6 +616,67 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         });
       };
 
+      const emitProgressForTool = async (
+        toolName: string,
+        toolInput: Record<string, unknown>
+      ) => {
+        const nextState = inferStateFromTool(toolName, toolInput);
+        if (nextState === state) return;
+        state = nextState;
+        const stateMessage = state === "rendering"
+          ? "Rendering video..."
+          : state === "coding"
+            ? "Writing code..."
+            : "Planning...";
+        await sendEvent({
+          type: "progress",
+          state,
+          message: stateMessage,
+          sandbox_id: sandboxId || undefined,
+          agent_session_id: agentSessionId || undefined,
+        });
+        await persistActivity("progress", stateMessage);
+      };
+
+      const emitToolUse = async (
+        toolName: string,
+        message: string,
+        toolInput: Record<string, unknown>
+      ) => {
+        await emitProgressForTool(toolName, toolInput);
+        await sendEvent({
+          type: "tool_use",
+          message,
+          tool_name: toolName,
+          tool_input: toolInput,
+          sandbox_id: sandboxId || undefined,
+          agent_session_id: agentSessionId || undefined,
+        });
+        await persistActivity("tool_use", message, {
+          tool_name: toolName,
+          tool_input: toolInput,
+        });
+      };
+
+      const emitToolResult = async (
+        message: string,
+        toolResult: string,
+        isError: boolean
+      ) => {
+        await sendEvent({
+          type: "tool_result",
+          message,
+          tool_result: toolResult,
+          is_error: isError,
+          sandbox_id: sandboxId || undefined,
+          agent_session_id: agentSessionId || undefined,
+        });
+        await persistActivity("tool_result", message, {
+          tool_result: toolResult,
+          is_error: isError,
+        });
+      };
+
       artifactSnapshotInterval = setInterval(() => {
         enqueue(syncArtifactSnapshot);
       }, 2000);
@@ -674,35 +735,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                 const exitCode = typeof item?.exit_code === "number" ? item.exit_code : null;
 
                 if (eventType === "item.started" || status === "in_progress") {
-                  const nextState = inferStateFromTool("Bash", toolInput);
-                  if (nextState !== state) {
-                    state = nextState;
-                    const stateMessage = state === "rendering"
-                      ? "Rendering video..."
-                      : state === "coding"
-                        ? "Writing code..."
-                        : "Planning...";
-                    await sendEvent({
-                      type: "progress",
-                      state,
-                      message: stateMessage,
-                      sandbox_id: sandboxId || undefined,
-                      agent_session_id: agentSessionId || undefined,
-                    });
-                    await persistActivity("progress", stateMessage);
-                  }
-                  await sendEvent({
-                    type: "tool_use",
-                    message: command || "Bash",
-                    tool_name: "Bash",
-                    tool_input: toolInput,
-                    sandbox_id: sandboxId || undefined,
-                    agent_session_id: agentSessionId || undefined,
-                  });
-                  await persistActivity("tool_use", command || "Bash", {
-                    tool_name: "Bash",
-                    tool_input: toolInput,
-                  });
+                  await emitToolUse("Bash", command || "Bash", toolInput);
                 } else if (eventType === "item.completed" || status === "completed") {
                   const rawOutput = typeof item?.aggregated_output === "string"
                     ? item.aggregated_output.trim()
@@ -715,18 +748,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   const toolResult = truncateText(rawResult, TOOL_RESULT_MAX_CHARS);
                   const message = truncateText(toolResult, TOOL_RESULT_MESSAGE_MAX_CHARS);
                   const isError = typeof exitCode === "number" && exitCode !== 0;
-                  await sendEvent({
-                    type: "tool_result",
-                    message,
-                    tool_result: toolResult,
-                    is_error: isError,
-                    sandbox_id: sandboxId || undefined,
-                    agent_session_id: agentSessionId || undefined,
-                  });
-                  await persistActivity("tool_result", message, {
-                    tool_result: toolResult,
-                    is_error: isError,
-                  });
+                  await emitToolResult(message, toolResult, isError);
                   await syncArtifactSnapshot();
                 }
               }
@@ -738,50 +760,11 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                 const status = typeof item?.status === "string" ? item.status : "";
 
                 if (eventType === "item.started" || status === "in_progress") {
-                  const nextState = inferStateFromTool(toolName, toolInput);
-                  if (nextState !== state) {
-                    state = nextState;
-                    const stateMessage = state === "rendering"
-                      ? "Rendering video..."
-                      : state === "coding"
-                        ? "Writing code..."
-                        : "Planning...";
-                    await sendEvent({
-                      type: "progress",
-                      state,
-                      message: stateMessage,
-                      sandbox_id: sandboxId || undefined,
-                      agent_session_id: agentSessionId || undefined,
-                    });
-                    await persistActivity("progress", stateMessage);
-                  }
                   const message = formatCodexFileChangeMessage(changes, "started");
-                  await sendEvent({
-                    type: "tool_use",
-                    message,
-                    tool_name: toolName,
-                    tool_input: toolInput,
-                    sandbox_id: sandboxId || undefined,
-                    agent_session_id: agentSessionId || undefined,
-                  });
-                  await persistActivity("tool_use", message, {
-                    tool_name: toolName,
-                    tool_input: toolInput,
-                  });
+                  await emitToolUse(toolName, message, toolInput);
                 } else if (eventType === "item.completed" || status === "completed") {
                   const message = formatCodexFileChangeMessage(changes, "completed");
-                  await sendEvent({
-                    type: "tool_result",
-                    message,
-                    tool_result: message,
-                    is_error: false,
-                    sandbox_id: sandboxId || undefined,
-                    agent_session_id: agentSessionId || undefined,
-                  });
-                  await persistActivity("tool_result", message, {
-                    tool_result: message,
-                    is_error: false,
-                  });
+                  await emitToolResult(message, message, false);
                   await syncArtifactSnapshot();
                 }
               }
@@ -789,35 +772,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
               if (itemType === "function_call") {
                 const toolName = typeof item?.name === "string" ? item.name : "Tool";
                 const toolInput = parseToolInput(item?.arguments ?? item?.input);
-                const nextState = inferStateFromTool(toolName, toolInput);
-                if (nextState !== state) {
-                  state = nextState;
-                  const stateMessage = state === "rendering"
-                    ? "Rendering video..."
-                    : state === "coding"
-                      ? "Writing code..."
-                      : "Planning...";
-                  await sendEvent({
-                    type: "progress",
-                    state,
-                    message: stateMessage,
-                    sandbox_id: sandboxId || undefined,
-                    agent_session_id: agentSessionId || undefined,
-                  });
-                  await persistActivity("progress", stateMessage);
-                }
-                await sendEvent({
-                  type: "tool_use",
-                  message: toolName,
-                  tool_name: toolName,
-                  tool_input: toolInput,
-                  sandbox_id: sandboxId || undefined,
-                  agent_session_id: agentSessionId || undefined,
-                });
-                await persistActivity("tool_use", toolName, {
-                  tool_name: toolName,
-                  tool_input: toolInput,
-                });
+                await emitToolUse(toolName, toolName, toolInput);
               }
 
               if (itemType === "function_call_output") {
@@ -825,17 +780,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   || "Tool completed with no text output.";
                 const toolResult = truncateText(rawResult, TOOL_RESULT_MAX_CHARS);
                 const message = truncateText(toolResult, TOOL_RESULT_MESSAGE_MAX_CHARS);
-                await sendEvent({
-                  type: "tool_result",
-                  message,
-                  tool_result: toolResult,
-                  sandbox_id: sandboxId || undefined,
-                  agent_session_id: agentSessionId || undefined,
-                });
-                await persistActivity("tool_result", message, {
-                  tool_result: toolResult,
-                  is_error: false,
-                });
+                await emitToolResult(message, toolResult, false);
                 await syncArtifactSnapshot();
               }
             }
@@ -863,36 +808,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   ? block.input as Record<string, unknown>
                   : {};
 
-                const nextState = inferStateFromTool(toolName, toolInput);
-                if (nextState !== state) {
-                  state = nextState;
-                  const stateMessage = state === "rendering"
-                    ? "Rendering video..."
-                    : state === "coding"
-                      ? "Writing code..."
-                      : "Planning...";
-                  await sendEvent({
-                    type: "progress",
-                    state,
-                    message: stateMessage,
-                    sandbox_id: sandboxId || undefined,
-                    agent_session_id: agentSessionId || undefined,
-                  });
-                  await persistActivity("progress", stateMessage);
-                }
-
-                await sendEvent({
-                  type: "tool_use",
-                  message: `${toolName}`,
-                  tool_name: toolName,
-                  tool_input: toolInput,
-                  sandbox_id: sandboxId || undefined,
-                  agent_session_id: agentSessionId || undefined,
-                });
-                await persistActivity("tool_use", toolName, {
-                  tool_name: toolName,
-                  tool_input: toolInput,
-                });
+                await emitToolUse(toolName, toolName, toolInput);
               }
 
               if (block.type === "tool_result") {
@@ -902,18 +818,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                 const toolResult = truncateText(rawResult, TOOL_RESULT_MAX_CHARS);
                 const message = truncateText(toolResult, TOOL_RESULT_MESSAGE_MAX_CHARS);
                 const isError = Boolean((block as { is_error?: unknown }).is_error);
-                await sendEvent({
-                  type: "tool_result",
-                  message,
-                  tool_result: toolResult,
-                  is_error: isError,
-                  sandbox_id: sandboxId || undefined,
-                  agent_session_id: agentSessionId || undefined,
-                });
-                await persistActivity("tool_result", message, {
-                  tool_result: toolResult,
-                  is_error: isError,
-                });
+                await emitToolResult(message, toolResult, isError);
                 await syncArtifactSnapshot();
               }
             }
