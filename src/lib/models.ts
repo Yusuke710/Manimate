@@ -4,7 +4,6 @@
 
 interface ModelEntry {
   label: string;
-  description: string;
 }
 
 export const DEFAULT_MODEL = "claude";
@@ -12,11 +11,9 @@ export const DEFAULT_MODEL = "claude";
 export const MODEL_REGISTRY: Record<string, ModelEntry> = {
   claude: {
     label: "Claude",
-    description: "Uses your configured Claude Code model",
   },
   codex: {
     label: "Codex",
-    description: "Uses your configured Codex CLI model",
   },
 };
 
@@ -27,7 +24,7 @@ export function isRegisteredModelId(modelId: string): boolean {
 }
 
 export const AVAILABLE_MODELS = Object.entries(MODEL_REGISTRY).map(
-  ([id, { label, description }]) => ({ id, label, description })
+  ([id, { label }]) => ({ id, label })
 );
 
 export function getModelDisplayLabel(modelId: string): string {

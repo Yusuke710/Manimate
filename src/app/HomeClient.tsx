@@ -122,7 +122,7 @@ function ModelSelector({ model, onChange, disabled }: { model: string; onChange:
               key={m.id}
               onClick={() => { onChange(m.id); setIsOpen(false); }}
               style={{
-                display: "flex", flexDirection: "column", gap: 1,
+                display: "flex", alignItems: "center",
                 width: "100%", padding: "8px 14px",
                 border: "none",
                 background: m.id === model ? "var(--bg-active)" : "transparent",
@@ -136,9 +136,6 @@ function ModelSelector({ model, onChange, disabled }: { model: string; onChange:
             >
               <span style={{ fontSize: 13, fontWeight: m.id === model ? 600 : 400, color: m.id === model ? "var(--text-primary)" : "var(--text-secondary)" }}>
                 {m.label}
-              </span>
-              <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                {m.description}
               </span>
             </button>
           ))}
