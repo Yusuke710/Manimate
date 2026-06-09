@@ -601,9 +601,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                 eventType === "agent_message" &&
                 typeof obj.message === "string"
               ) {
-                finalAssistantText = finalAssistantText
-                  ? `${finalAssistantText}\n${obj.message}`
-                  : obj.message;
+                finalAssistantText = obj.message;
                 await sendEvent({
                   type: "assistant_text",
                   message: obj.message,
@@ -614,9 +612,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
               }
 
               if (itemType === "agent_message" && typeof item?.text === "string") {
-                finalAssistantText = finalAssistantText
-                  ? `${finalAssistantText}\n${item.text}`
-                  : item.text;
+                finalAssistantText = item.text;
                 await sendEvent({
                   type: "assistant_text",
                   message: item.text,
@@ -624,6 +620,70 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   agent_session_id: agentSessionId || undefined,
                 });
                 await persistActivity("assistant_text", item.text);
+              }
+
+              if (itemType === "command_execution") {
+                const command = typeof item?.command === "string" ? item.command : "";
+                const toolInput = command ? { command } : {};
+                const status = typeof item?.status === "string" ? item.status : "";
+                const exitCode = typeof item?.exit_code === "number" ? item.exit_code : null;
+
+                if (eventType === "item.started" || status === "in_progress") {
+                  const nextState = inferStateFromTool("Bash", toolInput);
+                  if (nextState !== state) {
+                    state = nextState;
+                    const stateMessage = state === "rendering"
+                      ? "Rendering video..."
+                      : state === "coding"
+                        ? "Writing code..."
+                        : "Planning...";
+                    await sendEvent({
+                      type: "progress",
+                      state,
+                      message: stateMessage,
+                      sandbox_id: sandboxId || undefined,
+                      agent_session_id: agentSessionId || undefined,
+                    });
+                    await persistActivity("progress", stateMessage);
+                  }
+                  await sendEvent({
+                    type: "tool_use",
+                    message: command || "Bash",
+                    tool_name: "Bash",
+                    tool_input: toolInput,
+                    sandbox_id: sandboxId || undefined,
+                    agent_session_id: agentSessionId || undefined,
+                  });
+                  await persistActivity("tool_use", command || "Bash", {
+                    tool_name: "Bash",
+                    tool_input: toolInput,
+                  });
+                } else if (eventType === "item.completed" || status === "completed") {
+                  const rawOutput = typeof item?.aggregated_output === "string"
+                    ? item.aggregated_output.trim()
+                    : "";
+                  const rawResult = rawOutput || (
+                    exitCode === null
+                      ? "Command completed."
+                      : `Command exited with code ${exitCode}.`
+                  );
+                  const toolResult = truncateText(rawResult, TOOL_RESULT_MAX_CHARS);
+                  const message = truncateText(toolResult, TOOL_RESULT_MESSAGE_MAX_CHARS);
+                  const isError = typeof exitCode === "number" && exitCode !== 0;
+                  await sendEvent({
+                    type: "tool_result",
+                    message,
+                    tool_result: toolResult,
+                    is_error: isError,
+                    sandbox_id: sandboxId || undefined,
+                    agent_session_id: agentSessionId || undefined,
+                  });
+                  await persistActivity("tool_result", message, {
+                    tool_result: toolResult,
+                    is_error: isError,
+                  });
+                  await syncArtifactSnapshot();
+                }
               }
 
               if (itemType === "function_call") {
@@ -811,9 +871,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
             trailingItem?.type === "agent_message" &&
             typeof trailingItem.text === "string"
           ) {
-            finalAssistantText = finalAssistantText
-              ? `${finalAssistantText}\n${trailingItem.text}`
-              : trailingItem.text;
+            finalAssistantText = trailingItem.text;
           }
         } catch {
           // Ignore invalid trailing output.
