@@ -1046,13 +1046,14 @@ export function shouldApplyArtifactSnapshot(
 interface PendingWelcomePayload {
   prompt: string;
   images?: File[];
+  model?: string;
 }
 
 interface ChatPanelProps {
   sessionId: string | null;
   onSessionAspectRatio?: (ratio: AspectRatio) => void;
   hasPendingWelcomePayload?: (sessionId: string) => boolean;
-  consumeWelcomePayload?: (sessionId: string) => { prompt: string; images?: File[] } | null;
+  consumeWelcomePayload?: (sessionId: string) => PendingWelcomePayload | null;
   /** Resolves true when the session row exists in DB (for optimistic navigation) */
   sessionReady?: Promise<boolean> | null;
   isMobile?: boolean;
@@ -1289,7 +1290,11 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
     dispatch({ type: "ADD_ACTIVITY", event: { ...event, id: crypto.randomUUID(), timestamp: new Date(), turnId } });
   }, []);
 
-  const handleSend = useCallback(async (prompt: string, images?: File[]) => {
+  const handleSend = useCallback(async (
+    prompt: string,
+    images?: File[],
+    options?: { model?: string }
+  ) => {
     const currentSandboxId = sandboxIdRef.current;
     const currentAgentSessionId = agentSessionIdRef.current;
     const turnId = crypto.randomUUID();
@@ -1354,7 +1359,10 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
         }
       }
 
-      const body: Record<string, unknown> = { prompt, model: state.model };
+      const body: Record<string, unknown> = {
+        prompt,
+        model: options?.model ?? state.model,
+      };
       if (uploadedImages && uploadedImages.length > 0) body.images = uploadedImages;
       body.session_id = activeSessionId;
       const isNewSession = !sessionId;
@@ -1514,7 +1522,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
     const pending = consumeWelcomePayload?.(sessionId);
     if (!pending) return;
     welcomeSentRef.current = true;
-    void handleSend(pending.prompt, pending.images);
+    void handleSend(pending.prompt, pending.images, { model: pending.model });
   }, [sessionId, handleSend, consumeWelcomePayload]);
 
   const handleCancel = useCallback(async () => {
@@ -1812,6 +1820,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     pendingWelcomePayloadRef.current.set(id, {
       prompt: trimmedPrompt,
       images: images && images.length > 0 ? [...images] : undefined,
+      model: model ?? DEFAULT_MODEL,
     });
 
     // Fire session creation in background; resolve to boolean for ChatPanel.

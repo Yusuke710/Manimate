@@ -70,4 +70,45 @@ describe("welcome session transition", () => {
     expect(container?.textContent).not.toContain("Messages will appear here");
     expect(container?.querySelectorAll('[data-testid="message-user"]')).toHaveLength(1);
   });
+
+  it("uses the pending welcome model for the first chat request", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response("", {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const consumeWelcomePayload = vi.fn(() => ({
+      prompt: "Animate with Codex",
+      model: "codex",
+    }));
+
+    flushSync(() => {
+      root?.render(
+        <ChatPanel
+          sessionId="session-1"
+          hasPendingWelcomePayload={() => true}
+          consumeWelcomePayload={consumeWelcomePayload}
+          sessionReady={Promise.resolve(true)}
+        />,
+      );
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const chatCall = fetchMock.mock.calls.find(([url]) => String(url) === "/api/chat");
+    expect(chatCall).toBeDefined();
+    expect(JSON.parse(String(chatCall?.[1]?.body))).toMatchObject({
+      prompt: "Animate with Codex",
+      session_id: "session-1",
+      model: "codex",
+    });
+  });
 });
