@@ -268,6 +268,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
     let agentSessionId = "";
     let modelForRun = DEFAULT_MODEL;
     let currentTurnId: string | null = null;
+    let artifactSnapshotInterval: ReturnType<typeof setInterval> | null = null;
 
     const persistActivity = async (
       type: string,
@@ -570,6 +571,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         });
       };
 
+      artifactSnapshotInterval = setInterval(() => {
+        enqueue(syncArtifactSnapshot);
+      }, 2000);
+
       process.stdout.on("data", (chunk: Buffer) => {
         const data = chunk.toString("utf8");
         enqueue(async () => {
@@ -784,6 +789,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         process.once("exit", (code, signal) => resolve({ code, signal }));
       });
 
+      if (artifactSnapshotInterval) {
+        clearInterval(artifactSnapshotInterval);
+        artifactSnapshotInterval = null;
+      }
       await streamChain;
 
       if (ndjsonBuffer.trim()) {
@@ -1029,6 +1038,9 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         });
       }
     } finally {
+      if (artifactSnapshotInterval) {
+        clearInterval(artifactSnapshotInterval);
+      }
       if (sessionId) endLocalRunStart(sessionId);
       try {
         await writer.close();
