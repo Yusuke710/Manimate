@@ -206,6 +206,51 @@ function getCodexItem(obj: Record<string, unknown>): Record<string, unknown> | n
     : null;
 }
 
+function getCodexFileChanges(item: Record<string, unknown>): Array<{ path: string; kind: string }> {
+  const changes = item.changes;
+  if (!Array.isArray(changes)) return [];
+  return changes.flatMap((change) => {
+    if (!change || typeof change !== "object" || Array.isArray(change)) return [];
+    const record = change as Record<string, unknown>;
+    const filePath = typeof record.path === "string" ? record.path : "";
+    if (!filePath) return [];
+    const kind = typeof record.kind === "string" ? record.kind : "change";
+    return [{ path: filePath, kind }];
+  });
+}
+
+function getCodexFileChangeToolName(changes: Array<{ path: string; kind: string }>): string {
+  if (changes.length === 0) return "Edit";
+  const kinds = new Set(changes.map((change) => change.kind));
+  if (kinds.size === 1) {
+    const [kind] = [...kinds];
+    if (kind === "create") return "Write";
+    if (kind === "delete") return "Delete";
+  }
+  return "Edit";
+}
+
+function formatCodexFileChangeMessage(
+  changes: Array<{ path: string; kind: string }>,
+  phase: "started" | "completed"
+): string {
+  if (changes.length === 0) {
+    return phase === "started" ? "Editing files" : "Files updated";
+  }
+  if (changes.length === 1) {
+    const [{ path: filePath, kind }] = changes;
+    const action = kind === "create"
+      ? phase === "started" ? "Writing" : "File created"
+      : kind === "delete"
+        ? phase === "started" ? "Deleting" : "File deleted"
+        : phase === "started" ? "Editing" : "File updated";
+    return `${action} ${filePath}`;
+  }
+  return phase === "started"
+    ? `Editing ${changes.length} files`
+    : `Updated ${changes.length} files`;
+}
+
 function invalidModelMessage(model: string): string {
   return `Invalid model "${model}". Use one of: claude, codex.`;
 }
@@ -681,6 +726,61 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   await persistActivity("tool_result", message, {
                     tool_result: toolResult,
                     is_error: isError,
+                  });
+                  await syncArtifactSnapshot();
+                }
+              }
+
+              if (itemType === "file_change") {
+                const changes = getCodexFileChanges(item);
+                const toolName = getCodexFileChangeToolName(changes);
+                const toolInput = { changes };
+                const status = typeof item?.status === "string" ? item.status : "";
+
+                if (eventType === "item.started" || status === "in_progress") {
+                  const nextState = inferStateFromTool(toolName, toolInput);
+                  if (nextState !== state) {
+                    state = nextState;
+                    const stateMessage = state === "rendering"
+                      ? "Rendering video..."
+                      : state === "coding"
+                        ? "Writing code..."
+                        : "Planning...";
+                    await sendEvent({
+                      type: "progress",
+                      state,
+                      message: stateMessage,
+                      sandbox_id: sandboxId || undefined,
+                      agent_session_id: agentSessionId || undefined,
+                    });
+                    await persistActivity("progress", stateMessage);
+                  }
+                  const message = formatCodexFileChangeMessage(changes, "started");
+                  await sendEvent({
+                    type: "tool_use",
+                    message,
+                    tool_name: toolName,
+                    tool_input: toolInput,
+                    sandbox_id: sandboxId || undefined,
+                    agent_session_id: agentSessionId || undefined,
+                  });
+                  await persistActivity("tool_use", message, {
+                    tool_name: toolName,
+                    tool_input: toolInput,
+                  });
+                } else if (eventType === "item.completed" || status === "completed") {
+                  const message = formatCodexFileChangeMessage(changes, "completed");
+                  await sendEvent({
+                    type: "tool_result",
+                    message,
+                    tool_result: message,
+                    is_error: false,
+                    sandbox_id: sandboxId || undefined,
+                    agent_session_id: agentSessionId || undefined,
+                  });
+                  await persistActivity("tool_result", message, {
+                    tool_result: message,
+                    is_error: false,
                   });
                   await syncArtifactSnapshot();
                 }
