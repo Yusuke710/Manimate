@@ -115,7 +115,9 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
   const dense = attachments.length > 6;
   const thumbSize = dense ? 44 : 64;
   const thumbGap = dense ? 4 : 8;
-  const imageAttachments = attachments.filter((attachment) => attachment.file.type.startsWith("image/"));
+  const imageAttachments = attachments
+    .map((attachment, attachmentIndex) => ({ ...attachment, attachmentIndex }))
+    .filter((attachment) => attachment.file.type.startsWith("image/"));
 
   // Cleanup blob URLs on unmount
   useEffect(() => {
@@ -159,6 +161,40 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
       return prev.filter((_, i) => i !== index);
     });
   }, []);
+
+  const replaceImageAttachment = useCallback((imageIndex: number, file: File) => {
+    const attachmentIndex = imageAttachments[imageIndex]?.attachmentIndex;
+    if (attachmentIndex === undefined) return;
+
+    setAttachments((prev) => {
+      const previous = prev[attachmentIndex];
+      if (!previous) return prev;
+
+      URL.revokeObjectURL(previous.url);
+      return prev.map((attachment, index) => (
+        index === attachmentIndex
+          ? { file, url: URL.createObjectURL(file) }
+          : attachment
+      ));
+    });
+  }, [imageAttachments]);
+
+  const appendFrameInstruction = useCallback((instruction: string) => {
+    const trimmed = instruction.trim();
+    if (!trimmed) return;
+
+    setPrompt((prev) => {
+      if (!prev) return trimmed;
+      const spacer = prev.endsWith(" ") || prev.endsWith("\n") ? "" : " ";
+      return `${prev}${spacer}${trimmed}`;
+    });
+    scrollToBottomRef.current = true;
+  }, []);
+
+  const confirmFrameAnnotation = useCallback((imageIndex: number, file: File | null, instruction: string) => {
+    if (file) replaceImageAttachment(imageIndex, file);
+    appendFrameInstruction(instruction);
+  }, [appendFrameInstruction, replaceImageAttachment]);
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
@@ -500,6 +536,8 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
           index={lightboxIndex}
           onIndexChange={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
+          onImageChange={replaceImageAttachment}
+          onAnnotationConfirm={confirmFrameAnnotation}
         />
       )}
     </div>

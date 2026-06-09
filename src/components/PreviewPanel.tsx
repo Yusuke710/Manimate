@@ -29,6 +29,18 @@ interface PreviewPanelProps {
   onPreviewReady?: (previewNonce: number) => void;
 }
 
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable ||
+    Boolean(target.closest('[contenteditable="true"]'))
+  );
+}
+
 export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, isRendering = false, onRequestHqRender, onRequest4kRender, onPreviewReady }: PreviewPanelProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("plan");
@@ -1424,7 +1436,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Skip if typing in input/textarea or modal is open
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isEditableKeyboardTarget(e.target) || isEditableKeyboardTarget(document.activeElement)) return;
       if (showDownloadModal) return;
 
       switch (e.code) {
