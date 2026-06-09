@@ -89,8 +89,8 @@ describe("session feedback", () => {
     try {
       const { db, feedbackRoute, messagesRoute } = await loadModules(localRoot);
 
-      const firstSession = db.createLocalSession({ model: "opus" });
-      const secondSession = db.createLocalSession({ model: "opus" });
+      const firstSession = db.createLocalSession({ model: "claude" });
+      const secondSession = db.createLocalSession({ model: "claude" });
 
       expect(firstSession.session_number).toBe(1);
       expect(secondSession.session_number).toBe(2);
@@ -177,7 +177,7 @@ describe("session feedback", () => {
     try {
       const { store, db, cloudSync, feedbackRoute } = await loadModules(localRoot);
 
-      const session = db.createLocalSession({ model: "opus" });
+      const session = db.createLocalSession({ model: "claude" });
 
       await feedbackRoute.POST(
         new NextRequest(`http://localhost/api/sessions/${session.id}/feedback`, {

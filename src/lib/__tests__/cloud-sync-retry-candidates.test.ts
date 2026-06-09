@@ -28,20 +28,20 @@ describe("listLocalCloudSyncRetryCandidates", () => {
     try {
       const db = await loadDbModule(localRoot);
 
-      const idle = db.createLocalSession({ model: "opus" });
+      const idle = db.createLocalSession({ model: "claude" });
       db.updateLocalSession(idle.id, {
         video_path: "/tmp/idle.mp4",
         cloud_sync_status: "idle",
       });
 
-      const authFailed = db.createLocalSession({ model: "opus" });
+      const authFailed = db.createLocalSession({ model: "claude" });
       db.updateLocalSession(authFailed.id, {
         video_path: "/tmp/auth-failed.mp4",
         cloud_sync_status: "failed",
         cloud_last_error: AUTH_ERROR_MESSAGE,
       });
 
-      const synced = db.createLocalSession({ model: "opus" });
+      const synced = db.createLocalSession({ model: "claude" });
       db.updateLocalSession(synced.id, {
         video_path: "/tmp/synced.mp4",
         cloud_sync_status: "synced",

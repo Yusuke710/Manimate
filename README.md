@@ -95,7 +95,7 @@ Generate from the shell:
 
 ```bash
 manimate "Animate Laplace transform"
-manimate "Animate Laplace transform" -m opus -a 16:9
+manimate "Animate Laplace transform" -m claude -a 16:9
 manimate "Animate Laplace transform" -v Lci8YeL6PAFHJjNKvwXq
 manimate "Animate eigenvectors" --no-voice
 manimate -p "--animate a prompt that starts with a dash"
@@ -107,7 +107,7 @@ Generate flags:
 
 - `-p`, `--prompt <text>` use this when the prompt starts with `-`
 - `-s`, `--session <id>` continue an existing session
-- `-m`, `--model <opus|sonnet|haiku>`
+- `-m`, `--model <claude>` choose the logical runtime model
 - `-a`, `--aspect <16:9|9:16|1:1>`
 - `-v`, `--voice <voice_id>`
 - `--no-voice`
@@ -172,7 +172,7 @@ Example request:
 ```json
 {
   "prompt": "Animate eigenvectors in 2D",
-  "model": "opus",
+  "model": "claude",
   "aspect_ratio": "16:9"
 }
 ```

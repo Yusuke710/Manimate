@@ -1,6 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
-import { isRegisteredModelId } from "@/lib/models";
 import { getResolvedElevenLabsApiKey } from "@/lib/local/elevenlabs-config";
 
 export interface ActiveLocalRunProcess {
@@ -181,22 +180,6 @@ export async function cancelLocalRunProcess(input: {
   return { success: true, message: "Local Claude process canceled", runId: target.runId };
 }
 
-export function normalizeLocalClaudeModel(model: string | null | undefined): string | null {
-  const candidate = model?.trim();
-  if (!candidate) return null;
-
-  const lower = candidate.toLowerCase();
-  if (isRegisteredModelId(lower)) {
-    return lower;
-  }
-
-  // Backward compatibility for existing sessions that still store full model IDs.
-  if (lower.startsWith("claude-")) {
-    return candidate;
-  }
-  return null;
-}
-
 export function buildLocalClaudeEnv(
   sourceEnv: NodeJS.ProcessEnv = process.env
 ): NodeJS.ProcessEnv {
@@ -225,7 +208,6 @@ export function buildLocalClaudeEnv(
 export function spawnLocalClaudeProcess(input: {
   cwd: string;
   prompt: string;
-  model?: string | null;
   resumeSessionId?: string | null;
 }): ChildProcessWithoutNullStreams {
   const args = [
@@ -237,11 +219,6 @@ export function spawnLocalClaudeProcess(input: {
     "--allowedTools",
     "Task,TaskOutput,Bash,Glob,Grep,Read,Edit,Write,WebFetch,WebSearch,TaskStop,mcp__*",
   ];
-
-  const normalizedModel = normalizeLocalClaudeModel(input.model);
-  if (normalizedModel) {
-    args.push("--model", normalizedModel);
-  }
 
   if (input.resumeSessionId) {
     args.push("--resume", input.resumeSessionId);

@@ -3,7 +3,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { parseNDJSONChunk } from "@/lib/ndjson-parser";
 import { normalizeClaudeCliSetupError, transformCliError } from "@/lib/cli-error";
-import { DEFAULT_MODEL } from "@/lib/models";
+import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
 import {
   ensureLocalSessionLayout,
   getLocalSandboxId,
@@ -232,7 +232,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
     let sessionId: string | null = null;
     let sandboxId: string | null = null;
     let claudeSessionId = "";
-    let modelForRun = "claude";
+    let modelForRun = DEFAULT_MODEL;
     let currentTurnId: string | null = null;
 
     const persistActivity = async (
@@ -289,9 +289,16 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         });
       }
 
-      modelForRun = typeof body.model === "string" && body.model.trim()
-        ? body.model.trim()
-        : session.model || "claude";
+      modelForRun =
+        typeof body.model === "string" && isRegisteredModelId(body.model.trim())
+          ? body.model.trim()
+          : isRegisteredModelId(session.model)
+            ? session.model
+            : DEFAULT_MODEL;
+      if (session.model !== modelForRun) {
+        updateLocalSession(sessionId, { model: modelForRun });
+        session = getLocalSession(sessionId) || session;
+      }
       const resumeSessionId = session.claude_session_id || body.claude_session_id || null;
 
       sandboxId = session.sandbox_id || getLocalSandboxId(sessionId);
@@ -465,7 +472,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       const process = spawnLocalClaudeProcess({
         cwd: projectDir,
         prompt,
-        model: modelForRun,
         resumeSessionId,
       });
 

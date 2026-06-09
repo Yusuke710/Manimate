@@ -5,13 +5,13 @@ import { DEFAULT_VOICE_ID } from "@/lib/voices";
 describe("parseUrlLaunchIntent", () => {
   it("parses prompt with optional launch settings", () => {
     const intent = parseUrlLaunchIntent(
-      `prompt=Animate%20vectors&send=1&model=haiku&voice_id=${DEFAULT_VOICE_ID}&aspect_ratio=9%3A16`
+      `prompt=Animate%20vectors&send=1&model=claude&voice_id=${DEFAULT_VOICE_ID}&aspect_ratio=9%3A16`
     );
 
     expect(intent).toEqual({
       prompt: "Animate vectors",
       autoSend: true,
-      model: "haiku",
+      model: "claude",
       voiceId: DEFAULT_VOICE_ID,
       aspectRatio: "9:16",
     });

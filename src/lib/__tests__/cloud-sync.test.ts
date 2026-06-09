@@ -76,7 +76,7 @@ describe("queueLocalCloudSync", () => {
         },
       });
 
-      const session = db.createLocalSession({ model: "opus" });
+      const session = db.createLocalSession({ model: "claude" });
       db.updateLocalSession(session.id, {
         video_path: "/tmp/missing-video.mp4",
       });

@@ -1,5 +1,5 @@
 /**
- * Local model registry (single-provider local runtime).
+ * Local runtime identity. Model choice is inherited from Claude Code.
  */
 
 interface ModelEntry {
@@ -7,22 +7,14 @@ interface ModelEntry {
   description: string;
 }
 
+export const DEFAULT_MODEL = "claude";
+
 export const MODEL_REGISTRY: Record<string, ModelEntry> = {
-  opus: {
-    label: "Opus 4.7",
-    description: "Most capable for complex work",
-  },
-  sonnet: {
-    label: "Sonnet 4.5",
-    description: "Best for everyday tasks",
-  },
-  haiku: {
-    label: "Haiku 4.5",
-    description: "Fastest for quick answers",
+  claude: {
+    label: "Claude",
+    description: "Uses your configured Claude Code model",
   },
 };
-
-export const DEFAULT_MODEL = "opus";
 
 const MODEL_ID_SET = new Set(Object.keys(MODEL_REGISTRY));
 

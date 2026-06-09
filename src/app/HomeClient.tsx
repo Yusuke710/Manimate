@@ -50,6 +50,8 @@ function usePreferredModel() {
       const saved = localStorage.getItem(MODEL_PREF_KEY);
       if (saved && isRegisteredModelId(saved)) {
         timer = window.setTimeout(() => setModel(saved), 0);
+      } else if (saved) {
+        localStorage.setItem(MODEL_PREF_KEY, DEFAULT_MODEL);
       }
     } catch {}
     return () => {
@@ -58,13 +60,13 @@ function usePreferredModel() {
   }, []);
 
   const set = useCallback((m: string) => {
-    setModel(m);
-    try { localStorage.setItem(MODEL_PREF_KEY, m); } catch {}
+    const nextModel = isRegisteredModelId(m) ? m : DEFAULT_MODEL;
+    setModel(nextModel);
+    try { localStorage.setItem(MODEL_PREF_KEY, nextModel); } catch {}
   }, []);
   return [model, set] as const;
 }
 
-// Manus-style model selector dropdown
 function ModelSelector({ model, onChange, disabled }: { model: string; onChange: (model: string) => void; disabled?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -86,13 +88,12 @@ function ModelSelector({ model, onChange, disabled }: { model: string; onChange:
           display: "flex", alignItems: "center", gap: 5,
           background: "var(--bg-white)", border: "1px solid var(--border-main)",
           borderRadius: 20,
-          padding: "4px 10px 4px 10px",
+          padding: "4px 10px",
           cursor: disabled || AVAILABLE_MODELS.length <= 1 ? "default" : "pointer",
           fontFamily: "var(--font)",
           transition: "border-color 0.12s",
         }}
       >
-        {/* CPU/Chip icon */}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
         </svg>
@@ -163,7 +164,7 @@ function AspectRatioIcon({ ratio, size = 14, color = "currentColor" }: { ratio: 
   );
 }
 
-// Aspect ratio selector dropdown (Manus-style, parallels ModelSelector)
+// Aspect ratio selector dropdown
 function AspectRatioSelector({ ratio, onChange, disabled }: { ratio: AspectRatio; onChange: (ratio: AspectRatio) => void; disabled?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1121,7 +1122,10 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
       }
 
       if (data.session.model) {
-        dispatch({ type: "SET_MODEL", model: data.session.model });
+        dispatch({
+          type: "SET_MODEL",
+          model: isRegisteredModelId(data.session.model) ? data.session.model : DEFAULT_MODEL,
+        });
       }
       if (isAspectRatio(data.session.aspect_ratio)) {
         onSessionAspectRatio?.(data.session.aspect_ratio);
@@ -1818,7 +1822,8 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        id, model,
+        id,
+        model: model && isRegisteredModelId(model) ? model : DEFAULT_MODEL,
         ...(voice ? { voice_id: voice } : {}),
         aspect_ratio: ratioOverride ?? aspectRatio,
       }),
