@@ -183,8 +183,8 @@ describe("PreviewTab download flow", () => {
     expect(buildDownloadFilename("session-1", "claude-opus-4.6", "")).toBe(
       "manimate-claude-session-.mp4",
     );
-    expect(buildDownloadFilename("session-1", "codex", "-1080p")).toBe(
-      "manimate-codex-session--1080p.mp4",
+    expect(buildDownloadFilename("session-1", null, "-1080p")).toBe(
+      "manimate-claude-session--1080p.mp4",
     );
   });
 });

@@ -878,7 +878,7 @@ function runRetryingLoad(
 /** Build download filename: manimate-{model}-{shortId}.mp4 */
 export function buildDownloadFilename(sessionId: string | null, model: string | null, suffix: string): string {
   const shortId = sessionId?.slice(0, 8) ?? "unknown";
-  const logicalModel = model?.split("-")[0] || "video";
+  const logicalModel = model?.split("-")[0] || "claude";
   const safeModel = logicalModel.replace(/[^a-z0-9]/gi, "-").toLowerCase();
   return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
 }
