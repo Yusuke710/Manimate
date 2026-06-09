@@ -25,9 +25,22 @@ describe("parseUrlLaunchIntent", () => {
     });
   });
 
-  it("drops invalid optional params", () => {
+  it("accepts Codex as a runtime selector", () => {
+    const intent = parseUrlLaunchIntent("prompt=Test&model=codex");
+    expect(intent).toEqual({
+      prompt: "Test",
+      autoSend: false,
+      model: "codex",
+    });
+  });
+
+  it("rejects invalid model params", () => {
+    expect(parseUrlLaunchIntent("prompt=Test&model=invalid")).toBeNull();
+  });
+
+  it("drops other invalid optional params", () => {
     const intent = parseUrlLaunchIntent(
-      "prompt=Test&send=true&model=invalid&voice_id=bad&aspect_ratio=5:4"
+      "prompt=Test&send=true&voice_id=bad&aspect_ratio=5:4"
     );
     expect(intent).toEqual({
       prompt: "Test",

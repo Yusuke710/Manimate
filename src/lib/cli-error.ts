@@ -5,7 +5,12 @@
  * last line is a `{"type":"result", ...}` object. We scan for it, parse it,
  * and map known subtypes to user-friendly messages.
  */
-export function transformCliError(exitCode: number, rawDetails: string, stderr?: string): string {
+export function transformCliError(
+  exitCode: number,
+  rawDetails: string,
+  stderr?: string,
+  runtimeModel = "claude"
+): string {
   // Try to find and parse a result JSON object.
   // Input may be a single JSON string, or NDJSON with the result as the last line.
   const result = extractResult(rawDetails);
@@ -34,9 +39,9 @@ export function transformCliError(exitCode: number, rawDetails: string, stderr?:
   }
 
   // Check for common patterns in non-JSON error output (case-insensitive)
-  const claudeSetupMessage = normalizeClaudeCliSetupError(stderr || rawDetails);
-  if (claudeSetupMessage) {
-    return claudeSetupMessage;
+  const setupMessage = normalizeLocalAgentCliSetupError(runtimeModel, stderr || rawDetails);
+  if (setupMessage) {
+    return setupMessage;
   }
 
   const lower = rawDetails.toLowerCase();
@@ -81,6 +86,43 @@ export function normalizeClaudeCliSetupError(text: string): string | null {
   }
 
   return null;
+}
+
+export function normalizeCodexCliSetupError(text: string): string | null {
+  if (!text) return null;
+
+  const lower = text.toLowerCase();
+
+  if (
+    lower.includes("spawn codex enoent") ||
+    lower.includes("command not found: codex") ||
+    lower.includes("no such file or directory") && lower.includes("codex")
+  ) {
+    return "Codex CLI (`codex`) is not installed. Install it, then run `codex` locally and sign in.";
+  }
+
+  if (
+    lower.includes("not authenticated") ||
+    lower.includes("not logged in") ||
+    lower.includes("login required") ||
+    lower.includes("log in") ||
+    lower.includes("login") ||
+    lower.includes("sign in") ||
+    lower.includes("signed in")
+  ) {
+    return "Codex CLI is not signed in. Run `codex` locally and sign in, then try again.";
+  }
+
+  return null;
+}
+
+export function normalizeLocalAgentCliSetupError(
+  runtimeModel: string,
+  text: string
+): string | null {
+  return runtimeModel === "codex"
+    ? normalizeCodexCliSetupError(text)
+    : normalizeClaudeCliSetupError(text);
 }
 
 /**

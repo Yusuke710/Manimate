@@ -1,8 +1,8 @@
 # Manimate
 
-Run manimate.ai with your own claude code locally.
+Run manimate.ai with your own local agent runtime.
 
-- Claude Code, Manim, and rendering run locally
+- Claude Code or Codex, Manim, and rendering run locally
 - sessions are stored locally in SQLite and the filesystem
 - finished work can autosync to `manimate.ai` to view and share easily
 
@@ -10,6 +10,7 @@ Run manimate.ai with your own claude code locally.
 
 - Node.js 22+
 - Claude Code CLI (`claude`) authenticated locally
+- optional: Codex CLI (`codex`) authenticated locally for `-m codex`
 - Manim CE (`manim`), `ffmpeg`, LaTeX, and `dvisvgm`
 - optional: `ELEVENLABS_API_KEY` for voiceover, or paste it in the Studio voice menu
 
@@ -96,6 +97,7 @@ Generate from the shell:
 ```bash
 manimate "Animate Laplace transform"
 manimate "Animate Laplace transform" -m claude -a 16:9
+manimate "Animate Laplace transform" -m codex
 manimate "Animate Laplace transform" -v Lci8YeL6PAFHJjNKvwXq
 manimate "Animate eigenvectors" --no-voice
 manimate -p "--animate a prompt that starts with a dash"
@@ -107,7 +109,7 @@ Generate flags:
 
 - `-p`, `--prompt <text>` use this when the prompt starts with `-`
 - `-s`, `--session <id>` continue an existing session
-- `-m`, `--model <claude>` choose the logical runtime model
+- `-m`, `--model <claude|codex>` choose the logical runtime model
 - `-a`, `--aspect <16:9|9:16|1:1>`
 - `-v`, `--voice <voice_id>`
 - `--no-voice`

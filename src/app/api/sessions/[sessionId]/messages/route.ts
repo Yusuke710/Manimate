@@ -118,7 +118,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     activityEvents,
     session: {
       sandbox_id: session.sandbox_id,
-      claude_session_id: session.claude_session_id,
+      agent_session_id: session.agent_session_id,
       last_video_url: videoUrl,
       plan_content: session.plan_content,
       script_content: session.script_content,

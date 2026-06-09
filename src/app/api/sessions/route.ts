@@ -46,8 +46,15 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   try {
     const body = await request.json();
-    if (body.model && typeof body.model === "string" && isRegisteredModelId(body.model)) {
-      model = body.model;
+    const requestedModel = typeof body.model === "string" ? body.model.trim() : "";
+    if (body.model !== undefined) {
+      if (!requestedModel || !isRegisteredModelId(requestedModel)) {
+        return NextResponse.json(
+          { error: "Invalid model. Use one of: claude, codex" },
+          { status: 400 }
+        );
+      }
+      model = requestedModel;
     }
     if (body.id && typeof body.id === "string") {
       clientId = body.id;

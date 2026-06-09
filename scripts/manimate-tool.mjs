@@ -57,7 +57,7 @@ Usage:
 Generate Options:
   -p, --prompt <text>      Prompt text
   -s, --session <id>       Reuse a specific session ID
-  -m, --model <id>         Runtime model (claude)
+  -m, --model <id>         Runtime model (claude|codex)
   -a, --aspect <value>     Aspect ratio (16:9|9:16|1:1)
   -v, --voice <id>         Voice ID override
   --no-voice               Disable voiceover (default)

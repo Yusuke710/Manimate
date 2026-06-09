@@ -17,7 +17,7 @@ type ToolGenerateBody = {
   model?: string;
   aspect_ratio?: string;
   voice_id?: string;
-  claude_session_id?: string;
+  agent_session_id?: string;
   images?: Array<{
     id: string;
     path: string;
@@ -48,10 +48,14 @@ export async function POST(request: NextRequest): Promise<Response> {
       ? body.session_id.trim()
       : randomUUID();
 
-  const requestedModel =
-    typeof body.model === "string" && isRegisteredModelId(body.model.trim())
-      ? body.model.trim()
-      : null;
+  const requestedModelRaw = typeof body.model === "string" ? body.model.trim() : "";
+  if (body.model !== undefined && (!requestedModelRaw || !isRegisteredModelId(requestedModelRaw))) {
+    return NextResponse.json(
+      { error: "Invalid model. Use one of: claude, codex" },
+      { status: 400 }
+    );
+  }
+  const requestedModel = requestedModelRaw || null;
   const requestedAspectRatio = isAspectRatio(body.aspect_ratio)
     ? body.aspect_ratio
     : null;
@@ -59,9 +63,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     typeof body.voice_id === "string" && isValidVoiceId(body.voice_id.trim())
       ? body.voice_id.trim()
       : null;
-  const requestedClaudeSessionId =
-    typeof body.claude_session_id === "string" && body.claude_session_id.trim()
-      ? body.claude_session_id.trim()
+  const requestedAgentSessionId =
+    typeof body.agent_session_id === "string" && body.agent_session_id.trim()
+      ? body.agent_session_id.trim()
       : null;
 
   let session = getLocalSession(requestedSessionId);
@@ -98,15 +102,15 @@ export async function POST(request: NextRequest): Promise<Response> {
   const chatBody: Record<string, unknown> = {
     prompt,
     session_id: session.id,
-    model: requestedModel ?? session.model ?? DEFAULT_MODEL,
+    model: requestedModel ?? session.model,
   };
 
   const aspectRatioToUse = requestedAspectRatio ?? session.aspect_ratio;
   if (aspectRatioToUse) {
     chatBody.aspect_ratio = aspectRatioToUse;
   }
-  if (requestedClaudeSessionId) {
-    chatBody.claude_session_id = requestedClaudeSessionId;
+  if (requestedAgentSessionId) {
+    chatBody.agent_session_id = requestedAgentSessionId;
   }
   if (Array.isArray(body.images)) {
     chatBody.images = body.images;

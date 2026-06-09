@@ -8,6 +8,10 @@ const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const NEXT_STATIC_PATH = path.join(PROJECT_ROOT, ".next", "static");
 const NEXT_STANDALONE_ROOT = path.join(PROJECT_ROOT, ".next", "standalone");
 const NEXT_STANDALONE_STATIC_PATH = path.join(PROJECT_ROOT, ".next", "standalone", ".next", "static");
+const PROMPTS_SOURCE_PATH = path.join(PROJECT_ROOT, "src", "lib", "local", "prompts");
+const PROMPTS_STANDALONE_PATH = path.join(NEXT_STANDALONE_ROOT, "src", "lib", "local", "prompts");
+const SCRIPTS_STANDALONE_PATH = path.join(NEXT_STANDALONE_ROOT, "scripts");
+const HELPER_SCRIPT_NAMES = ["tts-generate.py", "lint-subtitles.py"];
 
 async function removeStandaloneEnvFiles() {
   const entries = await fs.readdir(NEXT_STANDALONE_ROOT).catch(() => []);
@@ -23,6 +27,17 @@ async function main() {
   await fs.mkdir(path.dirname(NEXT_STANDALONE_STATIC_PATH), { recursive: true });
   await fs.rm(NEXT_STANDALONE_STATIC_PATH, { recursive: true, force: true });
   await fs.cp(NEXT_STATIC_PATH, NEXT_STANDALONE_STATIC_PATH, { recursive: true });
+  await fs.mkdir(PROMPTS_STANDALONE_PATH, { recursive: true });
+  await fs.cp(PROMPTS_SOURCE_PATH, PROMPTS_STANDALONE_PATH, { recursive: true });
+  await fs.mkdir(SCRIPTS_STANDALONE_PATH, { recursive: true });
+  await Promise.all(
+    HELPER_SCRIPT_NAMES.map((scriptName) =>
+      fs.cp(
+        path.join(PROJECT_ROOT, "scripts", scriptName),
+        path.join(SCRIPTS_STANDALONE_PATH, scriptName)
+      )
+    )
+  );
   await removeStandaloneEnvFiles();
 }
 

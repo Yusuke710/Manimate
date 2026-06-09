@@ -37,7 +37,10 @@ export function parseUrlLaunchIntent(search: string): UrlLaunchIntent | null {
   };
 
   const modelParam = params.get("model")?.trim();
-  if (modelParam && isRegisteredModelId(modelParam)) {
+  if (params.has("model")) {
+    if (!modelParam || !isRegisteredModelId(modelParam)) {
+      return null;
+    }
     intent.model = modelParam;
   }
 

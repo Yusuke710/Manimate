@@ -14,6 +14,10 @@ export const MODEL_REGISTRY: Record<string, ModelEntry> = {
     label: "Claude",
     description: "Uses your configured Claude Code model",
   },
+  codex: {
+    label: "Codex",
+    description: "Uses your configured Codex CLI model",
+  },
 };
 
 const MODEL_ID_SET = new Set(Object.keys(MODEL_REGISTRY));

@@ -883,7 +883,7 @@ interface ChatState {
   isLoadingMessages: boolean;
   isCancelling: boolean;
   sandboxId: string | null;
-  claudeSessionId: string | null;
+  agentSessionId: string | null;
   statusMessage: string | null;
   activityEvents: ActivityEvent[];
   videoUrl: string | null;
@@ -900,10 +900,10 @@ type ChatAction =
   | { type: "SET_LOADING"; isLoading: boolean }
   | { type: "SET_CANCELLING"; isCancelling: boolean }
   | { type: "SET_STATUS"; statusMessage: string | null }
-  | { type: "SET_SESSION"; sandboxId?: string | null; claudeSessionId?: string | null }
+  | { type: "SET_SESSION"; sandboxId?: string | null; agentSessionId?: string | null }
   | { type: "ADD_ACTIVITY"; event: ActivityEvent }
   | { type: "SET_VIDEO_URL"; url: string | null; bumpNonce?: boolean }
-  | { type: "RESTORE_SESSION"; sandboxId: string; claudeSessionId: string }
+  | { type: "RESTORE_SESSION"; sandboxId: string; agentSessionId: string }
   | { type: "LOAD_MESSAGES"; messages: Message[] }
   | { type: "LOAD_ACTIVITY_EVENTS"; events: ActivityEvent[] }
   | { type: "SET_LOADING_MESSAGES"; isLoadingMessages: boolean }
@@ -948,7 +948,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         sandboxId: action.sandboxId !== undefined ? action.sandboxId : state.sandboxId,
-        claudeSessionId: action.claudeSessionId !== undefined ? action.claudeSessionId : state.claudeSessionId,
+        agentSessionId: action.agentSessionId !== undefined ? action.agentSessionId : state.agentSessionId,
       };
 
     case "ADD_ACTIVITY":
@@ -970,7 +970,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         sandboxId: action.sandboxId,
-        claudeSessionId: action.claudeSessionId,
+        agentSessionId: action.agentSessionId,
       };
 
     case "LOAD_MESSAGES":
@@ -1002,7 +1002,7 @@ const initialState: ChatState = {
   isLoadingMessages: false,
   isCancelling: false,
   sandboxId: null,
-  claudeSessionId: null,
+  agentSessionId: null,
   statusMessage: null,
   activityEvents: [],
   videoUrl: null,
@@ -1021,7 +1021,7 @@ interface SessionMessagePayload {
 
 interface SessionSnapshot {
   sandbox_id: string | null;
-  claude_session_id: string | null;
+  agent_session_id: string | null;
   last_video_url: string | null;
   plan_content: string | null;
   script_content: string | null;
@@ -1065,7 +1065,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentAssistantMessageIdRef = useRef<string | null>(null);
   const sandboxIdRef = useRef<string | null>(null);
-  const claudeSessionIdRef = useRef<string | null>(null);
+  const agentSessionIdRef = useRef<string | null>(null);
 
   const planContentRef = useRef<string | null>(null);
   const scriptContentRef = useRef<string | null>(null);
@@ -1078,7 +1078,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
 
   // Sync refs with state
   useEffect(() => { sandboxIdRef.current = state.sandboxId; }, [state.sandboxId]);
-  useEffect(() => { claudeSessionIdRef.current = state.claudeSessionId; }, [state.claudeSessionId]);
+  useEffect(() => { agentSessionIdRef.current = state.agentSessionId; }, [state.agentSessionId]);
   useEffect(() => { planContentRef.current = state.planContent; }, [state.planContent]);
   useEffect(() => { scriptContentRef.current = state.scriptContent; }, [state.scriptContent]);
   useEffect(() => { videoUrlRef.current = state.videoUrl; }, [state.videoUrl]);
@@ -1166,7 +1166,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
         applyFetchedSessionData(data);
 
         if (data.session.sandbox_id) {
-          dispatch({ type: "RESTORE_SESSION", sandboxId: data.session.sandbox_id, claudeSessionId: data.session.claude_session_id || "" });
+          dispatch({ type: "RESTORE_SESSION", sandboxId: data.session.sandbox_id, agentSessionId: data.session.agent_session_id || "" });
         }
 
         if (data.session.last_video_url) {
@@ -1249,9 +1249,9 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
         }
 
         const newSandboxId = data.activeRun?.sandbox_id || data.session.sandbox_id;
-        const newClaudeSessionId = data.activeRun?.claude_session_id || data.session.claude_session_id;
-        if (newSandboxId || newClaudeSessionId) {
-          dispatch({ type: "SET_SESSION", sandboxId: newSandboxId || undefined, claudeSessionId: newClaudeSessionId || undefined });
+        const newAgentSessionId = data.activeRun?.agent_session_id || data.session.agent_session_id;
+        if (newSandboxId || newAgentSessionId) {
+          dispatch({ type: "SET_SESSION", sandboxId: newSandboxId || undefined, agentSessionId: newAgentSessionId || undefined });
         }
 
         // Activate sandbox if an active run is detected (sandbox is already in use)
@@ -1291,7 +1291,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
 
   const handleSend = useCallback(async (prompt: string, images?: File[]) => {
     const currentSandboxId = sandboxIdRef.current;
-    const currentClaudeSessionId = claudeSessionIdRef.current;
+    const currentAgentSessionId = agentSessionIdRef.current;
     const turnId = crypto.randomUUID();
     const visibleFiles = images ?? [];
 
@@ -1359,7 +1359,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
       body.session_id = activeSessionId;
       const isNewSession = !sessionId;
       if (!isNewSession && currentSandboxId) body.sandbox_id = currentSandboxId;
-      if (!isNewSession && currentClaudeSessionId) body.claude_session_id = currentClaudeSessionId;
+      if (!isNewSession && currentAgentSessionId) body.agent_session_id = currentAgentSessionId;
 
       // Wait for optimistic session creation (already has 15s abort timeout).
       if (sessionReady && !(await sessionReady)) {
@@ -1407,7 +1407,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
           try {
 
             if (event.sandbox_id) dispatch({ type: "SET_SESSION", sandboxId: event.sandbox_id });
-            if (event.claude_session_id) dispatch({ type: "SET_SESSION", claudeSessionId: event.claude_session_id });
+            if (event.agent_session_id) dispatch({ type: "SET_SESSION", agentSessionId: event.agent_session_id });
 
             if (event.type === "system_init") {
               addActivity({
@@ -1823,7 +1823,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id,
-        model: model && isRegisteredModelId(model) ? model : DEFAULT_MODEL,
+        model: model ?? DEFAULT_MODEL,
         ...(voice ? { voice_id: voice } : {}),
         aspect_ratio: ratioOverride ?? aspectRatio,
       }),

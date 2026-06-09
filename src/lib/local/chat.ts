@@ -2,7 +2,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { parseNDJSONChunk } from "@/lib/ndjson-parser";
-import { normalizeClaudeCliSetupError, transformCliError } from "@/lib/cli-error";
+import { normalizeLocalAgentCliSetupError, transformCliError } from "@/lib/cli-error";
 import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
 import {
   ensureLocalSessionLayout,
@@ -29,7 +29,7 @@ import {
   endLocalRunStart,
   getActiveLocalRunBySandboxId,
   registerLocalRunProcess,
-  spawnLocalClaudeProcess,
+  spawnLocalAgentProcess,
 } from "@/lib/local/runtime";
 import {
   readLocalProjectChapters,
@@ -50,7 +50,7 @@ type LocalChatRequest = {
   model?: string;
   aspect_ratio?: string;
   voice_id?: string;
-  claude_session_id?: string;
+  agent_session_id?: string;
   images?: Array<{ id: string; path: string; name: string; size: number; type: string }>;
 };
 
@@ -60,7 +60,7 @@ type LocalSSEEvent = {
   message: string;
   session_id?: string;
   sandbox_id?: string;
-  claude_session_id?: string;
+  agent_session_id?: string;
   run_id?: string;
   video_url?: string;
   plan_content?: string | null;
@@ -176,6 +176,40 @@ function getMessageBlocks(obj: Record<string, unknown>): Array<Record<string, un
   return content.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object");
 }
 
+function getAgentSessionIdFromEvent(obj: Record<string, unknown>): string | null {
+  for (const key of ["session_id", "thread_id", "conversation_id"]) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return null;
+}
+
+function parseToolInput(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string" || !value.trim()) return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : { input: value };
+  } catch {
+    return { input: value };
+  }
+}
+
+function getCodexItem(obj: Record<string, unknown>): Record<string, unknown> | null {
+  const item = obj.item;
+  return item && typeof item === "object" && !Array.isArray(item)
+    ? item as Record<string, unknown>
+    : null;
+}
+
+function invalidModelMessage(model: string): string {
+  return `Invalid model "${model}". Use one of: claude, codex.`;
+}
+
 export function inferRenderProfile(prompt: string): RenderProfile {
   const normalized = prompt.toLowerCase();
   if (/\b(4k|2160p|uhd)\b/.test(normalized)) return "uhd_4k_30";
@@ -231,7 +265,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
     let runId: string | null = null;
     let sessionId: string | null = null;
     let sandboxId: string | null = null;
-    let claudeSessionId = "";
+    let agentSessionId = "";
     let modelForRun = DEFAULT_MODEL;
     let currentTurnId: string | null = null;
 
@@ -289,17 +323,36 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         });
       }
 
-      modelForRun =
-        typeof body.model === "string" && isRegisteredModelId(body.model.trim())
-          ? body.model.trim()
-          : isRegisteredModelId(session.model)
-            ? session.model
-            : DEFAULT_MODEL;
+      const requestedModel = typeof body.model === "string" ? body.model.trim() : "";
+      if (body.model !== undefined && (!requestedModel || !isRegisteredModelId(requestedModel))) {
+        await sendEvent({
+          type: "error",
+          state: "error",
+          message: invalidModelMessage(requestedModel || String(body.model)),
+        });
+        return;
+      }
+
+      const sessionModelIsValid = isRegisteredModelId(session.model);
+      if (!sessionModelIsValid && !requestedModel) {
+        await sendEvent({
+          type: "error",
+          state: "error",
+          message: invalidModelMessage(session.model),
+        });
+        return;
+      }
+
+      modelForRun = requestedModel || session.model;
+      const canReuseAgentSession = sessionModelIsValid && session.model === modelForRun;
       if (session.model !== modelForRun) {
-        updateLocalSession(sessionId, { model: modelForRun });
+        updateLocalSession(sessionId, { model: modelForRun, agent_session_id: null });
         session = getLocalSession(sessionId) || session;
       }
-      const resumeSessionId = session.claude_session_id || body.claude_session_id || null;
+      const resumeSessionId = canReuseAgentSession
+        ? session.agent_session_id || body.agent_session_id || null
+        : null;
+      agentSessionId = resumeSessionId || "";
 
       sandboxId = session.sandbox_id || getLocalSandboxId(sessionId);
       const { projectDir, sessionRoot } = ensureLocalSessionLayout(sessionId);
@@ -338,7 +391,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         session_id: sessionId,
         user_message_id: userMessageId,
         sandbox_id: sandboxId,
-        claude_session_id: resumeSessionId,
+        agent_session_id: resumeSessionId,
       });
       runId = run.id;
       const didResume = Boolean(resumeSessionId);
@@ -350,7 +403,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         model: modelForRun,
         tools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
         sandbox_id: sandboxId,
-        claude_session_id: resumeSessionId || undefined,
+        agent_session_id: resumeSessionId || undefined,
       });
       await persistActivity("system_init", initMessage, {
         model: modelForRun,
@@ -414,7 +467,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       }
 
       if (requestedImageCount > 0 && preparedRequestImageCount === 0) {
-        throw new Error("Attached files could not be prepared for local Claude access");
+        throw new Error("Attached files could not be prepared for local agent access");
       }
 
       const aspectRatio = isAspectRatio(body.aspect_ratio)
@@ -463,15 +516,16 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           type: "artifact_update",
           message: "Artifacts updated",
           sandbox_id: sandboxId || undefined,
-          claude_session_id: claudeSessionId || undefined,
+          agent_session_id: agentSessionId || undefined,
           plan_content: nextPlanContent,
           script_content: nextScriptContent,
         });
       };
 
-      const process = spawnLocalClaudeProcess({
+      const process = spawnLocalAgentProcess({
         cwd: projectDir,
         prompt,
+        model: modelForRun,
         resumeSessionId,
       });
 
@@ -489,7 +543,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         started_at: now,
         last_event_at: now,
         sandbox_id: sandboxId,
-        claude_session_id: resumeSessionId,
+        agent_session_id: resumeSessionId,
       });
 
       let state: ExecutionState = "planning";
@@ -522,12 +576,101 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           ndjsonBuffer = parsed.remainder;
 
           for (const obj of parsed.lines as Array<Record<string, unknown>>) {
-            if (typeof obj.session_id === "string") {
-              claudeSessionId = obj.session_id;
+            const nextAgentSessionId = getAgentSessionIdFromEvent(obj);
+            if (nextAgentSessionId) {
+              agentSessionId = nextAgentSessionId;
             }
 
             if (obj.type === "result" && typeof obj.result === "string") {
               finalAssistantText = obj.result;
+            }
+
+            if (modelForRun === "codex") {
+              const eventType = typeof obj.type === "string" ? obj.type : "";
+              const item = getCodexItem(obj);
+              const itemType = typeof item?.type === "string" ? item.type : "";
+
+              if (
+                eventType === "agent_message" &&
+                typeof obj.message === "string"
+              ) {
+                finalAssistantText = finalAssistantText
+                  ? `${finalAssistantText}\n${obj.message}`
+                  : obj.message;
+                await sendEvent({
+                  type: "assistant_text",
+                  message: obj.message,
+                  sandbox_id: sandboxId || undefined,
+                  agent_session_id: agentSessionId || undefined,
+                });
+                await persistActivity("assistant_text", obj.message);
+              }
+
+              if (itemType === "agent_message" && typeof item?.text === "string") {
+                finalAssistantText = finalAssistantText
+                  ? `${finalAssistantText}\n${item.text}`
+                  : item.text;
+                await sendEvent({
+                  type: "assistant_text",
+                  message: item.text,
+                  sandbox_id: sandboxId || undefined,
+                  agent_session_id: agentSessionId || undefined,
+                });
+                await persistActivity("assistant_text", item.text);
+              }
+
+              if (itemType === "function_call") {
+                const toolName = typeof item?.name === "string" ? item.name : "Tool";
+                const toolInput = parseToolInput(item?.arguments ?? item?.input);
+                const nextState = inferStateFromTool(toolName, toolInput);
+                if (nextState !== state) {
+                  state = nextState;
+                  const stateMessage = state === "rendering"
+                    ? "Rendering video..."
+                    : state === "coding"
+                      ? "Writing code..."
+                      : "Planning...";
+                  await sendEvent({
+                    type: "progress",
+                    state,
+                    message: stateMessage,
+                    sandbox_id: sandboxId || undefined,
+                    agent_session_id: agentSessionId || undefined,
+                  });
+                  await persistActivity("progress", stateMessage);
+                }
+                await sendEvent({
+                  type: "tool_use",
+                  message: toolName,
+                  tool_name: toolName,
+                  tool_input: toolInput,
+                  sandbox_id: sandboxId || undefined,
+                  agent_session_id: agentSessionId || undefined,
+                });
+                await persistActivity("tool_use", toolName, {
+                  tool_name: toolName,
+                  tool_input: toolInput,
+                });
+              }
+
+              if (itemType === "function_call_output") {
+                const rawResult = stringifyToolResult(item?.output).trim()
+                  || "Tool completed with no text output.";
+                const toolResult = truncateText(rawResult, TOOL_RESULT_MAX_CHARS);
+                const message = truncateText(toolResult, TOOL_RESULT_MESSAGE_MAX_CHARS);
+                await sendEvent({
+                  type: "tool_result",
+                  message,
+                  tool_result: toolResult,
+                  sandbox_id: sandboxId || undefined,
+                  agent_session_id: agentSessionId || undefined,
+                });
+                await persistActivity("tool_result", message, {
+                  tool_result: toolResult,
+                  is_error: false,
+                });
+                await syncArtifactSnapshot();
+              }
             }
 
             const messageType = typeof obj.type === "string" ? obj.type : "";
@@ -542,7 +685,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   type: "assistant_text",
                   message: block.text,
                   sandbox_id: sandboxId || undefined,
-                  claude_session_id: claudeSessionId || undefined,
+                  agent_session_id: agentSessionId || undefined,
                 });
                 await persistActivity("assistant_text", block.text);
               }
@@ -566,7 +709,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                     state,
                     message: stateMessage,
                     sandbox_id: sandboxId || undefined,
-                    claude_session_id: claudeSessionId || undefined,
+                    agent_session_id: agentSessionId || undefined,
                   });
                   await persistActivity("progress", stateMessage);
                 }
@@ -577,7 +720,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   tool_name: toolName,
                   tool_input: toolInput,
                   sandbox_id: sandboxId || undefined,
-                  claude_session_id: claudeSessionId || undefined,
+                  agent_session_id: agentSessionId || undefined,
                 });
                 await persistActivity("tool_use", toolName, {
                   tool_name: toolName,
@@ -598,7 +741,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   tool_result: toolResult,
                   is_error: isError,
                   sandbox_id: sandboxId || undefined,
-                  claude_session_id: claudeSessionId || undefined,
+                  agent_session_id: agentSessionId || undefined,
                 });
                 await persistActivity("tool_result", message, {
                   tool_result: toolResult,
@@ -625,7 +768,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
               message: `Rendering video... ${progress}%`,
               progress,
               sandbox_id: sandboxId || undefined,
-              claude_session_id: claudeSessionId || undefined,
+              agent_session_id: agentSessionId || undefined,
             });
             await persistActivity("progress", `Rendering video... ${progress}%`, {
               progress,
@@ -644,11 +787,22 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       if (ndjsonBuffer.trim()) {
         try {
           const trailing = JSON.parse(ndjsonBuffer.trim()) as Record<string, unknown>;
-          if (typeof trailing.session_id === "string") {
-            claudeSessionId = trailing.session_id;
+          const trailingAgentSessionId = getAgentSessionIdFromEvent(trailing);
+          if (trailingAgentSessionId) {
+            agentSessionId = trailingAgentSessionId;
           }
           if (trailing.type === "result" && typeof trailing.result === "string") {
             finalAssistantText = trailing.result;
+          }
+          const trailingItem = getCodexItem(trailing);
+          if (
+            modelForRun === "codex" &&
+            trailingItem?.type === "agent_message" &&
+            typeof trailingItem.text === "string"
+          ) {
+            finalAssistantText = finalAssistantText
+              ? `${finalAssistantText}\n${trailingItem.text}`
+              : trailingItem.text;
           }
         } catch {
           // Ignore invalid trailing output.
@@ -694,14 +848,14 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           status: "canceled",
           finished_at: finishedAt,
           sandbox_id: sandboxId,
-          claude_session_id: claudeSessionId || session.claude_session_id,
+          agent_session_id: agentSessionId || session.agent_session_id,
           error_message: "Stopped by user",
         });
         const canceledPlanTitle = planContent ? extractPlanTitle(planContent) : null;
         updateLocalSession(sessionId, {
           status: "active",
           sandbox_id: sandboxId,
-          claude_session_id: claudeSessionId || session.claude_session_id,
+          agent_session_id: agentSessionId || session.agent_session_id,
           model: modelForRun,
           ...(canceledPlanTitle ? { title: canceledPlanTitle } : {}),
           plan_content: planContent,
@@ -719,7 +873,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           type: "artifact_update",
           message: "Artifacts updated",
           sandbox_id: sandboxId,
-          claude_session_id: claudeSessionId || undefined,
+          agent_session_id: agentSessionId || undefined,
           plan_content: planContent,
           script_content: scriptContent,
         });
@@ -729,7 +883,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           message: "Stopped by user",
           terminal_status: "canceled",
           sandbox_id: sandboxId,
-          claude_session_id: claudeSessionId || undefined,
+          agent_session_id: agentSessionId || undefined,
           run_id: runId,
           video_url: videoUrl || undefined,
         });
@@ -743,20 +897,21 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         const message = transformCliError(
           exitResult.code ?? 1,
           rawStdoutTail.trim(),
-          stderrTail.trim()
+          stderrTail.trim(),
+          modelForRun
         );
         updateLocalRun(runId, {
           status: "failed",
           finished_at: finishedAt,
           sandbox_id: sandboxId,
-          claude_session_id: claudeSessionId || session.claude_session_id,
+          agent_session_id: agentSessionId || session.agent_session_id,
           error_message: message,
         });
         const failedPlanTitle = planContent ? extractPlanTitle(planContent) : null;
         updateLocalSession(sessionId, {
           status: "active",
           sandbox_id: sandboxId,
-          claude_session_id: claudeSessionId || session.claude_session_id,
+          agent_session_id: agentSessionId || session.agent_session_id,
           model: modelForRun,
           ...(failedPlanTitle ? { title: failedPlanTitle } : {}),
           plan_content: planContent,
@@ -767,7 +922,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           type: "artifact_update",
           message: "Artifacts updated",
           sandbox_id: sandboxId,
-          claude_session_id: claudeSessionId || undefined,
+          agent_session_id: agentSessionId || undefined,
           plan_content: planContent,
           script_content: scriptContent,
         });
@@ -776,7 +931,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           state: "error",
           message,
           sandbox_id: sandboxId,
-          claude_session_id: claudeSessionId || undefined,
+          agent_session_id: agentSessionId || undefined,
         });
         await persistActivity("error", message);
         return;
@@ -794,7 +949,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       updateLocalSession(sessionId, {
         status: "active",
         sandbox_id: sandboxId,
-        claude_session_id: claudeSessionId || session.claude_session_id,
+        agent_session_id: agentSessionId || session.agent_session_id,
         model: modelForRun,
         ...(planTitle ? { title: planTitle } : {}),
         plan_content: planContent,
@@ -808,7 +963,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         type: "artifact_update",
         message: "Artifacts updated",
         sandbox_id: sandboxId,
-        claude_session_id: claudeSessionId || undefined,
+        agent_session_id: agentSessionId || undefined,
         plan_content: planContent,
         script_content: scriptContent,
       });
@@ -817,7 +972,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         status: "completed",
         finished_at: finishedAt,
         sandbox_id: sandboxId,
-        claude_session_id: claudeSessionId || session.claude_session_id,
+        agent_session_id: agentSessionId || session.agent_session_id,
         video_url: videoUrl,
       });
 
@@ -827,7 +982,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         message: "Complete",
         terminal_status: "completed",
         sandbox_id: sandboxId,
-        claude_session_id: claudeSessionId || undefined,
+        agent_session_id: agentSessionId || undefined,
         run_id: runId,
         video_url: videoUrl || undefined,
       });
@@ -838,13 +993,13 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       queueLocalCloudSync(sessionId);
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : "An unexpected local-mode error occurred";
-      const message = normalizeClaudeCliSetupError(rawMessage) || rawMessage;
+      const message = normalizeLocalAgentCliSetupError(modelForRun, rawMessage) || rawMessage;
       if (runId) {
         updateLocalRun(runId, {
           status: "failed",
           finished_at: new Date().toISOString(),
           sandbox_id: sandboxId,
-          claude_session_id: claudeSessionId || null,
+          agent_session_id: agentSessionId || null,
           error_message: message,
         });
       }
@@ -852,7 +1007,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         updateLocalSession(sessionId, {
           status: "active",
           sandbox_id: sandboxId,
-          claude_session_id: claudeSessionId || null,
+          agent_session_id: agentSessionId || null,
           model: modelForRun,
         });
       }
@@ -861,7 +1016,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         state: "error",
         message,
         sandbox_id: sandboxId || undefined,
-        claude_session_id: claudeSessionId || undefined,
+        agent_session_id: agentSessionId || undefined,
       });
       if (sessionId) {
         insertLocalActivityEvent({

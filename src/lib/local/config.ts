@@ -42,19 +42,22 @@ export function getLocalSessionPaths(sessionId: string): {
   };
 }
 
-/**
- * Path to the canonical Manim expert prompt (CLAUDE.md) bundled in the repo.
- * This file is copied into each session's project dir so Claude CLI picks it up.
- * The launcher passes MANIMATE_PACKAGE_ROOT for installed builds. Falling back to
- * process.cwd() keeps local repo development working.
- */
-const MANIM_PROMPT_PATH = path.join(
+const CLAUDE_PROMPT_PATH = path.join(
   PACKAGE_ROOT,
   "src",
   "lib",
   "local",
   "prompts",
   "CLAUDE.md"
+);
+
+const AGENTS_PROMPT_PATH = path.join(
+  PACKAGE_ROOT,
+  "src",
+  "lib",
+  "local",
+  "prompts",
+  "AGENTS.md"
 );
 
 const TTS_GENERATE_PATH = path.join(
@@ -92,10 +95,11 @@ export function ensureLocalSessionLayout(sessionId: string): {
   fs.mkdirSync(paths.projectDir, { recursive: true });
   fs.mkdirSync(paths.artifactsDir, { recursive: true });
 
-  // Keep the Manim expert prompt in sync with the bundled app version.
-  // Claude CLI auto-discovers CLAUDE.md in cwd and uses it as system context.
+  // Keep runtime-specific prompt files in sync with the bundled app version.
   const destClaudeMd = path.join(paths.projectDir, "CLAUDE.md");
-  copyFileIfMissingOrChanged(MANIM_PROMPT_PATH, destClaudeMd);
+  copyFileIfMissingOrChanged(CLAUDE_PROMPT_PATH, destClaudeMd);
+  const destAgentsMd = path.join(paths.projectDir, "AGENTS.md");
+  copyFileIfMissingOrChanged(AGENTS_PROMPT_PATH, destAgentsMd);
 
   // Copy TTS generator into project dir so Claude Code can run:
   // `python tts-generate.py --plan plan.md`

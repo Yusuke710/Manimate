@@ -1,6 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import { getResolvedElevenLabsApiKey } from "@/lib/local/elevenlabs-config";
+import { DEFAULT_MODEL } from "@/lib/models";
 
 export interface ActiveLocalRunProcess {
   sessionId: string;
@@ -177,7 +178,7 @@ export async function cancelLocalRunProcess(input: {
 
   await terminateLocalRunProcess(target);
 
-  return { success: true, message: "Local Claude process canceled", runId: target.runId };
+  return { success: true, message: "Local agent process canceled", runId: target.runId };
 }
 
 export function buildLocalClaudeEnv(
@@ -205,11 +206,10 @@ export function buildLocalClaudeEnv(
   return env;
 }
 
-export function spawnLocalClaudeProcess(input: {
-  cwd: string;
+export function buildClaudeArgs(input: {
   prompt: string;
   resumeSessionId?: string | null;
-}): ChildProcessWithoutNullStreams {
+}): string[] {
   const args = [
     "--print",
     "--output-format",
@@ -225,13 +225,58 @@ export function spawnLocalClaudeProcess(input: {
   }
 
   args.push("-p", input.prompt);
-  const env = buildLocalClaudeEnv();
+  return args;
+}
+
+export function buildCodexArgs(input: {
+  cwd: string;
+  prompt: string;
+  resumeSessionId?: string | null;
+}): string[] {
+  const args = ["exec"];
+
+  if (input.resumeSessionId) {
+    args.push("resume");
+  }
+
+  args.push(
+    "--json",
+    "--skip-git-repo-check",
+    "--dangerously-bypass-approvals-and-sandbox"
+  );
+
+  if (!input.resumeSessionId) {
+    args.push("--cd", input.cwd);
+  } else {
+    args.push(input.resumeSessionId);
+  }
+
+  args.push(input.prompt);
+  return args;
+}
+
+function buildLocalAgentEnv(model: string): NodeJS.ProcessEnv {
+  const env = model === DEFAULT_MODEL ? buildLocalClaudeEnv() : { ...process.env };
   const elevenLabsApiKey = getResolvedElevenLabsApiKey().apiKey;
   if (elevenLabsApiKey) {
     env.ELEVENLABS_API_KEY = elevenLabsApiKey;
   }
 
-  const child = spawn("claude", args, {
+  return env;
+}
+
+export function spawnLocalAgentProcess(input: {
+  cwd: string;
+  prompt: string;
+  model?: string | null;
+  resumeSessionId?: string | null;
+}): ChildProcessWithoutNullStreams {
+  const model = input.model || DEFAULT_MODEL;
+  const command = model === "codex" ? "codex" : "claude";
+  const args = command === "codex" ? buildCodexArgs(input) : buildClaudeArgs(input);
+  const env = buildLocalAgentEnv(model);
+
+  const child = spawn(command, args, {
     cwd: input.cwd,
     env,
     stdio: ["pipe", "pipe", "pipe"],

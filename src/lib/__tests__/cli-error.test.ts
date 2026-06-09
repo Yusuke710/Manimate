@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { normalizeClaudeCliSetupError, transformCliError } from "@/lib/cli-error";
+import {
+  normalizeClaudeCliSetupError,
+  normalizeCodexCliSetupError,
+  transformCliError,
+} from "@/lib/cli-error";
 
 describe("transformCliError", () => {
   it("transforms permission_denial JSON into friendly message", () => {
@@ -162,6 +166,23 @@ describe("transformCliError", () => {
     expect(msg).toContain("Run `claude` locally and sign in");
   });
 
+  it("maps missing Codex CLI errors", () => {
+    const msg = transformCliError(1, "spawn codex ENOENT", "", "codex");
+    expect(msg).toContain("Codex CLI");
+    expect(msg).toContain("run `codex` locally and sign in");
+  });
+
+  it("maps signed-out Codex CLI errors", () => {
+    const msg = transformCliError(
+      1,
+      "Error: Not authenticated. Please login first.",
+      "",
+      "codex"
+    );
+    expect(msg).toContain("not signed in");
+    expect(msg).toContain("Run `codex` locally and sign in");
+  });
+
   it("maps ElevenLabs setup errors during execution", () => {
     const raw = JSON.stringify({
       type: "result",
@@ -179,5 +200,11 @@ describe("transformCliError", () => {
 describe("normalizeClaudeCliSetupError", () => {
   it("returns null for unrelated errors", () => {
     expect(normalizeClaudeCliSetupError("ValueError: invalid input")).toBeNull();
+  });
+});
+
+describe("normalizeCodexCliSetupError", () => {
+  it("returns null for unrelated errors", () => {
+    expect(normalizeCodexCliSetupError("ValueError: invalid input")).toBeNull();
   });
 });

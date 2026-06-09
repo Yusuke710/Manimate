@@ -11,7 +11,7 @@ export interface SSEEvent {
   message: string;
   session_id?: string;
   sandbox_id?: string;
-  claude_session_id?: string;
+  agent_session_id?: string;
   video_url?: string;
   plan_content?: string | null;
   script_content?: string | null;
@@ -38,7 +38,7 @@ export interface SSEEvent {
   terminal_status?: TerminalStatus;
 }
 
-// Activity event for tracking Claude's actions
+// Activity event for tracking the selected agent runtime's actions
 export interface ActivityEvent {
   id: string;
   timestamp: Date;
@@ -95,7 +95,7 @@ export interface ActiveRun {
   started_at: string | null;
   last_event_at: string | null;
   sandbox_id: string | null;
-  claude_session_id: string | null;
+  agent_session_id: string | null;
 }
 
 /**
@@ -147,5 +147,5 @@ export interface Message {
 // Session data stored in sessionStorage (per-tab isolation)
 export interface SessionData {
   sandboxId: string;
-  claudeSessionId: string;
+  agentSessionId: string;
 }

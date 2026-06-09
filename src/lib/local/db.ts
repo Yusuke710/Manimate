@@ -15,7 +15,7 @@ export interface LocalSession {
   title: string;
   status: string;
   sandbox_id: string | null;
-  claude_session_id: string | null;
+  agent_session_id: string | null;
   model: string;
   aspect_ratio: string | null;
   voice_id: string | null;
@@ -49,7 +49,7 @@ export interface LocalRun {
   user_message_id: string | null;
   status: "queued" | "running" | "completed" | "failed" | "canceled";
   sandbox_id: string | null;
-  claude_session_id: string | null;
+  agent_session_id: string | null;
   started_at: string | null;
   last_event_at: string | null;
   finished_at: string | null;
@@ -73,7 +73,7 @@ type SessionUpdateInput = Partial<{
   title: string;
   status: string;
   sandbox_id: string | null;
-  claude_session_id: string | null;
+  agent_session_id: string | null;
   model: string;
   aspect_ratio: string | null;
   voice_id: string | null;
@@ -92,7 +92,7 @@ type SessionUpdateInput = Partial<{
 type RunUpdateInput = Partial<{
   status: LocalRun["status"];
   sandbox_id: string | null;
-  claude_session_id: string | null;
+  agent_session_id: string | null;
   started_at: string | null;
   last_event_at: string | null;
   finished_at: string | null;
@@ -117,6 +117,7 @@ function ensureSessionColumns(database: DatabaseSync): void {
   const existing = getTableColumns(database, "sessions");
   const required: Array<{ name: string; ddl: string }> = [
     { name: "session_number", ddl: "session_number INTEGER" },
+    { name: "agent_session_id", ddl: "agent_session_id TEXT" },
     { name: "voice_id", ddl: "voice_id TEXT" },
     { name: "chapters", ddl: "chapters TEXT" },
     {
@@ -135,7 +136,34 @@ function ensureSessionColumns(database: DatabaseSync): void {
   for (const column of required) {
     if (!existing.has(column.name)) {
       database.exec(`ALTER TABLE sessions ADD COLUMN ${column.ddl};`);
+      existing.add(column.name);
     }
+  }
+
+  if (existing.has("claude_session_id") && existing.has("agent_session_id")) {
+    database.exec(`
+      UPDATE sessions
+      SET agent_session_id = claude_session_id
+      WHERE agent_session_id IS NULL
+        AND claude_session_id IS NOT NULL;
+    `);
+  }
+}
+
+function ensureRunColumns(database: DatabaseSync): void {
+  const existing = getTableColumns(database, "runs");
+  if (!existing.has("agent_session_id")) {
+    database.exec("ALTER TABLE runs ADD COLUMN agent_session_id TEXT;");
+    existing.add("agent_session_id");
+  }
+
+  if (existing.has("claude_session_id") && existing.has("agent_session_id")) {
+    database.exec(`
+      UPDATE runs
+      SET agent_session_id = claude_session_id
+      WHERE agent_session_id IS NULL
+        AND claude_session_id IS NOT NULL;
+    `);
   }
 }
 
@@ -194,7 +222,11 @@ function mapSession(row: Record<string, unknown>): LocalSession {
     title: String(row.title),
     status: String(row.status),
     sandbox_id: row.sandbox_id ? String(row.sandbox_id) : null,
-    claude_session_id: row.claude_session_id ? String(row.claude_session_id) : null,
+    agent_session_id: row.agent_session_id
+      ? String(row.agent_session_id)
+      : row.claude_session_id
+        ? String(row.claude_session_id)
+        : null,
     model: String(row.model),
     aspect_ratio: row.aspect_ratio ? String(row.aspect_ratio) : null,
     voice_id: row.voice_id ? String(row.voice_id) : null,
@@ -232,7 +264,11 @@ function mapRun(row: Record<string, unknown>): LocalRun {
     user_message_id: row.user_message_id ? String(row.user_message_id) : null,
     status: String(row.status) as LocalRun["status"],
     sandbox_id: row.sandbox_id ? String(row.sandbox_id) : null,
-    claude_session_id: row.claude_session_id ? String(row.claude_session_id) : null,
+    agent_session_id: row.agent_session_id
+      ? String(row.agent_session_id)
+      : row.claude_session_id
+        ? String(row.claude_session_id)
+        : null,
     started_at: row.started_at ? String(row.started_at) : null,
     last_event_at: row.last_event_at ? String(row.last_event_at) : null,
     finished_at: row.finished_at ? String(row.finished_at) : null,
@@ -270,7 +306,7 @@ function openDb(): DatabaseSync {
       title TEXT NOT NULL,
       status TEXT NOT NULL,
       sandbox_id TEXT,
-      claude_session_id TEXT,
+      agent_session_id TEXT,
       model TEXT NOT NULL,
       aspect_ratio TEXT,
       voice_id TEXT,
@@ -306,7 +342,7 @@ function openDb(): DatabaseSync {
       user_message_id TEXT,
       status TEXT NOT NULL,
       sandbox_id TEXT,
-      claude_session_id TEXT,
+      agent_session_id TEXT,
       started_at TEXT,
       last_event_at TEXT,
       finished_at TEXT,
@@ -339,13 +375,14 @@ function openDb(): DatabaseSync {
   `);
 
   ensureSessionColumns(db);
+  ensureRunColumns(db);
   backfillSessionNumbers(db);
 
   return db;
 }
 
 const SESSION_SUMMARY_COLS =
-  "id, session_number, title, status, sandbox_id, claude_session_id, model, aspect_ratio, voice_id, video_path, last_video_url, cloud_sync_status, cloud_last_synced_at, cloud_last_error, cloud_public_video_url, last_user_activity_at, created_at, updated_at";
+  "id, session_number, title, status, sandbox_id, agent_session_id, model, aspect_ratio, voice_id, video_path, last_video_url, cloud_sync_status, cloud_last_synced_at, cloud_last_error, cloud_public_video_url, last_user_activity_at, created_at, updated_at";
 
 export function listLocalSessions(): LocalSession[] {
   const rows = openDb()
@@ -409,7 +446,7 @@ export function createLocalSession(input: {
         title,
         status,
         sandbox_id,
-        claude_session_id,
+        agent_session_id,
         model,
         aspect_ratio,
         voice_id,
@@ -489,7 +526,7 @@ export function updateLocalSession(sessionId: string, updates: SessionUpdateInpu
     "title",
     "status",
     "sandbox_id",
-    "claude_session_id",
+    "agent_session_id",
     "model",
     "aspect_ratio",
     "voice_id",
@@ -582,14 +619,14 @@ export function createLocalRun(input: {
   session_id: string;
   user_message_id?: string | null;
   sandbox_id?: string | null;
-  claude_session_id?: string | null;
+  agent_session_id?: string | null;
 }): LocalRun {
   const now = new Date().toISOString();
   const id = randomUUID();
   openDb()
     .prepare(`
       INSERT INTO runs (
-        id, session_id, user_message_id, status, sandbox_id, claude_session_id,
+        id, session_id, user_message_id, status, sandbox_id, agent_session_id,
         started_at, last_event_at, finished_at, error_message, video_url, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)
     `)
@@ -599,7 +636,7 @@ export function createLocalRun(input: {
       input.user_message_id ?? null,
       "queued",
       input.sandbox_id ?? null,
-      input.claude_session_id ?? null,
+      input.agent_session_id ?? null,
       now,
       now
     );
@@ -648,7 +685,7 @@ export function updateLocalRun(runId: string, updates: RunUpdateInput): void {
   const allowedColumns = new Set<keyof RunUpdateInput>([
     "status",
     "sandbox_id",
-    "claude_session_id",
+    "agent_session_id",
     "started_at",
     "last_event_at",
     "finished_at",
