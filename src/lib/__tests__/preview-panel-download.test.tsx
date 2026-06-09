@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PreviewTab } from "@/components/PreviewPanel";
+import { PreviewTab, buildDownloadFilename } from "@/components/PreviewPanel";
 
 function createMatchMediaResult(matches: boolean) {
   return {
@@ -116,7 +116,7 @@ describe("PreviewTab download flow", () => {
           videoRefreshNonce={0}
           sandboxId="session-1"
           sessionId="session-1"
-          sessionModel="gpt-5.4"
+          sessionModel="claude-opus-4.6"
           isRendering={false}
           onRequestHqRender={onRequestHqRender}
         />,
@@ -151,7 +151,7 @@ describe("PreviewTab download flow", () => {
           videoRefreshNonce={0}
           sandboxId="session-1"
           sessionId="session-1"
-          sessionModel="gpt-5.4"
+          sessionModel="claude-opus-4.6"
           isRendering
           onRequestHqRender={onRequestHqRender}
         />,
@@ -165,7 +165,7 @@ describe("PreviewTab download flow", () => {
           videoRefreshNonce={1}
           sandboxId="session-1"
           sessionId="session-1"
-          sessionModel="gpt-5.4"
+          sessionModel="claude-opus-4.6"
           isRendering={false}
           onRequestHqRender={onRequestHqRender}
         />,
@@ -177,5 +177,14 @@ describe("PreviewTab download flow", () => {
     await flushEffects();
 
     expect(fetchMock).toHaveBeenCalledWith("/api/files?video=rendered", { cache: "no-store" });
+  });
+
+  it("uses the logical model in download filenames", () => {
+    expect(buildDownloadFilename("session-1", "claude-opus-4.6", "")).toBe(
+      "manimate-claude-session-.mp4",
+    );
+    expect(buildDownloadFilename("session-1", "codex", "-1080p")).toBe(
+      "manimate-codex-session--1080p.mp4",
+    );
   });
 });

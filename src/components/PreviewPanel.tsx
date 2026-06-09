@@ -875,11 +875,11 @@ function runRetryingLoad(
   };
 }
 
-/** Build download filename: manimate-{model}-{shortId}.mp4 (Runway-style) */
-function toFilename(sessionId: string | null, model: string | null, suffix: string): string {
+/** Build download filename: manimate-{model}-{shortId}.mp4 */
+export function buildDownloadFilename(sessionId: string | null, model: string | null, suffix: string): string {
   const shortId = sessionId?.slice(0, 8) ?? "unknown";
-  // Replace dots in model names (e.g. "claude-opus-4.6" → "claude-opus-4-6")
-  const safeModel = (model ?? "video").replace(/\./g, "-");
+  const logicalModel = model?.split("-")[0] || "video";
+  const safeModel = logicalModel.replace(/[^a-z0-9]/gi, "-").toLowerCase();
   return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
 }
 
@@ -1393,7 +1393,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
       setPendingRenderDownload(null);
       void downloadVideoBlob(
         fullVideoUrl,
-        toFilename(sessionId ?? null, sessionModel, suffix),
+        buildDownloadFilename(sessionId ?? null, sessionModel, suffix),
       );
       return;
     }
@@ -1422,7 +1422,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
       if (downloadQuality === 'current') {
         if (!fullVideoUrl) return;
         setPendingRenderDownload(null);
-        await downloadVideoBlob(fullVideoUrl, toFilename(sessionId ?? null, sessionModel, ""));
+        await downloadVideoBlob(fullVideoUrl, buildDownloadFilename(sessionId ?? null, sessionModel, ""));
         setShowDownloadModal(false);
       } else {
         queueRenderAndDownload(downloadQuality);
