@@ -301,7 +301,7 @@ type ElevenLabsKeyStatus = {
 function getElevenLabsKeySummary(status: ElevenLabsKeyStatus | null): string {
   if (!status) return "Checking ElevenLabs configuration...";
   if (!status.configured) {
-    return "For voiceover and voice lookup.";
+    return "Only needed for legacy ElevenLabs voices.";
   }
   if (status.source === "saved") {
     return status.masked_key
@@ -555,7 +555,7 @@ function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange:
                     fontFamily: "var(--font)",
                   }}
                 >
-                  ElevenLabs key
+                  Legacy ElevenLabs key
                 </span>
                 <span
                   style={{
@@ -742,59 +742,62 @@ function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange:
 
           <div style={{ height: 1, background: "var(--border-main)", margin: "4px 0" }} />
 
-          {AVAILABLE_VOICES.map((v) => (
-            <div
-              key={v.id}
-              style={{
-                display: "flex", alignItems: "center",
-                background: v.id === voice ? "var(--bg-active)" : "transparent",
-                transition: "background 0.12s",
-              }}
-              onMouseEnter={(e) => { if (v.id !== voice) e.currentTarget.style.background = "var(--bg-hover)"; }}
-              onMouseLeave={(e) => { if (v.id !== voice) e.currentTarget.style.background = "transparent"; }}
-            >
-              <button
-                onClick={() => { onChange(v.id); setIsOpen(false); }}
+          {AVAILABLE_VOICES.map((v) => {
+            const previewLabel = v.provider === "kokoro" ? "Open Kokoro model page" : `Preview ${v.label} on ElevenLabs`;
+            return (
+              <div
+                key={v.id}
                 style={{
-                  display: "flex", flexDirection: "column", gap: 1,
-                  flex: 1, padding: "8px 0 8px 14px",
-                  border: "none", background: "transparent",
-                  cursor: "pointer", fontFamily: "var(--font)",
-                  textAlign: "left",
+                  display: "flex", alignItems: "center",
+                  background: v.id === voice ? "var(--bg-active)" : "transparent",
+                  transition: "background 0.12s",
                 }}
+                onMouseEnter={(e) => { if (v.id !== voice) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                onMouseLeave={(e) => { if (v.id !== voice) e.currentTarget.style.background = "transparent"; }}
               >
-                <span style={{ fontSize: 13, fontWeight: v.id === voice ? 600 : 400, color: v.id === voice ? "var(--text-primary)" : "var(--text-secondary)" }}>
-                  {v.label}{v.id === DEFAULT_VOICE_ID && <span style={{ fontWeight: 400, color: "var(--text-tertiary)", marginLeft: 4 }}>(Default)</span>}
-                </span>
-                <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                  {v.description}
-                </span>
-              </button>
-              <a
-                href={getVoicePageUrl(v.id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Preview ${v.label} on ElevenLabs`}
-                title="Preview on ElevenLabs"
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 28, height: 28, marginRight: 8,
-                  borderRadius: 6, color: "var(--text-tertiary)",
-                  textDecoration: "none", flexShrink: 0,
-                  transition: "color 0.12s",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-primary)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-tertiary)"; }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                  <polyline points="15 3 21 3 21 9" />
-                  <line x1="10" y1="14" x2="21" y2="3" />
-                </svg>
-              </a>
-            </div>
-          ))}
+                <button
+                  onClick={() => { onChange(v.id); setIsOpen(false); }}
+                  style={{
+                    display: "flex", flexDirection: "column", gap: 1,
+                    flex: 1, padding: "8px 0 8px 14px",
+                    border: "none", background: "transparent",
+                    cursor: "pointer", fontFamily: "var(--font)",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ fontSize: 13, fontWeight: v.id === voice ? 600 : 400, color: v.id === voice ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                    {v.label}{v.id === DEFAULT_VOICE_ID && <span style={{ fontWeight: 400, color: "var(--text-tertiary)", marginLeft: 4 }}>(Default)</span>}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                    {v.description}
+                  </span>
+                </button>
+                <a
+                  href={getVoicePageUrl(v.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={previewLabel}
+                  title={previewLabel}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 28, height: 28, marginRight: 8,
+                    borderRadius: 6, color: "var(--text-tertiary)",
+                    textDecoration: "none", flexShrink: 0,
+                    transition: "color 0.12s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-primary)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-tertiary)"; }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                </a>
+              </div>
+            );
+          })}
 
           <div style={{ height: 1, background: "var(--border-main)", margin: "4px 0" }} />
 
@@ -865,7 +868,7 @@ function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange:
             onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = "underline"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = "none"; }}
           >
-            Browse voices ↗
+            Browse legacy voices ↗
           </a>
         </div>
       )}

@@ -28,6 +28,7 @@ import {
   beginLocalRunStart,
   endLocalRunStart,
   getActiveLocalRunBySandboxId,
+  prewarmLocalKokoroVoice,
   registerLocalRunProcess,
   spawnLocalAgentProcess,
 } from "@/lib/local/runtime";
@@ -527,6 +528,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         typeof body.voice_id === "string" && body.voice_id.trim()
           ? body.voice_id.trim()
           : session.voice_id || DEFAULT_VOICE_ID;
+      prewarmLocalKokoroVoice({ cwd: projectDir, voiceId });
       const prompt = buildPrompt({
         projectDir,
         prompt: promptBody,

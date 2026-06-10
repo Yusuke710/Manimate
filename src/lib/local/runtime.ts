@@ -2,6 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import { getResolvedElevenLabsApiKey } from "@/lib/local/elevenlabs-config";
 import { DEFAULT_MODEL } from "@/lib/models";
+import { NONE_VOICE_ID } from "@/lib/voices";
 
 export interface ActiveLocalRunProcess {
   sessionId: string;
@@ -33,6 +34,32 @@ function cleanupEntry(sandboxId: string, pid: number | undefined): void {
 
 function isProcessDone(process: ChildProcessWithoutNullStreams): boolean {
   return process.exitCode !== null || process.signalCode !== null;
+}
+
+function isKokoroVoiceId(voiceId: string): boolean {
+  return voiceId !== NONE_VOICE_ID && /^[a-z]{1,2}_[a-z0-9_]{2,64}$/.test(voiceId);
+}
+
+export function prewarmLocalKokoroVoice(input: { cwd: string; voiceId: string }): void {
+  if (!isKokoroVoiceId(input.voiceId)) return;
+
+  const python = process.env.MANIMATE_TTS_PYTHON?.trim() || "python";
+  const env = buildLocalClaudeEnv();
+  const child = spawn(
+    python,
+    ["tts-generate.py", "--prewarm-kokoro", "--provider", "kokoro", "--voice", input.voiceId],
+    {
+      cwd: input.cwd,
+      env,
+      stdio: "ignore",
+      detached: true,
+    }
+  );
+
+  child.unref();
+  child.once("error", () => {
+    // Prewarm is opportunistic. The regular TTS command will surface setup errors if needed.
+  });
 }
 
 function waitForProcessExit(
