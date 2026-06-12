@@ -10,13 +10,15 @@ import {
   getLocalSession,
 } from "@/lib/local/db";
 import { createHandoffFromLocalSession } from "@/lib/local/handoff";
+import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
+import { isValidVoiceId } from "@/lib/voices";
 
 interface RouteContext {
   params: Promise<{ sessionId: string }>;
 }
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   context: RouteContext,
 ): Promise<Response> {
   const { sessionId } = await context.params;
@@ -27,7 +29,30 @@ export async function POST(
   }
 
   try {
-    return NextResponse.json(await createHandoffFromLocalSession(sourceSession));
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const requestedModel = typeof body.model === "string" ? body.model.trim() : "";
+    const requestedVoiceId = typeof body.voice_id === "string" ? body.voice_id.trim() : "";
+
+    if (body.model !== undefined && (!requestedModel || !isRegisteredModelId(requestedModel))) {
+      return NextResponse.json(
+        { error: "Invalid model. Use one of: claude, codex" },
+        { status: 400 },
+      );
+    }
+
+    if (body.voice_id !== undefined && (!requestedVoiceId || !isValidVoiceId(requestedVoiceId))) {
+      return NextResponse.json(
+        { error: "Invalid voice_id" },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json(
+      await createHandoffFromLocalSession(sourceSession, {
+        model: requestedModel || DEFAULT_MODEL,
+        voiceId: requestedVoiceId || null,
+      }),
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create handoff";
     return NextResponse.json({ error: message }, { status: 500 });

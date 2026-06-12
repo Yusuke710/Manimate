@@ -29,6 +29,11 @@ export type HandoffResult = {
   included: HandoffIncluded;
 };
 
+export type HandoffSessionOptions = {
+  model?: string;
+  voiceId?: string | null;
+};
+
 export type SharedHandoffSnapshot = {
   token?: string;
   title?: string | null;
@@ -170,12 +175,13 @@ function getVideoExtension(videoUrl: string | null | undefined): string {
 
 export async function createHandoffFromLocalSession(
   sourceSession: LocalSession,
+  options: HandoffSessionOptions = {},
 ): Promise<HandoffResult> {
   const sourcePaths = ensureLocalSessionLayout(sourceSession.id);
   const handoffSession = createLocalSession({
-    model: sourceSession.model,
+    model: options.model || DEFAULT_MODEL,
     aspect_ratio: sourceSession.aspect_ratio,
-    voice_id: sourceSession.voice_id,
+    voice_id: options.voiceId ?? null,
   });
   const targetPaths = ensureLocalSessionLayout(handoffSession.id, {
     model: handoffSession.model,
@@ -236,12 +242,13 @@ export async function createHandoffFromLocalSession(
 
 export async function createHandoffFromSharedSnapshot(
   snapshot: SharedHandoffSnapshot,
+  options: HandoffSessionOptions = {},
 ): Promise<HandoffResult> {
   const videoBytes = await fetchVideoBytes(snapshot.videoUrl);
   const handoffSession = createLocalSession({
-    model: snapshot.model || DEFAULT_MODEL,
+    model: options.model || DEFAULT_MODEL,
     aspect_ratio: snapshot.aspectRatio || null,
-    voice_id: snapshot.voiceId || null,
+    voice_id: options.voiceId ?? null,
   });
   const targetPaths = ensureLocalSessionLayout(handoffSession.id, {
     model: handoffSession.model,
