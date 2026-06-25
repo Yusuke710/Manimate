@@ -27,8 +27,10 @@ async function hasExistingVideo(videoPath: string | null): Promise<boolean> {
   }
 }
 
-export async function GET(): Promise<Response> {
-  const sessions = listLocalSessions();
+export async function GET(request: NextRequest): Promise<Response> {
+  const includeSearchContent =
+    request.nextUrl.searchParams.get("include_search_content") === "1";
+  const sessions = listLocalSessions({ includeSearchContent });
   const sessionsWithVideo = await Promise.all(
     sessions.map(async (session) => ({
       ...session,

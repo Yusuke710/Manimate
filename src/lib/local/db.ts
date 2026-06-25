@@ -384,15 +384,27 @@ function openDb(): DatabaseSync {
 const SESSION_SUMMARY_COLS =
   "id, session_number, title, status, sandbox_id, agent_session_id, model, aspect_ratio, voice_id, video_path, last_video_url, cloud_sync_status, cloud_last_synced_at, cloud_last_error, cloud_public_video_url, last_user_activity_at, created_at, updated_at";
 
-export function listLocalSessions(): LocalSession[] {
+export function listLocalSessions(options?: { includeSearchContent?: boolean }): LocalSession[] {
+  const columns = options?.includeSearchContent
+    ? `${SESSION_SUMMARY_COLS}, plan_content, script_content`
+    : SESSION_SUMMARY_COLS;
   const rows = openDb()
     .prepare(`
-      SELECT ${SESSION_SUMMARY_COLS}
+      SELECT ${columns}
       FROM sessions
       ORDER BY COALESCE(NULLIF(last_user_activity_at, ''), created_at, updated_at) DESC
     `)
     .all() as Record<string, unknown>[];
-  return rows.map((r) => ({ ...mapSession(r), plan_content: null, script_content: null, subtitles_content: null, chapters: null }));
+  return rows.map((r) => {
+    const session = mapSession(r);
+    return {
+      ...session,
+      plan_content: options?.includeSearchContent ? session.plan_content : null,
+      script_content: options?.includeSearchContent ? session.script_content : null,
+      subtitles_content: null,
+      chapters: null,
+    };
+  });
 }
 
 export function listLocalCloudSyncRetryCandidates(options?: {

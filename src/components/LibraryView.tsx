@@ -1,7 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, useCallback, useMemo, useRef, type FormEvent, type MouseEvent } from "react";
+import { useDeferredValue, useEffect, useState, useCallback, useMemo, useRef, type FormEvent, type MouseEvent } from "react";
+import {
+  buildLibrarySearchIndex,
+  matchesLibrarySearchIndex,
+} from "@/lib/library-search";
 
 type LibrarySession = {
   id: string;
@@ -10,6 +14,8 @@ type LibrarySession = {
   status: string;
   has_video: boolean;
   last_video_url: string | null;
+  plan_content?: string | null;
+  script_content?: string | null;
   aspect_ratio: string | null;
   created_at: string;
   updated_at: string;
@@ -583,10 +589,14 @@ export function LibraryView({
 }) {
   const [allSessions, setAllSessions] = useState<LibrarySession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch("/api/sessions");
+      const res = await fetch(
+        mode === "videos" ? "/api/sessions?include_search_content=1" : "/api/sessions",
+      );
       if (!res.ok) return;
       const data = (await res.json()) as LibrarySession[];
       setAllSessions(data || []);
@@ -595,12 +605,26 @@ export function LibraryView({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mode]);
 
   const videoSessions = useMemo(
     () => allSessions.filter((session) => session.has_video),
     [allSessions]
   );
+  const indexedVideoSessions = useMemo(
+    () => videoSessions.map((session) => ({
+      session,
+      searchIndex: buildLibrarySearchIndex(session),
+    })),
+    [videoSessions],
+  );
+  const filteredVideoSessions = useMemo(
+    () => indexedVideoSessions
+      .filter(({ searchIndex }) => matchesLibrarySearchIndex(searchIndex, deferredSearchQuery))
+      .map(({ session }) => session),
+    [deferredSearchQuery, indexedVideoSessions],
+  );
+  const trimmedSearchQuery = searchQuery.trim();
 
   const handleSessionOpenInNewTab = useCallback((sessionId: string) => {
     window.open(`/?session=${encodeURIComponent(sessionId)}`, "_blank", "noopener,noreferrer");
@@ -627,27 +651,111 @@ export function LibraryView({
         gap: 0,
       }}
     >
-      <div
-        style={{
-          marginBottom: 24,
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <h1
-            style={{
-              fontSize: 22,
-              fontWeight: 600,
-              color: "var(--text-primary)",
-              fontFamily: "var(--font-display)",
-              margin: 0,
-            }}
-          >
-            {mode === "feedback" ? "Feedback" : "Library"}
-          </h1>
+      <div style={{ marginBottom: 24 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <h1
+              style={{
+                fontSize: 22,
+                fontWeight: 600,
+                color: "var(--text-primary)",
+                fontFamily: "var(--font-display)",
+                margin: 0,
+              }}
+            >
+              {mode === "feedback" ? "Feedback" : "Library"}
+            </h1>
+            {mode !== "feedback" && (
+              <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>
+                Review finished videos from your local sessions.
+              </div>
+            )}
+          </div>
           {mode !== "feedback" && (
-            <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>
-              Review finished videos from your local sessions.
-            </div>
+            <label
+              style={{
+                position: "relative",
+                display: "flex",
+                alignItems: "center",
+                width: "min(100%, 360px)",
+                flex: "0 1 360px",
+              }}
+            >
+              <span
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  display: "flex",
+                  color: "var(--icon-tertiary)",
+                  pointerEvents: "none",
+                }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M16.5 16.5L21 21" />
+                </svg>
+              </span>
+              <input
+                type="search"
+                aria-label="Search library videos"
+                placeholder="Search videos, plans, code"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                style={{
+                  width: "100%",
+                  height: 38,
+                  border: "1px solid var(--border-main)",
+                  borderRadius: 10,
+                  background: "var(--bg-white)",
+                  color: "var(--text-primary)",
+                  fontFamily: "var(--font)",
+                  fontSize: 14,
+                  padding: "0 36px 0 36px",
+                  outline: "none",
+                }}
+                onFocus={(event) => {
+                  event.currentTarget.style.borderColor = "var(--border-focus, var(--accent))";
+                }}
+                onBlur={(event) => {
+                  event.currentTarget.style.borderColor = "var(--border-main)";
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  aria-label="Clear library search"
+                  onClick={() => setSearchQuery("")}
+                  style={{
+                    position: "absolute",
+                    right: 7,
+                    width: 24,
+                    height: 24,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    border: "none",
+                    borderRadius: 6,
+                    background: "transparent",
+                    color: "var(--icon-tertiary)",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path d="M18 6L6 18" />
+                    <path d="M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </label>
           )}
         </div>
       </div>
@@ -682,6 +790,29 @@ export function LibraryView({
           <div style={{ fontSize: 15, fontWeight: 500 }}>No videos yet</div>
           <div style={{ fontSize: 13 }}>Generate an animation to see it here</div>
         </div>
+      ) : filteredVideoSessions.length === 0 ? (
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            color: "var(--text-tertiary)",
+            paddingTop: 80,
+            textAlign: "center",
+          }}
+        >
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1}>
+            <circle cx="11" cy="11" r="7" />
+            <path d="M16.5 16.5L21 21" />
+          </svg>
+          <div style={{ fontSize: 15, fontWeight: 500 }}>No matches</div>
+          <div style={{ fontSize: 13 }}>
+            {trimmedSearchQuery ? `No videos match "${trimmedSearchQuery}".` : "No videos match this search."}
+          </div>
+        </div>
       ) : (
         <div
           style={{
@@ -689,7 +820,7 @@ export function LibraryView({
             columnGap: 14,
           }}
         >
-          {videoSessions.map((session) => (
+          {filteredVideoSessions.map((session) => (
             <div key={`${session.id}:${session.updated_at}`} style={{ breakInside: "avoid", marginBottom: 14 }}>
               <VideoCard
                 session={session}

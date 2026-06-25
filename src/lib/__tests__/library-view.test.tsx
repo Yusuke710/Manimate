@@ -27,9 +27,24 @@ const sessions = [
     status: "completed",
     has_video: true,
     last_video_url: "/api/files?session_id=session-1",
+    plan_content: "Explain attention with highlighted tokens.",
+    script_content: "class AttentionScene(Scene): pass",
     aspect_ratio: "16:9",
     created_at: "2026-05-12T01:00:00.000Z",
     updated_at: "2026-05-12T01:00:00.000Z",
+  },
+  {
+    id: "session-2",
+    session_number: 8,
+    title: "A geometry video",
+    status: "completed",
+    has_video: true,
+    last_video_url: "/api/files?session_id=session-2",
+    plan_content: "Draw a triangle proof.",
+    script_content: "class GeometryScene(Scene): pass",
+    aspect_ratio: "16:9",
+    created_at: "2026-05-13T01:00:00.000Z",
+    updated_at: "2026-05-13T01:00:00.000Z",
   },
 ];
 
@@ -38,6 +53,13 @@ async function flushEffects(): Promise<void> {
     await Promise.resolve();
     await Promise.resolve();
   });
+}
+
+function updateInputValue(input: HTMLInputElement, value: string): void {
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  valueSetter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 describe("LibraryView", () => {
@@ -95,6 +117,36 @@ describe("LibraryView", () => {
 
     expect(onSessionSelect).toHaveBeenCalledWith("session-1");
     expect(openMock).not.toHaveBeenCalled();
+  });
+
+  it("filters library videos by fuzzy plan and code matches", async () => {
+    const onSessionSelect = vi.fn();
+
+    await act(async () => {
+      root?.render(<LibraryView onSessionSelect={onSessionSelect} />);
+    });
+    await flushEffects();
+
+    expect(container?.textContent).toContain("A generated video");
+    expect(container?.textContent).toContain("A geometry video");
+
+    const search = container?.querySelector('input[type="search"]') as HTMLInputElement | null;
+    expect(search).not.toBeNull();
+    if (!search) throw new Error("Expected search input");
+
+    await act(async () => {
+      updateInputValue(search, "attenton");
+    });
+
+    expect(container?.textContent).toContain("A generated video");
+    expect(container?.textContent).not.toContain("A geometry video");
+
+    await act(async () => {
+      updateInputValue(search, "GeometryScene");
+    });
+
+    expect(container?.textContent).not.toContain("A generated video");
+    expect(container?.textContent).toContain("A geometry video");
   });
 
   it("opens a library video session in a new tab on double click", async () => {
