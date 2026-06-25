@@ -21,6 +21,18 @@ function wrapIndex(index: number, length: number): number {
   return ((index % length) + length) % length;
 }
 
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable ||
+    Boolean(target.closest('[contenteditable="true"]'))
+  );
+}
+
 const DRAW_COLOR = "#ff3b30";
 const BRUSH_SIZE = 4;
 
@@ -52,6 +64,8 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
     if (!canNavigate) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableKeyboardTarget(event.target) || isEditableKeyboardTarget(document.activeElement)) return;
+
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         onIndexChange(wrapIndex(currentIndex - 1, count));
