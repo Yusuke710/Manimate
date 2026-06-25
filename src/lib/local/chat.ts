@@ -41,7 +41,7 @@ import {
   DEFAULT_ASPECT_RATIO,
   isAspectRatio,
 } from "@/lib/aspect-ratio";
-import { DEFAULT_VOICE_ID, NONE_VOICE_ID } from "@/lib/voices";
+import { DEFAULT_VOICE_ID, NONE_VOICE_ID, isValidVoiceId } from "@/lib/voices";
 import { buildConversationRecoveryContext } from "@/lib/conversation-recovery";
 import type { TerminalStatus } from "@/lib/types";
 
@@ -379,6 +379,24 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         });
         return;
       }
+      const requestedVoiceId = typeof body.voice_id === "string" ? body.voice_id.trim() : "";
+      if (body.voice_id !== undefined && (!requestedVoiceId || !isValidVoiceId(requestedVoiceId))) {
+        await sendEvent({
+          type: "error",
+          state: "error",
+          message: "Invalid voice_id",
+        });
+        return;
+      }
+      const requestedAspectRatio = typeof body.aspect_ratio === "string" ? body.aspect_ratio.trim() : "";
+      if (body.aspect_ratio !== undefined && !isAspectRatio(requestedAspectRatio)) {
+        await sendEvent({
+          type: "error",
+          state: "error",
+          message: "Invalid aspect_ratio",
+        });
+        return;
+      }
 
       const sessionModelIsValid = isRegisteredModelId(session.model);
       if (!sessionModelIsValid && !requestedModel) {
@@ -392,8 +410,30 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
 
       modelForRun = requestedModel || session.model;
       const canReuseAgentSession = sessionModelIsValid && session.model === modelForRun;
+      const voiceId = requestedVoiceId || session.voice_id || DEFAULT_VOICE_ID;
+      const aspectRatio = isAspectRatio(requestedAspectRatio)
+        ? requestedAspectRatio
+        : isAspectRatio(session.aspect_ratio)
+          ? session.aspect_ratio
+          : DEFAULT_ASPECT_RATIO;
+      const sessionUpdates: {
+        model?: string;
+        agent_session_id?: string | null;
+        voice_id?: string | null;
+        aspect_ratio?: string | null;
+      } = {};
       if (session.model !== modelForRun) {
-        updateLocalSession(sessionId, { model: modelForRun, agent_session_id: null });
+        sessionUpdates.model = modelForRun;
+        sessionUpdates.agent_session_id = null;
+      }
+      if (requestedVoiceId && session.voice_id !== requestedVoiceId) {
+        sessionUpdates.voice_id = requestedVoiceId;
+      }
+      if (requestedAspectRatio && session.aspect_ratio !== requestedAspectRatio) {
+        sessionUpdates.aspect_ratio = requestedAspectRatio;
+      }
+      if (Object.keys(sessionUpdates).length > 0) {
+        updateLocalSession(sessionId, sessionUpdates);
         session = getLocalSession(sessionId) || session;
       }
       const resumeSessionId = canReuseAgentSession
@@ -519,15 +559,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         throw new Error("Attached files could not be prepared for local agent access");
       }
 
-      const aspectRatio = isAspectRatio(body.aspect_ratio)
-        ? body.aspect_ratio
-        : isAspectRatio(session.aspect_ratio)
-          ? session.aspect_ratio
-          : DEFAULT_ASPECT_RATIO;
-      const voiceId =
-        typeof body.voice_id === "string" && body.voice_id.trim()
-          ? body.voice_id.trim()
-          : session.voice_id || DEFAULT_VOICE_ID;
       prewarmLocalKokoroVoice({ cwd: projectDir, voiceId });
       const prompt = buildPrompt({
         projectDir,
@@ -755,7 +786,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                 }
               }
 
-              if (itemType === "file_change") {
+              if (item && itemType === "file_change") {
                 const changes = getCodexFileChanges(item);
                 const toolName = getCodexFileChangeToolName(changes);
                 const toolInput = { changes };

@@ -1,22 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
-import {
-  AVAILABLE_MODELS,
-  DEFAULT_MODEL,
-  isRegisteredModelId,
-} from "@/lib/models";
-import {
-  AVAILABLE_VOICES,
-  DEFAULT_VOICE_ID,
-  NONE_VOICE_ID,
-  getVoiceLabel,
-  isValidVoiceId,
-} from "@/lib/voices";
-
-const MODEL_PREF_KEY = "manimate-preferred-model";
-const VOICE_PREF_KEY = "manimate-preferred-voice";
 
 type HandoffState = "idle" | "loading" | "error";
 
@@ -35,16 +19,11 @@ type HandoffResponse = {
 
 async function requestHandoff(options: {
   sessionId: string;
-  model: string;
-  voiceId: string;
 }): Promise<string> {
   const response = await fetch(`/api/sessions/${encodeURIComponent(options.sessionId)}/handoff`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: options.model,
-      voice_id: options.voiceId,
-    }),
+    body: JSON.stringify({}),
   });
   const payload = await response.json().catch(() => ({})) as HandoffResponse;
 
@@ -55,36 +34,6 @@ async function requestHandoff(options: {
   }
 
   return payload.session.id;
-}
-
-function getSavedModel(): string {
-  try {
-    const saved = localStorage.getItem(MODEL_PREF_KEY);
-    return saved && isRegisteredModelId(saved) ? saved : DEFAULT_MODEL;
-  } catch {
-    return DEFAULT_MODEL;
-  }
-}
-
-function getSavedVoice(): string {
-  try {
-    const saved = localStorage.getItem(VOICE_PREF_KEY);
-    return saved && isValidVoiceId(saved) ? saved : DEFAULT_VOICE_ID;
-  } catch {
-    return DEFAULT_VOICE_ID;
-  }
-}
-
-function persistModel(model: string): void {
-  try {
-    localStorage.setItem(MODEL_PREF_KEY, model);
-  } catch {}
-}
-
-function persistVoice(voiceId: string): void {
-  try {
-    localStorage.setItem(VOICE_PREF_KEY, voiceId);
-  } catch {}
 }
 
 function IncludedRow({
@@ -124,52 +73,6 @@ function IncludedRow({
   );
 }
 
-function SettingSelect({
-  id,
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}) {
-  return (
-    <label
-      htmlFor={id}
-      style={{
-        display: "grid",
-        gap: 5,
-        fontSize: 12,
-        color: "var(--text-tertiary)",
-      }}
-    >
-      <span>{label}</span>
-      <select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        style={{
-          width: "100%",
-          border: "1px solid var(--border-main)",
-          borderRadius: 9,
-          background: "var(--bg-white)",
-          color: "var(--text-primary)",
-          fontSize: 13,
-          fontFamily: "var(--font)",
-          padding: "7px 9px",
-          outline: "none",
-        }}
-      >
-        {children}
-      </select>
-    </label>
-  );
-}
-
 export default function HandoffButton({
   sessionId,
   hasPlan,
@@ -180,8 +83,6 @@ export default function HandoffButton({
   const [isOpen, setIsOpen] = useState(false);
   const [state, setState] = useState<HandoffState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [model, setModel] = useState(() => getSavedModel());
-  const [voiceId, setVoiceId] = useState(() => getSavedVoice());
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -203,7 +104,7 @@ export default function HandoffButton({
     setErrorMessage(null);
 
     try {
-      const nextSessionId = await requestHandoff({ sessionId, model, voiceId });
+      const nextSessionId = await requestHandoff({ sessionId });
       onCreated(nextSessionId);
     } catch (error) {
       setState("error");
@@ -213,9 +114,6 @@ export default function HandoffButton({
 
   const disabled = !sessionId || state === "loading";
   const emphasized = isOpen || state === "loading";
-  const selectedVoiceIsCustom =
-    voiceId !== NONE_VOICE_ID &&
-    !AVAILABLE_VOICES.some((voice) => voice.id === voiceId);
 
   return (
     <div ref={rootRef} style={{ position: "relative", display: "flex", alignItems: "center" }}>
@@ -226,10 +124,6 @@ export default function HandoffButton({
           if (!disabled) {
             setErrorMessage(null);
             setState("idle");
-            if (!isOpen) {
-              setModel(getSavedModel());
-              setVoiceId(getSavedVoice());
-            }
             setIsOpen((value) => !value);
           }
         }}
@@ -305,7 +199,7 @@ export default function HandoffButton({
                 Start handoff
               </div>
               <div style={{ marginTop: 5, fontSize: 12, lineHeight: 1.5, color: "var(--text-secondary)" }}>
-                Creates a new session with the latest artifacts already attached.
+                Creates a new session with the latest artifacts already attached. Choose model and sound before your first message there.
               </div>
             </div>
 
@@ -313,48 +207,6 @@ export default function HandoffButton({
               <IncludedRow label="Latest plan" available={hasPlan} />
               <IncludedRow label="Current code" available={hasCode} />
               <IncludedRow label="Latest rendered video" available={hasVideo} />
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <SettingSelect
-                id="handoff-model"
-                label="Model"
-                value={model}
-                onChange={(value) => {
-                  const nextModel = isRegisteredModelId(value) ? value : DEFAULT_MODEL;
-                  setModel(nextModel);
-                  persistModel(nextModel);
-                }}
-              >
-                {AVAILABLE_MODELS.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.label}
-                  </option>
-                ))}
-              </SettingSelect>
-
-              <SettingSelect
-                id="handoff-voice"
-                label="Sound"
-                value={voiceId}
-                onChange={(value) => {
-                  const nextVoiceId = isValidVoiceId(value) ? value : DEFAULT_VOICE_ID;
-                  setVoiceId(nextVoiceId);
-                  persistVoice(nextVoiceId);
-                }}
-              >
-                <option value={NONE_VOICE_ID}>No Voice</option>
-                {AVAILABLE_VOICES.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.label}
-                  </option>
-                ))}
-                {selectedVoiceIsCustom && (
-                  <option value={voiceId}>
-                    {getVoiceLabel(voiceId) ?? `Custom ${voiceId.slice(0, 6)}...${voiceId.slice(-4)}`}
-                  </option>
-                )}
-              </SettingSelect>
             </div>
 
             {errorMessage && (

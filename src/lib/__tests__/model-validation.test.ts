@@ -73,4 +73,32 @@ describe("model validation", () => {
 
     fs.rmSync(root, { recursive: true, force: true });
   });
+
+  it("rejects invalid voices in the local chat stream", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-voice-validation-"));
+    process.env.MANIMATE_LOCAL_ROOT = root;
+    vi.resetModules();
+
+    const { handleLocalChatRequest } = await import("@/lib/local/chat");
+    const response = await handleLocalChatRequest(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: "session-1",
+          prompt: "Animate vectors",
+          voice_id: "bad voice",
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const rawEvent = await response.text();
+    const payload = JSON.parse(rawEvent.match(/^data: (.+)$/m)?.[1] || "{}") as {
+      message?: string;
+    };
+    expect(payload.message).toBe("Invalid voice_id");
+
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 });

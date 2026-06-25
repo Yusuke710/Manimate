@@ -19,9 +19,16 @@ import {
   getModelDisplayLabel,
   isRegisteredModelId,
 } from "@/lib/models";
-import { AVAILABLE_VOICES, DEFAULT_VOICE_ID, NONE_VOICE_ID, getVoicePageUrl } from "@/lib/voices";
+import {
+  AVAILABLE_VOICES,
+  DEFAULT_VOICE_ID,
+  NONE_VOICE_ID,
+  getVoicePageUrl,
+  isValidVoiceId,
+} from "@/lib/voices";
 import {
   ASPECT_RATIO_OPTIONS,
+  DEFAULT_ASPECT_RATIO,
   isAspectRatio,
   type AspectRatio,
 } from "@/lib/aspect-ratio";
@@ -243,8 +250,10 @@ function usePreferredVoice() {
     let timer: number | null = null;
     try {
       const saved = localStorage.getItem(VOICE_PREF_KEY);
-      if (saved) {
+      if (saved && isValidVoiceId(saved)) {
         timer = window.setTimeout(() => setVoice(saved), 0);
+      } else if (saved) {
+        localStorage.setItem(VOICE_PREF_KEY, DEFAULT_VOICE_ID);
       }
     } catch {}
     return () => {
@@ -253,8 +262,9 @@ function usePreferredVoice() {
   }, []);
 
   const set = useCallback((v: string) => {
-    setVoice(v);
-    try { localStorage.setItem(VOICE_PREF_KEY, v); } catch {}
+    const nextVoice = isValidVoiceId(v) ? v : DEFAULT_VOICE_ID;
+    setVoice(nextVoice);
+    try { localStorage.setItem(VOICE_PREF_KEY, nextVoice); } catch {}
   }, []);
   return [voice, set] as const;
 }
@@ -876,6 +886,113 @@ function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange:
   );
 }
 
+function ComposerSettingsControls({
+  model,
+  onModelChange,
+  voice,
+  onVoiceChange,
+  aspectRatio,
+  onAspectRatioChange,
+  disabled,
+  compact,
+  isMobile,
+  hasPendingChange,
+}: {
+  model: string;
+  onModelChange: (model: string) => void;
+  voice: string;
+  onVoiceChange: (voice: string) => void;
+  aspectRatio: AspectRatio;
+  onAspectRatioChange: (ratio: AspectRatio) => void;
+  disabled?: boolean;
+  compact?: boolean;
+  isMobile?: boolean;
+  hasPendingChange?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const controls = (
+    <>
+      <ModelSelector model={model} onChange={onModelChange} disabled={disabled} />
+      <VoiceSelector voice={voice} onChange={onVoiceChange} disabled={disabled} />
+      <AspectRatioSelector ratio={aspectRatio} onChange={onAspectRatioChange} disabled={disabled} />
+    </>
+  );
+
+  if (!compact) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 6, flexWrap: "wrap" }}>
+        {controls}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => setIsOpen((value) => !value)}
+        title="Session settings"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          background: hasPendingChange
+            ? "rgba(43,181,160,0.12)"
+            : isOpen
+              ? "var(--bg-active)"
+              : "var(--bg-white)",
+          border: hasPendingChange
+            ? "1px solid rgba(43,181,160,0.42)"
+            : "1px solid var(--border-main)",
+          borderRadius: 20,
+          padding: "4px 10px",
+          cursor: "pointer",
+          color: hasPendingChange ? "var(--accent)" : "var(--text-primary)",
+          fontFamily: "var(--font)",
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={hasPendingChange ? "var(--accent)" : "var(--text-tertiary)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.2.38.6.61 1 .6h.1a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z" />
+        </svg>
+        <span style={{ fontSize: 13, fontWeight: 500 }}>Settings</span>
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 8px)",
+            left: 0,
+            width: "min(360px, calc(100vw - 32px))",
+            padding: 12,
+            border: "1px solid var(--border-main)",
+            borderRadius: 12,
+            background: "var(--bg-white)",
+            boxShadow: "0 18px 36px rgba(15,23,42,0.14)",
+            zIndex: 70,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {controls}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Chat state managed by reducer
 interface ChatState {
   messages: Message[];
@@ -1025,6 +1142,7 @@ interface SessionSnapshot {
   last_video_url: string | null;
   plan_content: string | null;
   script_content: string | null;
+  voice_id: string | null;
   model: string | null;
   aspect_ratio: string | null;
 }
@@ -1047,7 +1165,15 @@ interface PendingWelcomePayload {
   prompt: string;
   images?: File[];
   model?: string;
+  voiceId?: string;
+  aspectRatio?: AspectRatio;
 }
+
+type ComposerSettingsSnapshot = {
+  model: string;
+  voice: string;
+  aspectRatio: AspectRatio;
+};
 
 interface ChatPanelProps {
   sessionId: string | null;
@@ -1062,6 +1188,12 @@ interface ChatPanelProps {
 export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePayload, consumeWelcomePayload, sessionReady, isMobile = false }: ChatPanelProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(chatReducer, initialState);
+  const [composerModel, setComposerModel] = usePreferredModel();
+  const [composerVoice, setComposerVoice] = usePreferredVoice();
+  const [composerAspectRatio, setComposerAspectRatio] = usePreferredAspectRatio();
+  const [sessionComposerSettings, setSessionComposerSettings] =
+    useState<ComposerSettingsSnapshot | null>(null);
+  const [initialSessionLoaded, setInitialSessionLoaded] = useState(false);
   const draftKey = sessionId ? `chat-draft:${sessionId}` : undefined;
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentAssistantMessageIdRef = useRef<string | null>(null);
@@ -1075,6 +1207,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   const videoUpdateNonceRef = useRef(0);
   const reconnectedRunIdRef = useRef<string | null>(null);
   const expectedPreviewNonceRef = useRef<number | null>(null);
+  const composerSyncedFromSessionRef = useRef(false);
   const [showPreviewReadyBadge, setShowPreviewReadyBadge] = useState(false);
 
   // Sync refs with state
@@ -1122,15 +1255,38 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
         dispatch({ type: "LOAD_ACTIVITY_EVENTS", events: activityEvents });
       }
 
+      const shouldSyncComposerSettings = !composerSyncedFromSessionRef.current;
+      const fetchedModel = data.session.model && isRegisteredModelId(data.session.model)
+        ? data.session.model
+        : DEFAULT_MODEL;
+      const fetchedVoice = data.session.voice_id && isValidVoiceId(data.session.voice_id)
+        ? data.session.voice_id
+        : DEFAULT_VOICE_ID;
+      const fetchedAspectRatio = isAspectRatio(data.session.aspect_ratio)
+        ? data.session.aspect_ratio
+        : DEFAULT_ASPECT_RATIO;
+
+      setSessionComposerSettings({
+        model: fetchedModel,
+        voice: fetchedVoice,
+        aspectRatio: fetchedAspectRatio,
+      });
+
       if (data.session.model) {
         dispatch({
           type: "SET_MODEL",
-          model: isRegisteredModelId(data.session.model) ? data.session.model : DEFAULT_MODEL,
+          model: fetchedModel,
         });
+        if (shouldSyncComposerSettings) setComposerModel(fetchedModel);
+      }
+      if (shouldSyncComposerSettings) {
+        setComposerVoice(fetchedVoice);
       }
       if (isAspectRatio(data.session.aspect_ratio)) {
         onSessionAspectRatio?.(data.session.aspect_ratio);
+        if (shouldSyncComposerSettings) setComposerAspectRatio(fetchedAspectRatio);
       }
+      if (shouldSyncComposerSettings) composerSyncedFromSessionRef.current = true;
 
       if (shouldApplyArtifactSnapshot(data.session.plan_content, planContentRef.current)) {
         dispatch({ type: "SET_PLAN_CONTENT", content: data.session.plan_content });
@@ -1143,7 +1299,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
       }
 
     },
-    [onSessionAspectRatio],
+    [onSessionAspectRatio, setComposerAspectRatio, setComposerModel, setComposerVoice],
   );
 
   // Bootstrap: load messages for existing session on mount
@@ -1151,7 +1307,11 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   useEffect(() => {
     // Skip bootstrap fetch for welcome-prompted sessions (auto-send will fire)
     const isWelcomeCreated = sessionId ? Boolean(hasPendingWelcomePayload?.(sessionId)) : false;
-    if (!sessionId || isWelcomeCreated) return;
+    if (!sessionId) return;
+    if (isWelcomeCreated) {
+      setInitialSessionLoaded(true);
+      return;
+    }
 
     dispatch({ type: "SET_LOADING_MESSAGES", isLoadingMessages: true });
 
@@ -1191,7 +1351,12 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
         }
       })
       .catch((error) => { console.error("Failed to load session messages:", error); })
-      .finally(() => { if (!cancelled) dispatch({ type: "SET_LOADING_MESSAGES", isLoadingMessages: false }); });
+      .finally(() => {
+        if (!cancelled) {
+          dispatch({ type: "SET_LOADING_MESSAGES", isLoadingMessages: false });
+          setInitialSessionLoaded(true);
+        }
+      });
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1293,7 +1458,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   const handleSend = useCallback(async (
     prompt: string,
     images?: File[],
-    options?: { model?: string }
+    options?: { model?: string; voiceId?: string; aspectRatio?: AspectRatio }
   ) => {
     const currentSandboxId = sandboxIdRef.current;
     const currentAgentSessionId = agentSessionIdRef.current;
@@ -1363,6 +1528,8 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
         prompt,
         model: options?.model ?? state.model,
       };
+      if (options?.voiceId) body.voice_id = options.voiceId;
+      if (options?.aspectRatio) body.aspect_ratio = options.aspectRatio;
       if (uploadedImages && uploadedImages.length > 0) body.images = uploadedImages;
       body.session_id = activeSessionId;
       const isNewSession = !sessionId;
@@ -1522,7 +1689,11 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
     const pending = consumeWelcomePayload?.(sessionId);
     if (!pending) return;
     welcomeSentRef.current = true;
-    void handleSend(pending.prompt, pending.images, { model: pending.model });
+    void handleSend(pending.prompt, pending.images, {
+      model: pending.model,
+      voiceId: pending.voiceId,
+      aspectRatio: pending.aspectRatio,
+    });
   }, [sessionId, handleSend, consumeWelcomePayload]);
 
   const handleCancel = useCallback(async () => {
@@ -1565,15 +1736,23 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
 
   const handleRequestHqRender = useCallback(() => {
     if (state.isLoading) return false;
-    void handleSend("render in 1080@30fps");
+    void handleSend("render in 1080@30fps", undefined, {
+      model: composerModel,
+      voiceId: composerVoice,
+      aspectRatio: composerAspectRatio,
+    });
     return true;
-  }, [handleSend, state.isLoading]);
+  }, [composerAspectRatio, composerModel, composerVoice, handleSend, state.isLoading]);
 
   const handleRequest4kRender = useCallback(() => {
     if (state.isLoading) return false;
-    void handleSend("render in 4k@30fps");
+    void handleSend("render in 4k@30fps", undefined, {
+      model: composerModel,
+      voiceId: composerVoice,
+      aspectRatio: composerAspectRatio,
+    });
     return true;
-  }, [handleSend, state.isLoading]);
+  }, [composerAspectRatio, composerModel, composerVoice, handleSend, state.isLoading]);
 
   const hasArtifacts = !!(state.planContent || state.scriptContent || state.videoUrl);
   const [mobileArtifactOpen, setMobileArtifactOpen] = useState(false);
@@ -1589,6 +1768,40 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
 
   // Determine artifact label for the compact card
   const artifactLabel = state.videoUrl ? "Animation preview" : state.scriptContent ? "Script" : "Plan";
+  const shouldShowFirstTurnConfig =
+    initialSessionLoaded &&
+    !state.isLoadingMessages &&
+    state.messages.length === 0 &&
+    !state.agentSessionId;
+  const hasPendingComposerSettingsChange = Boolean(
+    sessionComposerSettings &&
+      (
+        composerModel !== sessionComposerSettings.model ||
+        composerVoice !== sessionComposerSettings.voice ||
+        composerAspectRatio !== sessionComposerSettings.aspectRatio
+      ),
+  );
+  const composerSettingsControls = initialSessionLoaded ? (
+    <ComposerSettingsControls
+      model={composerModel}
+      onModelChange={setComposerModel}
+      voice={composerVoice}
+      onVoiceChange={setComposerVoice}
+      aspectRatio={composerAspectRatio}
+      onAspectRatioChange={setComposerAspectRatio}
+      compact={!shouldShowFirstTurnConfig}
+      isMobile={isMobile}
+      hasPendingChange={hasPendingComposerSettingsChange}
+    />
+  ) : undefined;
+
+  const handleConfiguredSend = useCallback((prompt: string, images?: File[]) => {
+    void handleSend(prompt, images, {
+      model: composerModel,
+      voiceId: composerVoice,
+      aspectRatio: composerAspectRatio,
+    });
+  }, [composerAspectRatio, composerModel, composerVoice, handleSend]);
 
   // Shared PreviewPanel element — reused in desktop split and mobile preview mode
   const previewPanel = (
@@ -1616,10 +1829,11 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
           <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-main)" }}>
             <ChatMessages messages={state.messages} activityEvents={state.activityEvents} isLoading={state.isLoading} isLoadingMessages={state.isLoadingMessages} />
             <ChatInput
-              onSend={handleSend}
+              onSend={handleConfiguredSend}
               onStop={handleCancel}
               isLoading={state.isLoading}
               draftKey={draftKey}
+              extraLeft={composerSettingsControls}
             />
           </div>
         }
@@ -1659,11 +1873,12 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
           <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>{previewPanel}</div>
 
           <ChatInput
-            onSend={handleSend}
+            onSend={handleConfiguredSend}
             onStop={handleCancel}
             isLoading={state.isLoading}
             compact
             draftKey={draftKey}
+            extraLeft={composerSettingsControls}
           />
         </>
       ) : (
@@ -1717,11 +1932,12 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
             )}
 
             <ChatInput
-              onSend={handleSend}
+              onSend={handleConfiguredSend}
               onStop={handleCancel}
               isLoading={state.isLoading}
               compact={isMobile}
               draftKey={draftKey}
+              extraLeft={composerSettingsControls}
             />
           </div>
         </div>
@@ -1821,6 +2037,8 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
       prompt: trimmedPrompt,
       images: images && images.length > 0 ? [...images] : undefined,
       model: model ?? DEFAULT_MODEL,
+      voiceId: voice ?? DEFAULT_VOICE_ID,
+      aspectRatio: ratioOverride ?? aspectRatio,
     });
 
     // Fire session creation in background; resolve to boolean for ChatPanel.
