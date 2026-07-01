@@ -241,8 +241,9 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
       const last = prev.at(-1);
       if (!last) return prev;
       ctx.putImageData(last, 0, 0);
-      setIsDirty(true);
-      return prev.slice(0, -1);
+      const next = prev.slice(0, -1);
+      setIsDirty(next.length > 0);
+      return next;
     });
   }, []);
 
@@ -257,7 +258,13 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
       if (closeAfter) ref.current?.close();
     };
     const confirmNote = (file: File | null) => {
-      if (includeNote && onAnnotationConfirm) onAnnotationConfirm(currentIndex, file, note);
+      if (includeNote && onAnnotationConfirm) {
+        const trimmedNote = note.trim();
+        const promptNote = isDirty
+          ? `user annotation in red stroke${trimmedNote ? `: ${trimmedNote}` : ""}`
+          : note;
+        onAnnotationConfirm(currentIndex, file, promptNote);
+      }
     };
 
     const canvas = canvasRef.current;
