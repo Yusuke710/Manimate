@@ -28,15 +28,87 @@ afterEach(async () => {
 });
 
 describe("readLocalProjectSubtitles", () => {
-  it("returns project/subtitles.srt when available", async () => {
+  it("prefers TTS timestamps when available", async () => {
     const projectDir = await makeProjectDir();
-    const subtitlePath = path.join(projectDir, "subtitles.srt");
-    const content = "1\n00:00:00,000 --> 00:00:01,000\nRoot subtitle\n";
-    await fsp.writeFile(subtitlePath, content);
+    const sceneVideo = path.join(projectDir, "scene1.mp4");
+    await fsp.writeFile(sceneVideo, "");
+    await fsp.writeFile(
+      path.join(projectDir, "scene1.srt"),
+      "1\n00:00:00,000 --> 00:00:01,000\nScene subtitle\n"
+    );
+    await fsp.writeFile(
+      path.join(projectDir, "subtitles.srt"),
+      "1\n00:00:00,000 --> 00:00:01,000\nRoot subtitle\n"
+    );
+    await fsp.writeFile(path.join(projectDir, "concat.txt"), "file scene1.mp4\n");
+    await fsp.writeFile(
+      path.join(projectDir, "timestamps.json"),
+      JSON.stringify({
+        subtitles: [
+          {
+            start_s: 0,
+            end_s: 1.25,
+            text: "Timestamp subtitle",
+          },
+        ],
+      })
+    );
 
     const result = await readLocalProjectSubtitles(projectDir);
-    expect(result).toBe(content);
+
+    expect(result).toBe(
+      [
+        "1",
+        "00:00:00,000 --> 00:00:01,250",
+        "Timestamp subtitle",
+        "",
+      ].join("\n")
+    );
     expect(mockedRunLocalCommand).not.toHaveBeenCalled();
+  });
+
+  it("ignores project/subtitles.srt without current generated subtitles", async () => {
+    const projectDir = await makeProjectDir();
+    await fsp.writeFile(
+      path.join(projectDir, "subtitles.srt"),
+      "1\n00:00:00,000 --> 00:00:01,000\nRoot subtitle\n"
+    );
+
+    const result = await readLocalProjectSubtitles(projectDir);
+    expect(result).toBeNull();
+    expect(mockedRunLocalCommand).not.toHaveBeenCalled();
+  });
+
+  it("prefers scene subtitles over a stale project/subtitles.srt", async () => {
+    const projectDir = await makeProjectDir();
+    const sceneVideo = path.join(projectDir, "scene1.mp4");
+    await fsp.writeFile(sceneVideo, "");
+    await fsp.writeFile(
+      path.join(projectDir, "scene1.srt"),
+      "1\n00:00:00,000 --> 00:00:01,000\nFresh scene subtitle\n"
+    );
+    await fsp.writeFile(
+      path.join(projectDir, "subtitles.srt"),
+      "1\n00:00:00,000 --> 00:00:01,000\nStale root subtitle\n"
+    );
+    await fsp.writeFile(path.join(projectDir, "concat.txt"), "file scene1.mp4\n");
+
+    mockedRunLocalCommand.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ format: { duration: "1.0" } }),
+      stderr: "",
+    });
+
+    const result = await readLocalProjectSubtitles(projectDir);
+
+    expect(result).toBe(
+      [
+        "1",
+        "00:00:00,000 --> 00:00:01,000",
+        "Fresh scene subtitle",
+        "",
+      ].join("\n")
+    );
   });
 
   it("concatenates scene subtitles from concat.txt with duration offsets", async () => {

@@ -18,6 +18,12 @@ interface LocalSubtitleEntry {
   text: string;
 }
 
+interface TimestampSubtitleEntry {
+  start_s?: unknown;
+  end_s?: unknown;
+  text?: unknown;
+}
+
 async function readTextFileIfExists(filePath: string): Promise<string | null> {
   try {
     return await fsp.readFile(filePath, "utf8");
@@ -82,20 +88,49 @@ function parseSrtEntries(content: string): LocalSubtitleEntry[] {
   return entries;
 }
 
+function serializeSrtEntries(entries: LocalSubtitleEntry[]): string | null {
+  const output = entries.map((entry, index) =>
+    `${index + 1}\n${formatSrtTime(entry.start)} --> ${formatSrtTime(entry.end)}\n${entry.text}`
+  );
+  return output.length > 0 ? `${output.join("\n\n")}\n` : null;
+}
+
+async function readTimestampSubtitles(projectDir: string): Promise<string | null> {
+  const content = await readTextFileIfExists(`${projectDir}/timestamps.json`);
+  if (!content?.trim()) return null;
+
+  try {
+    const parsed = JSON.parse(content) as { subtitles?: unknown };
+    if (!Array.isArray(parsed.subtitles)) return null;
+
+    const entries: LocalSubtitleEntry[] = [];
+    for (const item of parsed.subtitles) {
+      const entry = item as TimestampSubtitleEntry;
+      const start = typeof entry.start_s === "number" ? entry.start_s : NaN;
+      const end = typeof entry.end_s === "number" ? entry.end_s : NaN;
+      const text = typeof entry.text === "string" ? entry.text.trim() : "";
+
+      if (!text || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        return null;
+      }
+
+      entries.push({ start, end, text });
+    }
+
+    return serializeSrtEntries(entries);
+  } catch {
+    return null;
+  }
+}
+
 export async function readLocalProjectSubtitles(
   projectDir: string
 ): Promise<string | null> {
-  const rootSubtitlePath = `${projectDir}/subtitles.srt`;
-  const rootSubtitle = await readTextFileIfExists(rootSubtitlePath);
-  if (rootSubtitle?.trim()) {
-    return rootSubtitle;
-  }
+  const timestampSubtitles = await readTimestampSubtitles(projectDir);
+  if (timestampSubtitles) return timestampSubtitles;
 
   const videoPaths = await getLocalSceneVideoPaths(projectDir);
-  if (videoPaths.length === 0) return null;
-
-  const outputEntries: string[] = [];
-  let nextIndex = 1;
+  const sceneEntries: LocalSubtitleEntry[] = [];
   let offset = 0;
 
   for (const videoPath of videoPaths) {
@@ -106,10 +141,11 @@ export async function readLocalProjectSubtitles(
     if (sceneContent?.trim()) {
       const entries = parseSrtEntries(sceneContent);
       for (const entry of entries) {
-        outputEntries.push(
-          `${nextIndex}\n${formatSrtTime(entry.start + offset)} --> ${formatSrtTime(entry.end + offset)}\n${entry.text}`
-        );
-        nextIndex += 1;
+        sceneEntries.push({
+          start: entry.start + offset,
+          end: entry.end + offset,
+          text: entry.text,
+        });
       }
     }
 
@@ -117,6 +153,5 @@ export async function readLocalProjectSubtitles(
     offset += duration;
   }
 
-  if (outputEntries.length === 0) return null;
-  return `${outputEntries.join("\n\n")}\n`;
+  return serializeSrtEntries(sceneEntries);
 }
