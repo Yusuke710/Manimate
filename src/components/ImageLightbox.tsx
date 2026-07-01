@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent,
+} from "react";
 
 interface LightboxImage {
   url: string;
@@ -35,6 +42,12 @@ function isEditableKeyboardTarget(target: EventTarget | null): boolean {
 
 const DRAW_COLOR = "#ff3b30";
 const BRUSH_SIZE = 4;
+const CLICK_STROKE_MOVEMENT_THRESHOLD = 2;
+
+interface CanvasPoint {
+  x: number;
+  y: number;
+}
 
 export default function ImageLightbox({ images, index, onIndexChange, onClose, onImageChange, onAnnotationConfirm }: ImageLightboxProps) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -42,6 +55,10 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
   const onCloseRef = useRef(onClose);
   const closeWithAnnotationRef = useRef<() => void>(() => {});
   const isDrawingRef = useRef(false);
+  const strokeStartPointRef = useRef<CanvasPoint | null>(null);
+  const strokeMovedRef = useRef(false);
+  const currentStrokeSnapshotRef = useRef<ImageData | null>(null);
+  const lastClickStrokeSnapshotRef = useRef<ImageData | null>(null);
   const [undoStack, setUndoStack] = useState<ImageData[]>([]);
   const [note, setNote] = useState("");
   const [isDirty, setIsDirty] = useState(false);
@@ -97,6 +114,10 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
 
       ctx.clearRect(0, 0, width, height);
       ctx.drawImage(image, 0, 0, width, height);
+      currentStrokeSnapshotRef.current = null;
+      lastClickStrokeSnapshotRef.current = null;
+      strokeStartPointRef.current = null;
+      strokeMovedRef.current = false;
       setUndoStack([]);
       setIsDirty(false);
     };
@@ -122,6 +143,10 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
 
   const beginStroke = useCallback((event: PointerEvent<HTMLCanvasElement>) => {
     if (!canAnnotate) return;
+    if (event.detail > 1) {
+      event.preventDefault();
+      return;
+    }
 
     const canvas = canvasRef.current;
     const point = getCanvasPoint(event);
@@ -130,7 +155,12 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    setUndoStack((prev) => [...prev.slice(-9), ctx.getImageData(0, 0, canvas.width, canvas.height)]);
+    const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    currentStrokeSnapshotRef.current = snapshot;
+    lastClickStrokeSnapshotRef.current = null;
+    strokeStartPointRef.current = point;
+    strokeMovedRef.current = false;
+    setUndoStack((prev) => [...prev.slice(-9), snapshot]);
     isDrawingRef.current = true;
     canvas.setPointerCapture(event.pointerId);
 
@@ -155,17 +185,52 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const startPoint = strokeStartPointRef.current;
+    if (startPoint) {
+      const distance = Math.hypot(point.x - startPoint.x, point.y - startPoint.y);
+      if (distance > CLICK_STROKE_MOVEMENT_THRESHOLD) strokeMovedRef.current = true;
+    }
+
     ctx.lineTo(point.x, point.y);
     ctx.stroke();
   }, [getCanvasPoint]);
 
   const endStroke = useCallback((event: PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
+    if (isDrawingRef.current) {
+      lastClickStrokeSnapshotRef.current = strokeMovedRef.current ? null : currentStrokeSnapshotRef.current;
+    }
+
     isDrawingRef.current = false;
+    currentStrokeSnapshotRef.current = null;
+    strokeStartPointRef.current = null;
+    strokeMovedRef.current = false;
     if (canvas?.hasPointerCapture(event.pointerId)) {
       canvas.releasePointerCapture(event.pointerId);
     }
   }, []);
+
+  const rollbackClickStroke = useCallback(() => {
+    const snapshot = lastClickStrokeSnapshotRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!snapshot || !canvas || !ctx) return;
+
+    ctx.putImageData(snapshot, 0, 0);
+    lastClickStrokeSnapshotRef.current = null;
+    setUndoStack((prev) => {
+      const next = prev.at(-1) === snapshot ? prev.slice(0, -1) : prev;
+      setIsDirty(next.length > 0);
+      return next;
+    });
+  }, []);
+
+  const handleCanvasDoubleClick = useCallback((event: ReactMouseEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    isDrawingRef.current = false;
+    rollbackClickStroke();
+  }, [rollbackClickStroke]);
 
   const undoStroke = useCallback(() => {
     const canvas = canvasRef.current;
@@ -335,6 +400,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
             onPointerMove={continueStroke}
             onPointerUp={endStroke}
             onPointerCancel={endStroke}
+            onDoubleClick={handleCanvasDoubleClick}
             style={{
               maxWidth: "90vw",
               maxHeight: "76vh",
