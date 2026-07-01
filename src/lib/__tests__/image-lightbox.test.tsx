@@ -153,6 +153,91 @@ describe("ImageLightbox keyboard navigation", () => {
     expect(context.putImageData).toHaveBeenCalledWith(snapshot, 0, 0);
   });
 
+  it("describes a red-stroke annotation without a trailing colon when the note is blank", async () => {
+    const snapshot = {} as ImageData;
+    const context = {
+      beginPath: vi.fn(),
+      getImageData: vi.fn(() => snapshot),
+      lineTo: vi.fn(),
+      moveTo: vi.fn(),
+      putImageData: vi.fn(),
+      stroke: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+      lineCap: "",
+      lineJoin: "",
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => {
+      callback(new Blob(["frame"], { type: "image/png" }));
+    });
+    const onAnnotationConfirm = vi.fn();
+
+    await act(async () => {
+      root?.render(
+        <ImageLightbox
+          images={[{ url: "/first.png" }]}
+          index={0}
+          onIndexChange={vi.fn()}
+          onClose={vi.fn()}
+          onImageChange={vi.fn()}
+          onAnnotationConfirm={onAnnotationConfirm}
+        />,
+      );
+    });
+    await flushEffects();
+
+    const canvas = document.querySelector<HTMLCanvasElement>("canvas");
+    expect(canvas).not.toBeNull();
+    if (!canvas) throw new Error("Expected annotation canvas");
+
+    canvas.getBoundingClientRect = vi.fn(() => ({
+      bottom: 100,
+      height: 100,
+      left: 0,
+      right: 100,
+      top: 0,
+      width: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }));
+    canvas.setPointerCapture = vi.fn();
+    canvas.hasPointerCapture = vi.fn(() => true);
+    canvas.releasePointerCapture = vi.fn();
+
+    const dispatchPointerEvent = (type: string) => {
+      const event = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: 20,
+        clientY: 20,
+        detail: 1,
+      });
+      Object.defineProperty(event, "pointerId", { value: 1 });
+      canvas.dispatchEvent(event);
+    };
+
+    await act(async () => {
+      dispatchPointerEvent("pointerdown");
+      dispatchPointerEvent("pointerup");
+    });
+
+    const applyButton = document.querySelector<HTMLButtonElement>('button[aria-label="Apply frame instruction"]');
+    expect(applyButton).not.toBeNull();
+    if (!applyButton) throw new Error("Expected apply frame instruction button");
+
+    await act(async () => {
+      applyButton.click();
+    });
+
+    expect(onAnnotationConfirm).toHaveBeenCalledWith(
+      0,
+      expect.any(File),
+      "user annotation in red stroke",
+    );
+  });
+
   it("navigates images with arrow keys outside editable fields", async () => {
     const onIndexChange = vi.fn();
 

@@ -44,6 +44,14 @@ const DRAW_COLOR = "#ff3b30";
 const BRUSH_SIZE = 4;
 const CLICK_STROKE_MOVEMENT_THRESHOLD = 2;
 
+export function formatAnnotationInstruction(hasRedStroke: boolean, note: string): string {
+  const trimmedNote = note.trim();
+  if (!hasRedStroke) return trimmedNote;
+  return trimmedNote
+    ? `user annotation in red stroke: ${trimmedNote}`
+    : "user annotation in red stroke";
+}
+
 interface CanvasPoint {
   x: number;
   y: number;
@@ -259,10 +267,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
     };
     const confirmNote = (file: File | null) => {
       if (includeNote && onAnnotationConfirm) {
-        const trimmedNote = note.trim();
-        const promptNote = isDirty
-          ? `user annotation in red stroke${trimmedNote ? `: ${trimmedNote}` : ""}`
-          : note;
+        const promptNote = formatAnnotationInstruction(isDirty, note);
         onAnnotationConfirm(currentIndex, file, promptNote);
       }
     };
