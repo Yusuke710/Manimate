@@ -34,6 +34,12 @@ describe("listLocalCloudSyncRetryCandidates", () => {
         cloud_sync_status: "idle",
       });
 
+      const syncing = db.createLocalSession({ model: "claude" });
+      db.updateLocalSession(syncing.id, {
+        video_path: "/tmp/syncing.mp4",
+        cloud_sync_status: "syncing",
+      });
+
       const authFailed = db.createLocalSession({ model: "claude" });
       db.updateLocalSession(authFailed.id, {
         video_path: "/tmp/auth-failed.mp4",
@@ -56,8 +62,8 @@ describe("listLocalCloudSyncRetryCandidates", () => {
         .map((session) => session.id)
         .sort();
 
-      expect(defaultRetryIds).toEqual([idle.id].sort());
-      expect(reconnectRetryIds).toEqual([idle.id, authFailed.id].sort());
+      expect(defaultRetryIds).toEqual([idle.id, syncing.id].sort());
+      expect(reconnectRetryIds).toEqual([idle.id, syncing.id, authFailed.id].sort());
     } finally {
       fs.rmSync(localRoot, { recursive: true, force: true });
     }

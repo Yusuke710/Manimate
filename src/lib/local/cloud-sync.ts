@@ -208,11 +208,18 @@ function buildAttachmentManifest(messages: ReturnType<typeof listLocalMessages>)
   return manifest;
 }
 
+function normalizeCloudMirrorVoiceId(voiceId: string | null): string | null {
+  if (typeof voiceId !== "string") return null;
+  const trimmed = voiceId.trim();
+  return trimmed === "none" || /^[a-zA-Z0-9]{8,64}$/.test(trimmed) ? trimmed : null;
+}
+
 function toCloudSyncSession(
   session: NonNullable<ReturnType<typeof getLocalSession>>
 ): CloudSyncSession {
   const cloudSession = { ...session };
   delete (cloudSession as { session_number?: number }).session_number;
+  cloudSession.voice_id = normalizeCloudMirrorVoiceId(session.voice_id);
   return cloudSession;
 }
 

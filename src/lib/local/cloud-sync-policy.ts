@@ -32,6 +32,7 @@ export function shouldRetryCloudSyncSession(params: {
   if (
     params.cloudSyncStatus !== "idle" &&
     params.cloudSyncStatus !== "pending" &&
+    params.cloudSyncStatus !== "syncing" &&
     params.cloudSyncStatus !== "failed"
   ) {
     return false;

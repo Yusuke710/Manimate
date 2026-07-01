@@ -62,6 +62,78 @@ afterEach(() => {
 });
 
 describe("queueLocalCloudSync", () => {
+  it("omits local-only voice IDs from hosted cloud snapshots", async () => {
+    const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-cloud-sync-"));
+
+    try {
+      const { store, db, cloudSync } = await loadCloudSyncModules(localRoot);
+
+      store.writeStoredLocalConfig({
+        cloud_sync: {
+          base_url: "https://manimate.ai",
+          token: "token-123",
+          connected_at: "2026-04-01T00:00:00.000Z",
+        },
+      });
+
+      const session = db.createLocalSession({
+        model: "claude",
+        voice_id: "af_heart",
+      });
+      const sessionRoot = path.join(localRoot, "sessions", session.id);
+      const projectDir = path.join(sessionRoot, "project");
+      fs.mkdirSync(projectDir, { recursive: true });
+      const videoPath = path.join(projectDir, "video.mp4");
+      fs.writeFileSync(videoPath, "not a real mp4");
+      fs.writeFileSync(path.join(sessionRoot, "thumbnail.jpg"), "not a real jpg");
+      db.updateLocalSession(session.id, {
+        video_path: videoPath,
+      });
+
+      let capturedSnapshot: { session?: { voice_id?: unknown } } | null = null;
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "https://www.manimate.ai/api/local-sync/uploads") {
+          return new Response(JSON.stringify({ error: "Not Found" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url === "https://www.manimate.ai/api/local-sync/sessions") {
+          expect(init?.body).toBeInstanceOf(FormData);
+          const snapshotRaw = (init?.body as FormData).get("snapshot");
+          capturedSnapshot = JSON.parse(String(snapshotRaw)) as {
+            session?: { voice_id?: unknown };
+          };
+          return new Response(JSON.stringify({ public_video_url: "https://manimate.ai/v/test" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        throw new Error(`Unexpected fetch target: ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      cloudSync.queueLocalCloudSync(session.id);
+
+      await waitForCloudSyncStatus(
+        () => db.getLocalSession(session.id)?.cloud_sync_status ?? null,
+        "synced",
+      );
+
+      expect(capturedSnapshot?.session?.voice_id).toBeNull();
+      expect(db.getLocalSession(session.id)).toMatchObject({
+        voice_id: "af_heart",
+        cloud_sync_status: "synced",
+        cloud_public_video_url: "https://manimate.ai/v/test",
+      });
+    } finally {
+      fs.rmSync(localRoot, { recursive: true, force: true });
+    }
+  });
+
   it("clears persisted cloud sync config after hosted auth rejection", async () => {
     const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-cloud-sync-"));
 

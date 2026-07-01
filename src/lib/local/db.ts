@@ -415,7 +415,7 @@ export function listLocalCloudSyncRetryCandidates(options?: {
       SELECT *
       FROM sessions
       WHERE COALESCE(video_path, '') <> ''
-        AND cloud_sync_status IN ('idle', 'pending', 'failed')
+        AND cloud_sync_status IN ('idle', 'pending', 'syncing', 'failed')
       ORDER BY updated_at DESC
     `)
     .all() as Record<string, unknown>[];
