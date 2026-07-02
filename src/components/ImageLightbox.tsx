@@ -151,6 +151,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
 
   const beginStroke = useCallback((event: PointerEvent<HTMLCanvasElement>) => {
     if (!canAnnotate) return;
+    if (event.button !== 0) return;
     if (event.detail > 1) {
       event.preventDefault();
       return;
@@ -234,6 +235,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
   }, []);
 
   const handleCanvasDoubleClick = useCallback((event: ReactMouseEvent<HTMLCanvasElement>) => {
+    if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
     isDrawingRef.current = false;

@@ -153,6 +153,69 @@ describe("ImageLightbox keyboard navigation", () => {
     expect(context.putImageData).toHaveBeenCalledWith(snapshot, 0, 0);
   });
 
+  it("does not draw on the annotation canvas for right-clicks", async () => {
+    const context = {
+      beginPath: vi.fn(),
+      getImageData: vi.fn(),
+      lineTo: vi.fn(),
+      moveTo: vi.fn(),
+      stroke: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+      lineCap: "",
+      lineJoin: "",
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as unknown as CanvasRenderingContext2D);
+
+    await act(async () => {
+      root?.render(
+        <ImageLightbox
+          images={[{ url: "/first.png" }]}
+          index={0}
+          onIndexChange={vi.fn()}
+          onClose={vi.fn()}
+          onImageChange={vi.fn()}
+          onAnnotationConfirm={vi.fn()}
+        />,
+      );
+    });
+    await flushEffects();
+
+    const canvas = document.querySelector<HTMLCanvasElement>("canvas");
+    expect(canvas).not.toBeNull();
+    if (!canvas) throw new Error("Expected annotation canvas");
+
+    canvas.getBoundingClientRect = vi.fn(() => ({
+      bottom: 100,
+      height: 100,
+      left: 0,
+      right: 100,
+      top: 0,
+      width: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }));
+    canvas.setPointerCapture = vi.fn();
+
+    const rightClick = new MouseEvent("pointerdown", {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+      clientX: 20,
+      clientY: 20,
+    });
+    Object.defineProperty(rightClick, "pointerId", { value: 1 });
+
+    await act(async () => {
+      canvas.dispatchEvent(rightClick);
+    });
+
+    expect(context.getImageData).not.toHaveBeenCalled();
+    expect(context.stroke).not.toHaveBeenCalled();
+    expect(canvas.setPointerCapture).not.toHaveBeenCalled();
+  });
+
   it("describes a red-stroke annotation without a trailing colon when the note is blank", async () => {
     const snapshot = {} as ImageData;
     const context = {
