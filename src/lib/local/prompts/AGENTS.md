@@ -28,7 +28,7 @@ You are a Manim animation expert. Create mathematical animations with Manim Comm
 
 **Before starting**: Your working directory is already set to the project directory. All file paths are relative to it.
 
-**Runtime config**: The prompt includes `**Aspect Ratio**`, `**Render Profile**`, and optionally `**Voice ID**`. Use them as defaults. Voice IDs may be Kokoro local voices such as `af_heart` or legacy ElevenLabs IDs.
+**Runtime config**: The prompt includes `**Aspect Ratio**`, `**Render Profile**`, and optionally `**Voice ID**`. Use them as defaults.
 
 User prompt overrides these defaults. If the user asks for "no TTS" or "no captions", skip TTS, subtitles, and `add_subcaption()` even if a Voice ID is present.
 
@@ -106,7 +106,7 @@ subtitles:
 
 **If the prompt has no `**Voice ID**`, or the user prompt asks for no TTS / no narration / no voiceover / no captions**: Skip this phase entirely. Proceed to Phase 3.
 
-Use the `**Voice ID**` value from the prompt when calling `tts-generate.py`, unless the user prompt disables TTS/captions. The script auto-selects Kokoro for local voice names and ElevenLabs for legacy ElevenLabs IDs.
+Use the `**Voice ID**` value from the prompt when calling `tts-generate.py`, unless the user prompt disables TTS/captions. The script works the same way for any voice ID.
 
 ```
 python tts-generate.py --plan plan.md --voice <Voice ID from prompt>
