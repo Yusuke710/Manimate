@@ -49,7 +49,7 @@ export function formatAnnotationInstruction(hasRedStroke: boolean, note: string)
   if (!hasRedStroke) return trimmedNote;
   return trimmedNote
     ? `user annotation in red stroke: ${trimmedNote}`
-    : "user annotation in red stroke";
+    : "user annotation in red stroke:";
 }
 
 interface CanvasPoint {

@@ -216,7 +216,7 @@ describe("ImageLightbox keyboard navigation", () => {
     expect(canvas.setPointerCapture).not.toHaveBeenCalled();
   });
 
-  it("describes a red-stroke annotation without a trailing colon when the note is blank", async () => {
+  it("describes a red-stroke annotation with a trailing colon when the note is blank", async () => {
     const snapshot = {} as ImageData;
     const context = {
       beginPath: vi.fn(),
@@ -297,7 +297,7 @@ describe("ImageLightbox keyboard navigation", () => {
     expect(onAnnotationConfirm).toHaveBeenCalledWith(
       0,
       expect.any(File),
-      "user annotation in red stroke",
+      "user annotation in red stroke:",
     );
   });
 

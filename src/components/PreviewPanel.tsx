@@ -778,6 +778,13 @@ function highlightPythonLine(line: string): string {
 // Format time helper
 const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
+export function formatCaptureFrameText(timestamp: number, chapterName?: string | null): string {
+  const trimmedChapterName = chapterName?.trim();
+  return trimmedChapterName
+    ? `[${formatTime(timestamp)}] ${trimmedChapterName}: `
+    : `[${formatTime(timestamp)}]: `;
+}
+
 interface PreviewPlaybackSnapshot {
   currentTime: number;
   duration: number;
@@ -1462,7 +1469,9 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
           break;
         case 'KeyT':
           e.preventDefault();
-          captureFrameAndInsert((t) => `[${formatTime(t)}]: `);
+          captureFrameAndInsert((t) => (
+            formatCaptureFrameText(t, currentChapter && useSegmentedTimeline ? currentChapter.name : null)
+          ));
           break;
         case 'KeyF':
           if (e.metaKey || e.ctrlKey || e.altKey) break; // Don't hijack Cmd+F / Ctrl+F
@@ -1474,7 +1483,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, seekBy, toggleFullscreen, captureFrameAndInsert, showDownloadModal]);
+  }, [currentChapter, useSegmentedTimeline, togglePlay, seekBy, toggleFullscreen, captureFrameAndInsert, showDownloadModal]);
 
   // Progress bar drag handling with throttled seeking
   // Updates UI immediately but throttles video.currentTime to reduce Range requests
@@ -1749,9 +1758,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
                 data-testid="capture-frame-button"
                 className="h-7 px-2 inline-flex items-center gap-1.5 rounded hover:bg-white/10 transition-colors text-zinc-400 hover:text-white"
                 onClick={() => captureFrameAndInsert((t) => (
-                  currentChapter && useSegmentedTimeline
-                    ? `[${formatTime(t)}] ${currentChapter.name}: `
-                    : `[${formatTime(t)}]: `
+                  formatCaptureFrameText(t, currentChapter && useSegmentedTimeline ? currentChapter.name : null)
                 ))}
                 title="Capture frame + timestamp to chat"
                 aria-label="Capture frame and timestamp to chat"
@@ -1773,9 +1780,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
                 data-testid="capture-frame-button"
                 className="h-9 px-2.5 inline-flex items-center gap-1.5 rounded hover:bg-white/10 transition-colors text-zinc-300 hover:text-white"
                 onClick={() => captureFrameAndInsert((t) => (
-                  currentChapter && useSegmentedTimeline
-                    ? `[${formatTime(t)}] ${currentChapter.name}: `
-                    : `[${formatTime(t)}]: `
+                  formatCaptureFrameText(t, currentChapter && useSegmentedTimeline ? currentChapter.name : null)
                 ))}
                 title="Capture frame + timestamp to chat"
                 aria-label="Capture frame and timestamp to chat"

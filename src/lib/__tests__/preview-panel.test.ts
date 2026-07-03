@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPreviewPlaybackSnapshot } from "@/components/PreviewPanel";
+import { formatCaptureFrameText, getPreviewPlaybackSnapshot } from "@/components/PreviewPanel";
 
 describe("getPreviewPlaybackSnapshot", () => {
   it("hydrates playback state from an already-loaded video element", () => {
@@ -38,5 +38,17 @@ describe("getPreviewPlaybackSnapshot", () => {
       playbackSpeed: 1,
       isPaused: true,
     });
+  });
+});
+
+describe("formatCaptureFrameText", () => {
+  it("keeps a colon after a chapter title for normal capture text", () => {
+    expect(formatCaptureFrameText(33, "Scene4 Reasoning Explosion")).toBe(
+      "[0:33] Scene4 Reasoning Explosion: ",
+    );
+  });
+
+  it("keeps the timestamp-only capture prompt colon", () => {
+    expect(formatCaptureFrameText(17)).toBe("[0:17]: ");
   });
 });

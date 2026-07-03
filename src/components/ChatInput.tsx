@@ -5,6 +5,8 @@ import ImageLightbox from "@/components/ImageLightbox";
 import { getAttachmentBadgeLabel } from "@/lib/chat-attachments";
 
 const MAX_ATTACHMENTS = 12;
+const RED_STROKE_ANNOTATION_PREFIX = "user annotation in red stroke";
+const CAPTURE_CHAPTER_PROMPT_SUFFIX = /(\[\d+:\d{2}\]\s+\S[^\n]*):\s*$/;
 
 interface AttachmentPreview {
   file: File;
@@ -24,6 +26,18 @@ interface ChatInputProps {
   draftKey?: string;
   /** One-time prompt prefill. Used for URL launch links. */
   initialPrompt?: string;
+}
+
+export function appendFrameInstructionToPrompt(prev: string, instruction: string): string {
+  const trimmed = instruction.trim();
+  if (!trimmed) return prev;
+  if (!prev) return trimmed;
+
+  const base = trimmed.startsWith(RED_STROKE_ANNOTATION_PREFIX)
+    ? prev.replace(CAPTURE_CHAPTER_PROMPT_SUFFIX, "$1, ")
+    : prev;
+  const spacer = base.endsWith(" ") || base.endsWith("\n") ? "" : " ";
+  return `${base}${spacer}${trimmed}`;
 }
 
 export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false, disabled = false, placeholder, extraLeft, compact = false, draftKey, initialPrompt }: ChatInputProps) {
@@ -184,9 +198,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
     if (!trimmed) return;
 
     setPrompt((prev) => {
-      if (!prev) return trimmed;
-      const spacer = prev.endsWith(" ") || prev.endsWith("\n") ? "" : " ";
-      return `${prev}${spacer}${trimmed}`;
+      return appendFrameInstructionToPrompt(prev, trimmed);
     });
     scrollToBottomRef.current = true;
   }, []);
