@@ -355,7 +355,7 @@ def run_kokoro_worker(socket_path: Path, idle_ttl_s: int) -> None:
     except FileNotFoundError:
         pass
 
-    state = {"last_used": time.monotonic()}
+    state = {"last_used": time.monotonic(), "warmed_voices": set()}
 
     class KokoroWorkerHandler(socketserver.StreamRequestHandler):
         def handle(self) -> None:
@@ -377,6 +377,7 @@ def run_kokoro_worker(socket_path: Path, idle_ttl_s: int) -> None:
                 "identity": kokoro_worker_identity(),
                 "kokoro_available": importlib.util.find_spec("kokoro") is not None,
                 "warmed": sorted(_KOKORO_PIPELINES.keys()),
+                "warmed_voices": sorted(state["warmed_voices"]),
                 "idle_ttl_s": idle_ttl_s,
                 "seconds_since_use": time.monotonic() - state["last_used"],
             }
@@ -389,10 +390,12 @@ def run_kokoro_worker(socket_path: Path, idle_ttl_s: int) -> None:
         started = time.perf_counter()
 
         if cmd == "warm":
-            synthesize_kokoro_batch_mp3(
-                [(0, "Ready.", Path(tempfile.gettempdir()) / "manimate-kokoro-warmup.mp3")],
-                voice_id,
-            )
+            if voice_id not in state["warmed_voices"]:
+                synthesize_kokoro_batch_mp3(
+                    [(0, "Ready.", Path(tempfile.gettempdir()) / "manimate-kokoro-warmup.mp3")],
+                    voice_id,
+                )
+                state["warmed_voices"].add(voice_id)
         elif cmd == "synthesize":
             raw_items = request.get("items")
             if not isinstance(raw_items, list):
@@ -403,6 +406,7 @@ def run_kokoro_worker(socket_path: Path, idle_ttl_s: int) -> None:
                     raise ValueError("item must be an object")
                 items.append((int(item["index"]), str(item["text"]), Path(str(item["path"]))))
             paths = synthesize_kokoro_batch_mp3(items, voice_id)
+            state["warmed_voices"].add(voice_id)
             state["last_used"] = time.monotonic()
             return {"ok": True, "elapsed_s": time.perf_counter() - started, "paths": paths}
         else:
