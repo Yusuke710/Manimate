@@ -315,6 +315,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
     let modelForRun = DEFAULT_MODEL;
     let currentTurnId: string | null = null;
     let artifactSnapshotInterval: ReturnType<typeof setInterval> | null = null;
+    let runHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
     const persistActivity = async (
       type: string,
@@ -625,7 +626,17 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         last_event_at: now,
         sandbox_id: sandboxId,
         agent_session_id: resumeSessionId,
+        pid: process.pid ?? null,
       });
+
+      // The CLI can stay silent for many minutes inside one long tool call
+      // (e.g. a manim render). Keep last_event_at fresh while the process is
+      // alive so the stale-run reaper in the messages route never cancels a
+      // run that is still working.
+      const heartbeatRunId = runId;
+      runHeartbeatInterval = setInterval(() => {
+        updateLocalRun(heartbeatRunId, { last_event_at: new Date().toISOString() });
+      }, 15_000);
 
       let state: ExecutionState = "planning";
       await sendEvent({
@@ -891,6 +902,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         clearInterval(artifactSnapshotInterval);
         artifactSnapshotInterval = null;
       }
+      if (runHeartbeatInterval) {
+        clearInterval(runHeartbeatInterval);
+        runHeartbeatInterval = null;
+      }
       await streamChain;
 
       if (ndjsonBuffer.trim()) {
@@ -1136,6 +1151,9 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
     } finally {
       if (artifactSnapshotInterval) {
         clearInterval(artifactSnapshotInterval);
+      }
+      if (runHeartbeatInterval) {
+        clearInterval(runHeartbeatInterval);
       }
       if (sessionId) endLocalRunStart(sessionId);
       try {

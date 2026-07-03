@@ -24,7 +24,10 @@ import {
   listLocalMessages,
   updateLocalRun,
 } from "@/lib/local/db";
-import { getActiveLocalRunBySessionId } from "@/lib/local/runtime";
+import {
+  getActiveLocalRunBySessionId,
+  killOrphanedAgentProcessGroup,
+} from "@/lib/local/runtime";
 
 type MessageMetadata = {
   images?: Array<{
@@ -92,6 +95,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     const hasLiveProcess = Boolean(getActiveLocalRunBySessionId(sessionId));
     const staleRunRef = activeRun.last_event_at || activeRun.started_at || activeRun.created_at;
     if (!hasLiveProcess && isOlderThan(staleRunRef, RUN_STALE_MS)) {
+      // A stale run can leave a detached agent process behind (e.g. after a
+      // server restart). Kill it so it doesn't keep working in the background.
+      if (activeRun.pid) {
+        killOrphanedAgentProcessGroup(activeRun.pid);
+      }
       updateLocalRun(activeRun.id, {
         status: "canceled",
         finished_at: new Date().toISOString(),

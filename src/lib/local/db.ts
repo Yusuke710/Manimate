@@ -50,6 +50,7 @@ export interface LocalRun {
   status: "queued" | "running" | "completed" | "failed" | "canceled";
   sandbox_id: string | null;
   agent_session_id: string | null;
+  pid: number | null;
   started_at: string | null;
   last_event_at: string | null;
   finished_at: string | null;
@@ -93,6 +94,7 @@ type RunUpdateInput = Partial<{
   status: LocalRun["status"];
   sandbox_id: string | null;
   agent_session_id: string | null;
+  pid: number | null;
   started_at: string | null;
   last_event_at: string | null;
   finished_at: string | null;
@@ -155,6 +157,10 @@ function ensureRunColumns(database: DatabaseSync): void {
   if (!existing.has("agent_session_id")) {
     database.exec("ALTER TABLE runs ADD COLUMN agent_session_id TEXT;");
     existing.add("agent_session_id");
+  }
+  if (!existing.has("pid")) {
+    database.exec("ALTER TABLE runs ADD COLUMN pid INTEGER;");
+    existing.add("pid");
   }
 
   if (existing.has("claude_session_id") && existing.has("agent_session_id")) {
@@ -269,6 +275,7 @@ function mapRun(row: Record<string, unknown>): LocalRun {
       : row.claude_session_id
         ? String(row.claude_session_id)
         : null,
+    pid: row.pid == null ? null : Number(row.pid),
     started_at: row.started_at ? String(row.started_at) : null,
     last_event_at: row.last_event_at ? String(row.last_event_at) : null,
     finished_at: row.finished_at ? String(row.finished_at) : null,
@@ -343,6 +350,7 @@ function openDb(): DatabaseSync {
       status TEXT NOT NULL,
       sandbox_id TEXT,
       agent_session_id TEXT,
+      pid INTEGER,
       started_at TEXT,
       last_event_at TEXT,
       finished_at TEXT,
@@ -698,6 +706,7 @@ export function updateLocalRun(runId: string, updates: RunUpdateInput): void {
     "status",
     "sandbox_id",
     "agent_session_id",
+    "pid",
     "started_at",
     "last_event_at",
     "finished_at",

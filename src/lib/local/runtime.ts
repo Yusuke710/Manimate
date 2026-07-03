@@ -1,5 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { getResolvedElevenLabsApiKey } from "@/lib/local/elevenlabs-config";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { NONE_VOICE_ID } from "@/lib/voices";
@@ -13,9 +13,24 @@ export interface ActiveLocalRunProcess {
   canceled: boolean;
 }
 
-const activeBySandboxId = new Map<string, ActiveLocalRunProcess>();
-const startingSessionIds = new Set<string>();
-const pendingCancelBySessionId = new Set<string>();
+interface LocalRunRegistry {
+  activeBySandboxId: Map<string, ActiveLocalRunProcess>;
+  startingSessionIds: Set<string>;
+  pendingCancelBySessionId: Set<string>;
+}
+
+// Stored on globalThis: Next.js dev-mode HMR re-instantiates this module while
+// spawned agent processes keep running. Module-scoped maps would come back
+// empty, making live runs invisible to the polling/cancel routes.
+const registryHost = globalThis as typeof globalThis & {
+  __manimateLocalRunRegistry?: LocalRunRegistry;
+};
+const localRunRegistry: LocalRunRegistry = (registryHost.__manimateLocalRunRegistry ??= {
+  activeBySandboxId: new Map(),
+  startingSessionIds: new Set(),
+  pendingCancelBySessionId: new Set(),
+});
+const { activeBySandboxId, startingSessionIds, pendingCancelBySessionId } = localRunRegistry;
 
 const LOCAL_CLAUDE_ENV_KEYS_TO_REMOVE = [
   "ANTHROPIC_API_KEY",
@@ -114,6 +129,28 @@ async function terminateLocalRunProcess(target: ActiveLocalRunProcess): Promise<
     try { target.process.kill("SIGKILL"); } catch { /* gone */ }
   }
   await waitForProcessExit(target.process, 500);
+}
+
+/**
+ * Terminate an agent process group that outlived its tracked run (e.g. the
+ * dev server restarted while a detached agent kept running). Verifies the pid
+ * still belongs to an agent CLI before signaling, so a recycled pid is safe.
+ */
+export function killOrphanedAgentProcessGroup(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0 || process.platform === "win32") return false;
+
+  let command = "";
+  try {
+    command = execFileSync("ps", ["-o", "command=", "-p", String(pid)], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return false; // Process already gone.
+  }
+  if (!/(^|\/|\s)(claude|codex)(\s|$)/.test(command)) return false;
+
+  killProcessGroup(pid, "SIGTERM");
+  return true;
 }
 
 export function beginLocalRunStart(sessionId: string): boolean {
