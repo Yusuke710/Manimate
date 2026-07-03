@@ -1,6 +1,46 @@
 # Kokoro Voiceover Benchmark
 
-Date: 2026-06-09, updated 2026-06-10
+Date: 2026-06-09, updated 2026-06-10 and 2026-07-03.
+
+## 2026-07-03: kokoro-onnx evaluated, rejected — staying on PyTorch + worker
+
+[`kokoro-onnx`](https://github.com/thewh1teagle/kokoro-onnx) (onnxruntime port of the same Kokoro-82M weights) was prototyped as a replacement for the PyTorch `kokoro` package to eliminate the cold-start warm-up. Measurements on this machine (Apple Silicon, CPU):
+
+| Engine | Cold start to first audio | Warm inference |
+| --- | ---: | ---: |
+| PyTorch `kokoro` 0.9.4 | ~29.5s (15-16s torch/spaCy import + 9-10s load + 4s first synth) | ~0.25x realtime |
+| `kokoro-onnx` fp32 | ~3.1s | ~0.65-0.9x realtime |
+| `kokoro-onnx` fp16 | ~3s | ~30% faster than fp32, still ~3x slower than torch |
+
+Other variants rejected outright: int8 was slower than fp32 on Apple Silicon; CoreML EP fragmented the graph into 129 partitions and was slower than plain CPU.
+
+Decision: **keep PyTorch + the Unix-socket worker.** Rationale:
+
+- The prewarm fired at chat-turn start (`prewarmLocalKokoroVoice` in `chat.ts`) overlaps the agent writing `plan.md`, which takes far longer than the 30s cold start — so the agent's TTS run hits a warm worker and only warm inference time matters. There, torch wins ~3x (8.3s vs 19-26s for a 30s-audio plan; torch benefits from Accelerate/AMX, which onnxruntime's CPU EP does not match).
+- The PyTorch `kokoro` package is hexgrad's official reference implementation; kokoro-onnx is a community runtime. Staying official is better for future model updates.
+- Costs accepted knowingly: torch (~2GB) + spaCy installs, Python <3.13 pin, `brew install espeak-ng`, and the ~240-line worker daemon.
+
+If the worker's 10-minute idle TTL ever becomes a felt problem again, raise `KOKORO_WORKER_IDLE_TTL_S` before revisiting ONNX.
+
+## 2026-07-03 (later): mlx-audio and kokoro-js evaluated (Mac install-target scenario)
+
+Benchmarked on an idle M2 / 16GB (load avg ~2; the earlier ONNX numbers above were taken under load avg 30-76, which inflated them — the torch cold start re-measured idle is ~11s, not ~29.5s). Same 8-line / 34s-audio plan, same `af_heart` voice. Full-audio samples: engines produce equivalent output — Whisper-base WER 3.4% for all three, no NaN/clipping/silence anomalies.
+
+| | PyTorch `kokoro` (current) | mlx-audio 0.4.1 (MLX, bf16) | kokoro-js (Node, ORT CPU, fp32) |
+| --- | --- | --- | --- |
+| Clean setup | pip + brew espeak-ng, Python <3.13 pin; ~440MB packages (torch macOS wheel is 381MB, not the 2GB CUDA size) | ~70s pip, 1.1GB venv (misaki drags spaCy back in); no brew deps | 11s `npm install`, 408MB node_modules; zero system deps (espeak via WASM) |
+| Model download (one-time) | 313MB / ~30s + spaCy model | 353MB / ~25s | 321MB / ~14s |
+| Cold start → first audio | 11.1s | 5.7s | **1.5s** |
+| Warm inference (34s audio) | 7.3s (RTF 0.215) | 3.8-6.6s (RTF 0.111-0.195) | 36s (RTF ~1.03; q8 worse at 1.22) |
+| Fresh-process total, 34s audio | 18.4s cold / ~7.6s via warm worker | **9.4-12.3s, no worker needed** | ~37s (in-process, no spawn at all) |
+
+Reliability findings (the deciding factor, not speed):
+
+- **mlx-audio 0.4.4 (current PyPI release) is broken**: ~10% of ordinary sentences crash with a `broadcast_shapes` error in the vocoder ([issue #784](https://github.com/Blaizzy/mlx-audio/issues/784), regression from 0.4.2-0.4.4; fix merged to main 2026-07-01 but unreleased, and main has fresh NaN/silent-audio reports #813/#815). 0.4.1 passes all inputs. The mlx-community quantized model repos (4bit/8bit) are weight-layout incompatible with 0.4.1. Conclusion: usable only with hard-pinned package + model-repo versions.
+- **kokoro-js** is stable but unmaintained since May 2025, and inherits the ORT-CPU-slow-on-Apple-Silicon penalty (~5x slower than torch warm).
+- int8/q8 quantization was slower than fp32/bf16 in every runtime tested (python ORT, sherpa numbers, kokoro-js) — do not revisit.
+
+Takeaway: mlx-audio is the only engine that beats torch on BOTH cold start and warm inference on Apple Silicon (fresh-process total ≈ the current warm-worker fast path, which would let the worker daemon be deleted), but its release quality as of July 2026 is not trustworthy enough to ship as the default. Re-evaluate when 0.4.5+ ships with the SineGen fix and the NaN issues closed. kokoro-js is the best "npm install and it just works" story if inference time is not critical.
 
 ## Purpose
 
