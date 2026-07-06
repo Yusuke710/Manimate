@@ -5,8 +5,7 @@
  * frames and selects the one closest to the mean histogram — i.e. the most
  * "representative" / content-rich frame, similar to YouTube's approach.
  * If that does not produce a thumbnail, fall back to a frame 25% into the
- * video. This primarily helps older sessions that only generate thumbnails
- * lazily when first viewed in the library.
+ * video.
  *
  * Called fire-and-forget immediately after a video is rendered.
  */
@@ -123,18 +122,10 @@ export function generateThumbnailAsync(videoPath: string, sessionRoot: string): 
 }
 
 /**
- * Returns true if a cached thumbnail exists for the session.
+ * Returns an existing thumbnail path for the session.
  */
-export function thumbnailExists(sessionRoot: string): boolean {
-  return existsSync(getThumbnailPath(sessionRoot));
-}
-
-/**
- * Returns an existing thumbnail path, or lazily generates one for older sessions.
- */
-export async function ensureThumbnail(sessionRoot: string, videoPath: string | null): Promise<string | null> {
+export function getExistingThumbnailPath(sessionRoot: string): string | null {
   const thumbPath = getThumbnailPath(sessionRoot);
   if (existsSync(thumbPath)) return thumbPath;
-  if (!videoPath || !existsSync(videoPath)) return null;
-  return (await generateThumbnail(videoPath, sessionRoot)) ? thumbPath : null;
+  return null;
 }

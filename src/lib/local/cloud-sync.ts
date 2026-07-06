@@ -1,5 +1,16 @@
+/**
+ * Cloud sync: fire-and-forget mirror of a session to hosted Manimate.
+ *
+ * Runs deterministically after a render (chat.ts) or on explicit retry.
+ * Each sync uploads the full session snapshot — request presigned upload
+ * URLs, PUT files straight to storage, POST the snapshot JSON to finalize —
+ * so a retry at any time converges to the correct remote state.
+ *
+ * The hosted server must support POST /api/local-sync/uploads (presigned
+ * plan); the legacy multipart fallback was removed.
+ */
+
 import fsp from "node:fs/promises";
-import path from "node:path";
 import { getLocalSessionPaths } from "@/lib/local/config";
 import { normalizeCloudSyncBaseUrl } from "@/lib/local/cloud-sync-base-url";
 import {
@@ -17,9 +28,13 @@ import {
   readLocalSessionArtifacts,
   updateLocalSession,
 } from "@/lib/local/session-store";
-import { ensureThumbnail } from "@/lib/local/thumbnail";
+import { generateThumbnail, getExistingThumbnailPath } from "@/lib/local/thumbnail";
+
+type LocalSession = NonNullable<ReturnType<typeof getLocalSession>>;
 
 type CloudSyncAttachment = {
+  // field_name is unused since the multipart fallback was removed, but stays
+  // part of the snapshot wire format the hosted server accepts.
   field_name: string;
   id: string;
   local_path: string;
@@ -28,73 +43,37 @@ type CloudSyncAttachment = {
   type?: string;
 };
 
-type CloudSyncSession = Omit<
-  NonNullable<ReturnType<typeof getLocalSession>>,
-  "session_number"
-> &
-  ReturnType<typeof readLocalSessionArtifacts>;
-
-type CloudSyncPayload = {
+type CloudSyncSnapshot = {
   version: 1;
+  session: Omit<LocalSession, "session_number"> &
+    ReturnType<typeof readLocalSessionArtifacts>;
+  messages: ReturnType<typeof listLocalMessages>;
+  runs: ReturnType<typeof listLocalRuns>;
   // Tool-level activity is no longer persisted locally (the raw CLI transcript
   // in <session>/transcripts/ is the trace record); the key stays for the
   // hosted server's wire format.
   activity_events: never[];
   attachments: CloudSyncAttachment[];
-  messages: ReturnType<typeof listLocalMessages>;
-  runs: ReturnType<typeof listLocalRuns>;
-  session: CloudSyncSession;
 };
 
-type CloudSyncPayloadInput = Omit<CloudSyncPayload, "session"> & {
-  session: NonNullable<ReturnType<typeof getLocalSession>>;
-};
-
-type CloudSyncUploadPlanRequest = {
-  session_id: string;
-  attachments: Array<Pick<CloudSyncAttachment, "id" | "local_path" | "name" | "type">>;
-  include_video: boolean;
-  include_thumbnail: boolean;
-};
-
-type CloudSyncUploadPlanFile = {
+type UploadPlanFile = {
   storage_path: string;
   upload_url: string;
   headers: Record<string, string>;
 };
 
-type CloudSyncUploadPlanAttachment = CloudSyncUploadPlanFile & {
-  id: string;
-  local_path: string;
-  name: string;
-};
-
-type CloudSyncUploadPlanResponse = {
+type UploadPlanResponse = {
   session_id: string;
   target_user_id: string;
-  attachments: CloudSyncUploadPlanAttachment[];
-  video: CloudSyncUploadPlanFile | null;
-  thumbnail: CloudSyncUploadPlanFile | null;
-};
-
-type PreparedUploadFile = {
-  contentType: string;
-  fileName: string;
-  localPath: string;
-};
-
-type PreparedCloudSyncSnapshot = {
-  snapshot: CloudSyncPayload;
-  thumbnailFile: PreparedUploadFile | null;
-  videoFile: PreparedUploadFile | null;
+  attachments: Array<UploadPlanFile & { id: string; local_path: string; name: string }>;
+  video: UploadPlanFile | null;
+  thumbnail: UploadPlanFile | null;
 };
 
 type CloudSyncSettings = {
   baseUrl: string;
   token: string;
 };
-
-const DIRECT_UPLOAD_UNSUPPORTED = "__MANIMATE_DIRECT_UPLOAD_UNSUPPORTED__";
 
 function hasCloudSyncEnvOverride(): boolean {
   return Boolean(
@@ -122,90 +101,40 @@ function getCloudSyncSettings(): CloudSyncSettings | null {
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function inferContentType(fileName: string, fallback = "application/octet-stream"): string {
-  const normalized = fileName.toLowerCase();
-  if (normalized.endsWith(".png")) return "image/png";
-  if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) return "image/jpeg";
-  if (normalized.endsWith(".webp")) return "image/webp";
-  if (normalized.endsWith(".gif")) return "image/gif";
-  if (normalized.endsWith(".pdf")) return "application/pdf";
-  if (normalized.endsWith(".mp4")) return "video/mp4";
-  return fallback;
-}
-
-async function appendFileIfPresent(
-  formData: FormData,
-  fieldName: string,
-  filePath: string | null | undefined,
-  contentType: string,
-  fileName?: string
-): Promise<boolean> {
+async function fileExists(filePath: string | null | undefined): Promise<boolean> {
   if (!filePath) return false;
-
   try {
-    const buffer = await fsp.readFile(filePath);
-    formData.append(
-      fieldName,
-      new Blob([buffer], { type: contentType }),
-      fileName || path.basename(filePath)
-    );
+    await fsp.access(filePath);
     return true;
   } catch {
     return false;
   }
 }
 
-async function getReadableUploadFile(
-  filePath: string | null | undefined,
-  contentType: string,
-  fileName?: string
-): Promise<PreparedUploadFile | null> {
-  if (!filePath) return null;
-
-  try {
-    await fsp.access(filePath);
-    return {
-      contentType,
-      fileName: fileName || path.basename(filePath),
-      localPath: filePath,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function buildAttachmentManifest(messages: ReturnType<typeof listLocalMessages>): CloudSyncAttachment[] {
+function buildAttachmentManifest(
+  messages: ReturnType<typeof listLocalMessages>
+): CloudSyncAttachment[] {
   const seenLocalPaths = new Set<string>();
   const manifest: CloudSyncAttachment[] = [];
 
   for (const message of messages) {
-    const metadata = message.metadata;
-    if (!isRecord(metadata)) continue;
+    // Shape written by chat.ts when the user attaches images to a message.
+    const images = message.metadata?.images as
+      | Array<{ id?: string; path?: string; name?: string; size?: number; type?: string }>
+      | undefined;
+    if (!Array.isArray(images)) continue;
 
-    const rawImages = metadata.images;
-    if (!Array.isArray(rawImages)) continue;
-
-    for (const rawImage of rawImages) {
-      if (!isRecord(rawImage)) continue;
-      const id = typeof rawImage.id === "string" ? rawImage.id : "";
-      const localPath = typeof rawImage.path === "string" ? rawImage.path : "";
-      const name = typeof rawImage.name === "string" ? rawImage.name : "";
-      if (!id || !localPath || !name || seenLocalPaths.has(localPath)) continue;
-
-      const fieldName = `attachment_${manifest.length}`;
+    for (const image of images) {
+      if (!image?.id || !image.path || !image.name || seenLocalPaths.has(image.path)) continue;
+      seenLocalPaths.add(image.path);
       manifest.push({
-        field_name: fieldName,
-        id,
-        local_path: localPath,
-        name,
-        size: typeof rawImage.size === "number" ? rawImage.size : undefined,
-        type: typeof rawImage.type === "string" ? rawImage.type : undefined,
+        field_name: `attachment_${manifest.length}`,
+        id: image.id,
+        local_path: image.path,
+        name: image.name,
+        size: image.size,
+        type: image.type,
       });
-      seenLocalPaths.add(localPath);
     }
   }
 
@@ -218,103 +147,80 @@ function normalizeCloudMirrorVoiceId(voiceId: string | null): string | null {
   return trimmed === "none" || /^[a-zA-Z0-9]{8,64}$/.test(trimmed) ? trimmed : null;
 }
 
-function toCloudSyncSession(
-  session: NonNullable<ReturnType<typeof getLocalSession>>
-): CloudSyncSession {
-  const cloudSession = {
+async function buildSnapshot(session: LocalSession): Promise<{
+  snapshot: CloudSyncSnapshot;
+  videoPath: string | null;
+  thumbnailPath: string | null;
+}> {
+  const messages = listLocalMessages(session.id);
+
+  const attachments: CloudSyncAttachment[] = [];
+  for (const attachment of buildAttachmentManifest(messages)) {
+    if (await fileExists(attachment.local_path)) attachments.push(attachment);
+  }
+
+  const cloudSession: CloudSyncSnapshot["session"] & { session_number?: number } = {
     ...session,
     // Artifact content lives in project files locally; the hosted mirror
     // still receives it inline (wire format v1).
     ...readLocalSessionArtifacts(session.id),
+    voice_id: normalizeCloudMirrorVoiceId(session.voice_id),
   };
-  delete (cloudSession as { session_number?: number }).session_number;
-  cloudSession.voice_id = normalizeCloudMirrorVoiceId(session.voice_id);
-  return cloudSession;
-}
+  delete cloudSession.session_number;
 
-async function prepareSessionSnapshot(
-  payload: Omit<CloudSyncPayloadInput, "attachments" | "version">
-): Promise<PreparedCloudSyncSnapshot> {
-  const attachmentManifest = buildAttachmentManifest(payload.messages);
-  const uploadedAttachments: CloudSyncAttachment[] = [];
+  const { sessionRoot } = getLocalSessionPaths(session.id);
+  const videoPath = (await fileExists(session.video_path)) ? session.video_path : null;
 
-  for (const attachment of attachmentManifest) {
-    const prepared = await getReadableUploadFile(
-      attachment.local_path,
-      attachment.type || inferContentType(attachment.name),
-      attachment.name
-    );
-    if (prepared) {
-      uploadedAttachments.push(attachment);
-    }
+  // The post-render thumbnail job is fire-and-forget and may not have
+  // finished (or run) yet — ensure our own input instead of ordering jobs.
+  let thumbnailPath = getExistingThumbnailPath(sessionRoot);
+  if (!thumbnailPath && videoPath) {
+    await generateThumbnail(videoPath, sessionRoot);
+    thumbnailPath = getExistingThumbnailPath(sessionRoot);
   }
-
-  const { sessionRoot } = getLocalSessionPaths(payload.session.id);
-  const thumbnailPath = await ensureThumbnail(sessionRoot, payload.session.video_path);
 
   return {
     snapshot: {
       version: 1,
-      ...payload,
-      session: toCloudSyncSession(payload.session),
-      attachments: uploadedAttachments,
+      session: cloudSession,
+      messages,
+      runs: listLocalRuns(session.id),
+      activity_events: [],
+      attachments,
     },
-    videoFile: await getReadableUploadFile(
-      payload.session.video_path,
-      "video/mp4",
-      payload.session.video_path ? path.basename(payload.session.video_path) : "video.mp4"
-    ),
-    thumbnailFile: await getReadableUploadFile(
-      thumbnailPath,
-      "image/jpeg",
-      "thumbnail.jpg"
-    ),
+    videoPath,
+    thumbnailPath,
   };
 }
 
-async function buildMultipartSessionSnapshotFormData(
-  prepared: PreparedCloudSyncSnapshot
-): Promise<FormData> {
-  const formData = new FormData();
+async function postJson<T>(
+  settings: CloudSyncSettings,
+  apiPath: string,
+  body: unknown
+): Promise<T> {
+  const response = await fetch(`${settings.baseUrl}${apiPath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${settings.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
 
-  for (const attachment of prepared.snapshot.attachments) {
-    await appendFileIfPresent(
-      formData,
-      attachment.field_name,
-      attachment.local_path,
-      attachment.type || inferContentType(attachment.name),
-      attachment.name
-    );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = typeof data.error === "string" ? data.error : `HTTP ${response.status}`;
+    throw new Error(message);
   }
 
-  await appendFileIfPresent(
-    formData,
-    "video",
-    prepared.videoFile?.localPath,
-    prepared.videoFile?.contentType || "video/mp4",
-    prepared.videoFile?.fileName || "video.mp4"
-  );
-  await appendFileIfPresent(
-    formData,
-    "thumbnail",
-    prepared.thumbnailFile?.localPath,
-    prepared.thumbnailFile?.contentType || "image/jpeg",
-    prepared.thumbnailFile?.fileName || "thumbnail.jpg"
-  );
-
-  formData.set("snapshot", JSON.stringify(prepared.snapshot));
-  return formData;
+  return data as T;
 }
 
-async function uploadFileToPresignedUrl(
-  upload: CloudSyncUploadPlanFile,
-  localFile: PreparedUploadFile
-): Promise<void> {
-  const body = await fsp.readFile(localFile.localPath);
+async function putFile(upload: UploadPlanFile, localPath: string): Promise<void> {
   const response = await fetch(upload.upload_url, {
     method: "PUT",
     headers: upload.headers,
-    body,
+    body: await fsp.readFile(localPath),
   });
 
   if (!response.ok) {
@@ -322,146 +228,44 @@ async function uploadFileToPresignedUrl(
   }
 }
 
-async function requestUploadPlan(
+async function pushSnapshot(
   settings: CloudSyncSettings,
-  prepared: PreparedCloudSyncSnapshot
-): Promise<CloudSyncUploadPlanResponse> {
-  const requestBody: CloudSyncUploadPlanRequest = {
-    session_id: prepared.snapshot.session.id,
-    attachments: prepared.snapshot.attachments.map((attachment) => ({
-      id: attachment.id,
-      local_path: attachment.local_path,
-      name: attachment.name,
-      type: attachment.type,
+  snapshot: CloudSyncSnapshot,
+  videoPath: string | null,
+  thumbnailPath: string | null
+): Promise<{ public_video_url?: string | null }> {
+  const plan = await postJson<UploadPlanResponse>(settings, "/api/local-sync/uploads", {
+    session_id: snapshot.session.id,
+    attachments: snapshot.attachments.map(({ id, local_path, name, type }) => ({
+      id,
+      local_path,
+      name,
+      type,
     })),
-    include_video: Boolean(prepared.videoFile),
-    include_thumbnail: Boolean(prepared.thumbnailFile),
-  };
-  const response = await fetch(`${settings.baseUrl}/api/local-sync/uploads`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${settings.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
+    include_video: Boolean(videoPath),
+    include_thumbnail: Boolean(thumbnailPath),
   });
 
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    if (response.status === 404 || response.status === 405) {
-      throw new Error(DIRECT_UPLOAD_UNSUPPORTED);
-    }
-    const message = typeof data.error === "string" ? data.error : `HTTP ${response.status}`;
-    throw new Error(message);
-  }
-
-  return data as CloudSyncUploadPlanResponse;
-}
-
-async function uploadSnapshotFiles(
-  prepared: PreparedCloudSyncSnapshot,
-  plan: CloudSyncUploadPlanResponse
-): Promise<void> {
-  const attachmentPlanByLocalPath = new Map(
-    plan.attachments.map((attachment) => [attachment.local_path, attachment])
-  );
-
-  for (const attachment of prepared.snapshot.attachments) {
-    const upload = attachmentPlanByLocalPath.get(attachment.local_path);
+  const planByLocalPath = new Map(plan.attachments.map((a) => [a.local_path, a]));
+  for (const attachment of snapshot.attachments) {
+    const upload = planByLocalPath.get(attachment.local_path);
     if (!upload) {
       throw new Error(`Upload plan is missing attachment ${attachment.name}`);
     }
-    await uploadFileToPresignedUrl(upload, {
-      contentType: attachment.type || inferContentType(attachment.name),
-      fileName: attachment.name,
-      localPath: attachment.local_path,
-    });
+    await putFile(upload, attachment.local_path);
   }
 
-  if (prepared.videoFile) {
-    if (!plan.video) {
-      throw new Error("Upload plan is missing video upload");
-    }
-    await uploadFileToPresignedUrl(plan.video, prepared.videoFile);
+  if (videoPath) {
+    if (!plan.video) throw new Error("Upload plan is missing video upload");
+    await putFile(plan.video, videoPath);
   }
 
-  if (prepared.thumbnailFile) {
-    if (!plan.thumbnail) {
-      throw new Error("Upload plan is missing thumbnail upload");
-    }
-    await uploadFileToPresignedUrl(plan.thumbnail, prepared.thumbnailFile);
-  }
-}
-
-async function finalizeSessionSnapshot(
-  settings: CloudSyncSettings,
-  snapshot: CloudSyncPayload
-): Promise<{
-  public_video_url?: string | null;
-}> {
-  const response = await fetch(`${settings.baseUrl}/api/local-sync/sessions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${settings.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ snapshot }),
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = typeof data.error === "string" ? data.error : `HTTP ${response.status}`;
-    throw new Error(message);
+  if (thumbnailPath) {
+    if (!plan.thumbnail) throw new Error("Upload plan is missing thumbnail upload");
+    await putFile(plan.thumbnail, thumbnailPath);
   }
 
-  return data as { public_video_url?: string | null };
-}
-
-async function finalizeSessionSnapshotMultipart(
-  settings: CloudSyncSettings,
-  prepared: PreparedCloudSyncSnapshot
-): Promise<{
-  public_video_url?: string | null;
-}> {
-  const formData = await buildMultipartSessionSnapshotFormData(prepared);
-  const response = await fetch(`${settings.baseUrl}/api/local-sync/sessions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${settings.token}`,
-    },
-    body: formData,
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = typeof data.error === "string" ? data.error : `HTTP ${response.status}`;
-    throw new Error(message);
-  }
-
-  return data as { public_video_url?: string | null };
-}
-
-async function postSessionSnapshot(payload: CloudSyncPayloadInput): Promise<{
-  public_video_url?: string | null;
-}> {
-  const settings = getCloudSyncSettings();
-  if (!settings) {
-    throw new Error("Cloud sync is not configured. Open Manimate to reconnect.");
-  }
-
-  const prepared = await prepareSessionSnapshot(payload);
-
-  try {
-    const plan = await requestUploadPlan(settings, prepared);
-    await uploadSnapshotFiles(prepared, plan);
-    return await finalizeSessionSnapshot(settings, prepared.snapshot);
-  } catch (error) {
-    if (!(error instanceof Error) || error.message !== DIRECT_UPLOAD_UNSUPPORTED) {
-      throw error;
-    }
-  }
-
-  return finalizeSessionSnapshotMultipart(settings, prepared);
+  return postJson(settings, "/api/local-sync/sessions", { snapshot });
 }
 
 export function queueLocalCloudSync(sessionId: string): void {
@@ -487,20 +291,22 @@ async function syncLocalSessionToCloud(sessionId: string): Promise<void> {
   });
 
   try {
-    const result = await postSessionSnapshot({
-      version: 1,
-      session,
-      messages: listLocalMessages(sessionId),
-      runs: listLocalRuns(sessionId),
-      activity_events: [],
-      attachments: [],
-    });
+    const settings = getCloudSyncSettings();
+    if (!settings) {
+      throw new Error("Cloud sync is not configured. Open Manimate to reconnect.");
+    }
+
+    const { snapshot, videoPath, thumbnailPath } = await buildSnapshot(session);
+    const result = await pushSnapshot(settings, snapshot, videoPath, thumbnailPath);
 
     updateLocalSession(sessionId, {
       cloud_sync_status: "synced",
       cloud_last_synced_at: new Date().toISOString(),
       cloud_last_error: null,
-      cloud_public_video_url: typeof result.public_video_url === "string" ? result.public_video_url : session.cloud_public_video_url,
+      cloud_public_video_url:
+        typeof result.public_video_url === "string"
+          ? result.public_video_url
+          : session.cloud_public_video_url,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Cloud sync failed";
