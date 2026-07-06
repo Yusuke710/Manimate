@@ -1366,10 +1366,10 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   useEffect(() => {
     if (!sessionId) return;
 
-    const doRefetch = async () => {
+    const doRefetch = async (): Promise<boolean> => {
       try {
         const response = await fetch(`/api/sessions/${sessionId}/messages`);
-        if (!response.ok) return;
+        if (!response.ok) return false;
 
         const data = (await response.json()) as SessionMessagesResponse;
         applyFetchedSessionData(data);
@@ -1439,15 +1439,51 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
             if (lastProgress?.message) dispatch({ type: "SET_STATUS", statusMessage: lastProgress.message });
           }
         }
-      } catch (error) { console.error("[ChatPanel] Failed to refetch data:", error); }
+        return runStillActive;
+      } catch (error) {
+        console.error("[ChatPanel] Failed to refetch data:", error);
+        return false;
+      }
     };
 
-    // Run once immediately, then keep polling for reconnection state + background updates.
-    doRefetch();
-    const poller = setInterval(doRefetch, 2000);
+    // Adaptive cadence: SSE carries live updates during a run, so polling is
+    // only a reconciliation fallback. Poll fast while a run is active or a
+    // stream is pending, back off when idle, skip hidden tabs entirely, and
+    // reconcile immediately when a tab becomes visible again. Keeps many
+    // idle tabs from hammering the server (see docs/2026-07-06-session-json-storage.md).
+    const ACTIVE_POLL_MS = 2000;
+    const IDLE_POLL_MS = 30_000;
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = (delayMs: number) => {
+      if (disposed) return;
+      timer = setTimeout(tick, delayMs);
+    };
+
+    const tick = async () => {
+      if (document.hidden) {
+        schedule(IDLE_POLL_MS);
+        return;
+      }
+      const runStillActive = await doRefetch();
+      const busy = runStillActive || Boolean(abortControllerRef.current);
+      schedule(busy ? ACTIVE_POLL_MS : IDLE_POLL_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (timer) clearTimeout(timer);
+      void tick();
+    };
+
+    void tick();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      clearInterval(poller);
+      disposed = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [sessionId, router, applyFetchedSessionData, showPendingPreviewReadyBadge]);
 
