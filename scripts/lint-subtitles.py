@@ -1,235 +1,125 @@
 #!/usr/bin/env python3
 """
-Subtitle linter for Manim scripts.
+Subtitle linter for Manim scripts: simulates scene timelines without rendering.
 
-Runs scenes with a lightweight Manim stub (no render) and reports:
-- overlapping subtitles
-- animation overflow beyond subtitle duration
+Scenes run against a stub `manim` module that only tracks time, so a full
+video's script checks in well under a second. Reports:
+- overlapping subtitles (next one starts before the previous ends)
+- overflows (play/wait extends past the active subtitle's end)
+
+Usage: python lint-subtitles.py script.py
+Exit codes: 0 = clean, 1 = issues found, 2 = could not read/parse the script.
 """
 
-import argparse
 import ast
 import builtins
-from dataclasses import dataclass, field
-import inspect
 import keyword
-import math
 import os
-from pathlib import Path
 import sys
 import types
+from pathlib import Path
 
 import numpy as np
 
-OVERFLOW_TOLERANCE = 0.01
-PATCHED_MANIM_MODULES = (
-    "manim",
-    "manim.constants",
-    "manim.mobject",
-    "manim.animation",
-    "manim.scene",
-    "manim.utils",
-)
+TOL = 0.01  # seconds of slack before a timing mismatch counts
+STUBBED_MODULES = ("manim", "manim.constants", "manim.mobject",
+                   "manim.animation", "manim.scene", "manim.utils")
 SCENE_TYPES = ("Scene", "ThreeDScene", "MovingCameraScene", "ZoomedScene")
-RATE_FUNCS = (
-    "linear",
-    "smooth",
-    "rush_into",
-    "rush_from",
-    "slow_into",
-    "double_smooth",
-    "there_and_back",
-    "there_and_back_with_pause",
-    "running_start",
-    "not_quite_there",
-    "wiggle",
-    "squish_rate_func",
-    "lingering",
-    "exponential_decay",
-)
-
-VECTOR_CONSTANTS = {
-    "UP": np.array([0.0, 1.0, 0.0]),
-    "DOWN": np.array([0.0, -1.0, 0.0]),
-    "LEFT": np.array([-1.0, 0.0, 0.0]),
-    "RIGHT": np.array([1.0, 0.0, 0.0]),
-    "OUT": np.array([0.0, 0.0, 1.0]),
-    "IN": np.array([0.0, 0.0, -1.0]),
-    "ORIGIN": np.array([0.0, 0.0, 0.0]),
+VECTORS = {
+    "UP": (0, 1, 0), "DOWN": (0, -1, 0), "LEFT": (-1, 0, 0), "RIGHT": (1, 0, 0),
+    "OUT": (0, 0, 1), "IN": (0, 0, -1), "ORIGIN": (0, 0, 0),
+    "UL": (-1, 1, 0), "UR": (1, 1, 0), "DL": (-1, -1, 0), "DR": (1, -1, 0),
 }
-VECTOR_CONSTANTS["UL"] = VECTOR_CONSTANTS["UP"] + VECTOR_CONSTANTS["LEFT"]
-VECTOR_CONSTANTS["UR"] = VECTOR_CONSTANTS["UP"] + VECTOR_CONSTANTS["RIGHT"]
-VECTOR_CONSTANTS["DL"] = VECTOR_CONSTANTS["DOWN"] + VECTOR_CONSTANTS["LEFT"]
-VECTOR_CONSTANTS["DR"] = VECTOR_CONSTANTS["DOWN"] + VECTOR_CONSTANTS["RIGHT"]
-
-BASE_EXPORTS = {
-    *SCENE_TYPES,
-    *RATE_FUNCS,
-    *VECTOR_CONSTANTS.keys(),
-    "PI",
-    "TAU",
-    "DEGREES",
-    "BOLD",
-    "ITALIC",
-    "NORMAL",
-    "config",
-    "np",
-    "always_redraw",
-    "always_shift",
-    "interpolate",
-    "interpolate_color",
+# getters whose return type script math depends on; every other get_* stays a dummy
+POINT_GETTERS = {
+    "get_center", "get_top", "get_bottom", "get_left", "get_right", "get_corner",
+    "get_edge_center", "get_start", "get_end", "get_center_of_mass",
+    "get_critical_point", "get_arc_center",
 }
+SCALAR_GETTERS = {"get_x", "get_y", "get_z", "get_width", "get_height", "get_value"}
+SCALAR_ATTRS = {"width", "height", "depth", "radius"}
 
 
-@dataclass
-class Subtitle:
-    index: int
-    start: float
-    end: float
-    text: str
-    line_number: int
-    scene_name: str
+class DummyMeta(type):
+    """Class-level access (Tex.set_default, rate_functions.ease_out) returns dummies."""
+
+    def __getattr__(cls, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return DummyMobject()
 
 
-@dataclass
-class SubtitleCollector:
-    subtitles: list[Subtitle] = field(default_factory=list)
-    overflows: list[dict] = field(default_factory=list)
-    current_time: float = 0.0
-    subtitle_index: int = 0
-    scene_name: str = ""
-    verbose: bool = False
-    _active_end: float = 0.0
-    _active_line: int = 0
+class DummyMobject(metaclass=DummyMeta):
+    """Stands in for any manim object: absorbs attribute access, calls, and math."""
 
-    def add_subtitle(self, text: str, duration: float, line_number: int) -> None:
-        try:
-            dur = max(0.0, float(duration))
-        except (TypeError, ValueError):
-            dur = 1.0
-
-        sub = Subtitle(
-            index=self.subtitle_index,
-            start=self.current_time,
-            end=self.current_time + dur,
-            text=str(text)[:50] if text else "<empty>",
-            line_number=line_number,
-            scene_name=self.scene_name,
-        )
-        self.subtitles.append(sub)
-        self.subtitle_index += 1
-        self._active_end = sub.end
-        self._active_line = line_number
-
-        if self.verbose:
-            print(f'  [{sub.index}] {sub.start:.2f}s-{sub.end:.2f}s: "{sub.text}"')
-
-    def advance_time(self, duration: float, line_number: int, event: str = "timeline") -> None:
-        try:
-            step = max(0.0, float(duration))
-        except (TypeError, ValueError):
-            step = 0.0
-
-        end_time = self.current_time + step
-
-        if (
-            self._active_end > 0
-            and self.current_time <= self._active_end + OVERFLOW_TOLERANCE
-            and end_time > self._active_end + OVERFLOW_TOLERANCE
-        ):
-            self.overflows.append(
-                {
-                    "scene": self.scene_name,
-                    "line": line_number,
-                    "subtitle_line": self._active_line,
-                    "subtitle_end": self._active_end,
-                    "event": event,
-                    "event_end": end_time,
-                    "overflow": end_time - self._active_end,
-                }
-            )
-
-        self.current_time = end_time
-
-        if self._active_end > 0 and self.current_time > self._active_end + OVERFLOW_TOLERANCE:
-            self._active_end = 0.0
-            self._active_line = 0
-
-        if self.verbose:
-            print(f"  time += {step:.2f}s -> {self.current_time:.2f}s")
-
-
-class DummyMobject:
     run_time = 1.0
 
     def __init__(self, *args, **kwargs):
         if "run_time" in kwargs:
             self.run_time = kwargs["run_time"]
-        self._args = []
+        self._items = []  # keep children so loops over groups run the real number of times
         for arg in args:
             if isinstance(arg, DummyMobject):
-                self._args.append(arg)
+                self._items.append(arg)
             elif isinstance(arg, (list, tuple)):
-                self._args.extend(arg)
+                self._items.extend(arg)
             else:
-                self._args.append(DummyMobject())
+                self._items.append(DummyMobject())
 
     def __getattr__(self, name):
-        if name.startswith("__array"):
+        if name.startswith("__"):
             raise AttributeError(name)
-        if name.startswith("get_"):
-            return lambda *a, **k: np.array([0.0, 0.0, 0.0])
+        if name in SCALAR_ATTRS:
+            return 1.0
+        if name in SCALAR_GETTERS:
+            return lambda *a, **k: 0.0
+        if name in POINT_GETTERS:
+            return lambda *a, **k: np.zeros(3)
         return DummyMobject()
 
     def __call__(self, *args, **kwargs):
         return DummyMobject(*args, **kwargs)
 
     def __iter__(self):
-        return iter(self._args)
+        return iter(self._items)
 
     def __len__(self):
-        return len(self._args)
+        return len(self._items)
 
     def __getitem__(self, key):
-        if isinstance(key, int) and 0 <= key < len(self._args):
-            item = self._args[key]
-            if isinstance(item, DummyMobject):
+        if isinstance(key, int) and 0 <= key < len(self._items):
+            item = self._items[key]
+            if isinstance(item, DummyMobject):  # raw values (floats, strings) stay inside
                 return item
         return DummyMobject()
 
-    def __bool__(self):
+    def __bool__(self):  # empty groups must still be truthy
         return True
 
-    def __array__(self, dtype=None):
-        return np.array([0.0, 0.0, 0.0], dtype=dtype)
+    def __array__(self, dtype=None, copy=None):
+        return np.zeros(3, dtype=dtype)
 
     def _op(self, other):
-        if isinstance(other, (np.ndarray, list, tuple)):
-            return other
-        return DummyMobject()
+        return other if isinstance(other, (np.ndarray, list, tuple)) else DummyMobject()
 
     __add__ = __radd__ = __sub__ = __rsub__ = lambda self, other: self._op(other)
     __mul__ = __rmul__ = __truediv__ = __rtruediv__ = lambda self, other: self._op(other)
-    __neg__ = __pos__ = lambda self: DummyMobject()
-
-    def copy(self):
-        return DummyMobject()
-
-    @property
-    def animate(self):
-        return DummyMobject()
+    __neg__ = __pos__ = __abs__ = lambda self: DummyMobject()
+    __lt__ = __le__ = __gt__ = __ge__ = lambda self, other: False  # False ends while-loops
+    __float__ = lambda self: 1.0
+    __int__ = __index__ = lambda self: 1
 
 
-def caller_line() -> int:
-    frame = inspect.currentframe()
-    caller = frame.f_back.f_back if frame and frame.f_back else None
-    return caller.f_lineno if caller else 0
+def caller_line():
+    try:
+        return sys._getframe(2).f_lineno
+    except ValueError:
+        return 0
 
 
-def resolve_duration(run_time, animations=()) -> float:
+def resolve_duration(run_time, animations=()):
     if isinstance(run_time, (int, float)):
         return max(0.0, float(run_time))
-
     duration = 1.0
     for anim in animations or ():
         candidate = getattr(anim, "run_time", None)
@@ -238,301 +128,244 @@ def resolve_duration(run_time, animations=()) -> float:
     return max(0.0, duration)
 
 
-def find_scene_names(tree: ast.AST) -> list[str]:
-    scenes = []
+class Timeline:
+    """Per-scene clock; records subtitles and flags overlaps/overflows as they happen."""
+
+    def __init__(self, scene_name):
+        self.scene = scene_name
+        self.now = 0.0
+        self.subs = []       # {start, end, text, line}
+        self.overlaps = []   # (previous sub, offending sub)
+        self.overflows = []  # {sub, line, event, end}
+        self._active = None  # subtitle currently covering the clock, if any
+
+    def subtitle(self, text, duration, line):
+        try:
+            dur = max(0.0, float(duration))
+        except (TypeError, ValueError):
+            dur = 1.0
+        sub = {"start": self.now, "end": self.now + dur,
+               "text": str(text)[:50] if text else "<empty>", "line": line}
+        if self.subs and self.subs[-1]["end"] > sub["start"] + TOL:
+            self.overlaps.append((self.subs[-1], sub))
+        self.subs.append(sub)
+        self._active = sub
+
+    def advance(self, duration, line, event):
+        try:
+            step = max(0.0, float(duration))
+        except (TypeError, ValueError):
+            step = 0.0
+        end = self.now + step
+        active = self._active
+        if active and self.now <= active["end"] + TOL < end:
+            self.overflows.append({"sub": active, "line": line, "event": event, "end": end})
+        self.now = end
+        if active and self.now > active["end"] + TOL:
+            self._active = None
+
+
+class InstrumentedScene:
+    """Replaces every manim Scene type; only the time-related methods do anything."""
+
+    timeline = None  # swapped in per scene by simulate()
+
+    def __init__(self, *args, **kwargs):
+        self._mobjects = []
+
+    def add_subcaption(self, content, duration=1.0, offset=0.0):
+        self.timeline.subtitle(content, duration, caller_line())
+
+    def play(self, *anims, subcaption=None, subcaption_duration=None,
+             run_time=None, **kwargs):
+        line = caller_line()
+        duration = resolve_duration(run_time, anims)
+        if subcaption:
+            self.timeline.subtitle(
+                subcaption,
+                duration if subcaption_duration is None else subcaption_duration,
+                line,
+            )
+        self.timeline.advance(duration, line, "play")
+
+    def wait(self, duration=1.0, **kwargs):
+        self.timeline.advance(duration, caller_line(), "wait")
+
+    def move_camera(self, *args, run_time=None, **kwargs):
+        line = caller_line()
+        duration = resolve_duration(run_time, kwargs.get("added_anims", ()))
+        if kwargs.get("subcaption"):
+            sub_dur = kwargs.get("subcaption_duration")
+            self.timeline.subtitle(kwargs["subcaption"],
+                                   duration if sub_dur is None else sub_dur, line)
+        self.timeline.advance(duration, line, "move_camera")
+
+    def add(self, *mobjects):
+        self._mobjects.extend(mobjects)
+
+    @property
+    def mobjects(self):
+        return self._mobjects
+
+    @property
+    def camera(self):
+        return DummyMobject()
+
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: DummyMobject()
+
+
+class ConfigStub:
+    frame_width = 14.222
+    frame_height = 8.0
+    pixel_width = 1920
+    pixel_height = 1080
+    frame_rate = 60
+    background_color = "#000000"
+
+    def __getattr__(self, name):
+        return None
+
+
+class StubModule(types.ModuleType):
+    def __getattr__(self, name):
+        if name.startswith("_"):  # keep import machinery (__all__, __path__) honest
+            raise AttributeError(name)
+        return 1.0 if name.isupper() else DummyMobject
+
+
+def collect_used_names(tree):
+    """Names the script reads, so the stub can export them for `from manim import *`.
+
+    Names bound by the script's own non-manim imports (json, numpy, ...) are excluded,
+    so the stub never shadows a real module regardless of import order.
+    """
+    real_imports = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.ClassDef):
-            continue
-        for base in node.bases:
-            if isinstance(base, ast.Name):
-                name = base.id
-            elif isinstance(base, ast.Attribute):
-                name = base.attr
-            else:
-                name = ""
-            if "Scene" in name:
-                scenes.append((node.lineno, node.name))
-                break
-    return [name for _, name in sorted(scenes)]
-
-
-def collect_stub_exports(tree: ast.AST) -> set[str]:
-    exports = set(BASE_EXPORTS)
-
-    has_star_import = False
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        module_name = node.module or ""
-        if module_name != "manim" and not module_name.startswith("manim."):
-            continue
-        for alias in node.names:
-            if alias.name == "*":
-                has_star_import = True
-            else:
-                exports.add(alias.name)
-
-    if not has_star_import:
-        return exports
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                real_imports.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            module_name = node.module or ""
+            if module_name != "manim" and not module_name.startswith("manim."):
+                for alias in node.names:
+                    if alias.name != "*":
+                        real_imports.add(alias.asname or alias.name)
 
     builtin_names = set(dir(builtins))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-            name = node.id
-            if name.startswith("_") or keyword.iskeyword(name) or name in builtin_names:
-                continue
-            exports.add(name)
+    return {
+        node.id for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+        and not node.id.startswith("_")
+        and not keyword.iskeyword(node.id)
+        and node.id not in builtin_names
+        and node.id not in real_imports
+    }
 
-    return exports
 
-
-def create_stub_module(collector: SubtitleCollector, exported_names: set[str]):
-    class InstrumentedScene:
-        def __init__(self, *args, **kwargs):
-            self._mobjects = []
-
-        def add_subcaption(self, content: str, duration: float = 1.0, offset: float = 0.0):
-            collector.add_subtitle(content, duration, caller_line())
-
-        def play(
-            self,
-            *args,
-            subcaption: str = None,
-            subcaption_duration: float = None,
-            subcaption_offset: float = 0.0,
-            run_time: float = None,
-            **kwargs,
-        ):
-            line = caller_line()
-            duration = resolve_duration(run_time, args)
-
-            if subcaption:
-                sub_dur = subcaption_duration if subcaption_duration is not None else duration
-                collector.add_subtitle(subcaption, sub_dur, line)
-
-            collector.advance_time(duration, line, event="play")
-
-        def wait(self, duration: float = 1.0, **kwargs):
-            collector.advance_time(duration, caller_line(), event="wait")
-
-        def move_camera(self, *args, run_time: float = None, **kwargs):
-            line = caller_line()
-            duration = resolve_duration(run_time, kwargs.get("added_anims", ()))
-            subcaption = kwargs.get("subcaption")
-            if subcaption:
-                sub_dur = kwargs.get("subcaption_duration")
-                collector.add_subtitle(subcaption, duration if sub_dur is None else sub_dur, line)
-            collector.advance_time(duration, line, event="move_camera")
-
-        def add(self, *mobjects):
-            self._mobjects.extend(mobjects)
-
-        def remove(self, *mobjects):
-            return None
-
-        def clear(self):
-            self._mobjects = []
-
-        @property
-        def mobjects(self):
-            return self._mobjects
-
-        @property
-        def camera(self):
-            return DummyMobject()
-
-        def __getattr__(self, name):
-            return lambda *args, **kwargs: DummyMobject()
-
-    class StubModule(types.ModuleType):
-        def __getattr__(self, name):
-            return DummyMobject()
-
-    class ConfigStub:
-        frame_width = 14.222
-        frame_height = 8.0
-        pixel_width = 1920
-        pixel_height = 1080
-        frame_rate = 60
-        background_color = "#000000"
-
-        def __getattr__(self, name):
-            return None
-
+def make_stub(exported_names):
     stub = StubModule("manim")
-
-    for scene_type in SCENE_TYPES:
-        setattr(stub, scene_type, InstrumentedScene)
-
-    for rate_func in RATE_FUNCS:
-        setattr(stub, rate_func, lambda t: t)
-
-    for name, value in VECTOR_CONSTANTS.items():
-        setattr(stub, name, value)
-
-    stub.PI = math.pi
-    stub.TAU = 2 * math.pi
-    stub.DEGREES = math.pi / 180
-    stub.BOLD = "BOLD"
-    stub.ITALIC = "ITALIC"
-    stub.NORMAL = "NORMAL"
+    for name in SCENE_TYPES:
+        setattr(stub, name, InstrumentedScene)
+    for name, vec in VECTORS.items():
+        setattr(stub, name, np.array(vec, dtype=float))
+    stub.PI = np.pi
+    stub.TAU = 2 * np.pi
+    stub.DEGREES = np.pi / 180
     stub.config = ConfigStub()
     stub.np = np
-    stub.always_redraw = lambda fn: fn()
-    stub.always_shift = lambda mob, direction: mob
-    stub.interpolate = lambda a, b, t: a + (b - a) * t
-    stub.interpolate_color = lambda c1, c2, t: c1
-
-    for name in sorted(exported_names):
-        if name in stub.__dict__:
-            continue
-        setattr(stub, name, 1.0 if name.isupper() else DummyMobject)
-
-    stub.__all__ = sorted({*BASE_EXPORTS, *exported_names})
+    stub.interpolate = lambda a, b, t: a + (b - a) * t  # scripts mutate the result
+    for name in exported_names:
+        if name not in stub.__dict__:
+            setattr(stub, name, 1.0 if name.isupper() else DummyMobject)
     return stub
 
 
-def find_overlaps(subtitles: list[Subtitle]) -> list[tuple[Subtitle, Subtitle]]:
-    overlaps = []
-    sorted_subs = sorted(subtitles, key=lambda s: s.start)
-    for idx in range(len(sorted_subs) - 1):
-        curr, next_sub = sorted_subs[idx], sorted_subs[idx + 1]
-        if curr.end > next_sub.start + OVERFLOW_TOLERANCE:
-            overlaps.append((curr, next_sub))
-    return overlaps
+def simulate(filepath):
+    """Exec the script once against the stub, then run each scene's construct()."""
+    tree = ast.parse(Path(filepath).read_text(), filename=filepath)
+    code = compile(tree, filepath, "exec")
 
+    stub = make_stub(collect_used_names(tree))
+    sys.modules.update({name: stub for name in STUBBED_MODULES})
+    sys.path.insert(0, os.path.dirname(filepath))
 
-def lint_file(filepath: str, verbose: bool = False) -> int:
-    filepath = os.path.abspath(filepath)
-    module_name = Path(filepath).stem
-
+    module_globals = {
+        "__name__": Path(filepath).stem,
+        "__file__": filepath,
+        "__builtins__": builtins,
+    }
+    timelines, warnings = [], []
     try:
-        source = Path(filepath).read_text()
+        exec(code, module_globals)
     except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 2
+        return timelines, [f"Error executing script: {exc}"]
 
-    try:
-        tree = ast.parse(source, filename=filepath)
-        code = compile(tree, filepath, "exec")
-    except SyntaxError as exc:
-        print(f"Syntax error: {exc}", file=sys.stderr)
-        return 2
+    scene_classes = []
+    for name, value in module_globals.items():
+        if (isinstance(value, type) and issubclass(value, InstrumentedScene)
+                and value is not InstrumentedScene
+                and all(value is not cls for _, cls in scene_classes)):
+            scene_classes.append((name, value))
+    if not scene_classes:
+        warnings.append("No Scene subclasses found")
 
-    scene_names = find_scene_names(tree)
-    if not scene_names:
-        print("Warning: No Scene subclasses found", file=sys.stderr)
-        return 0
-
-    exported_names = collect_stub_exports(tree)
-    scenes: dict[str, list[Subtitle]] = {}
-    all_overflows = []
-    warnings = []
-
-    module_dir = os.path.dirname(filepath)
-
-    for scene_name in scene_names:
-        collector = SubtitleCollector(scene_name=scene_name, verbose=verbose)
-        if verbose:
-            print(f"[Scene] {scene_name}")
-
-        stub = create_stub_module(collector, exported_names)
-        original_modules = {name: sys.modules.get(name) for name in PATCHED_MANIM_MODULES}
-        for patch_name in PATCHED_MANIM_MODULES:
-            sys.modules[patch_name] = stub
-
-        path_added = False
-        if module_dir not in sys.path:
-            sys.path.insert(0, module_dir)
-            path_added = True
-
+    for name, cls in scene_classes:
+        timeline = Timeline(name)
+        InstrumentedScene.timeline = timeline
         try:
-            module_globals = {
-                "__name__": module_name,
-                "__file__": filepath,
-                "__builtins__": __builtins__,
-            }
-            exec(code, module_globals)
-
-            scene_cls = module_globals.get(scene_name)
-            if scene_cls is None:
-                warnings.append(f"Scene class not found at runtime: {scene_name}")
-            else:
-                scene = scene_cls()
-                if hasattr(scene, "construct"):
-                    scene.construct()
+            cls().construct()
         except Exception as exc:
-            warnings.append(f"Error in {scene_name}.construct(): {exc}")
-            if verbose:
-                import traceback
+            warnings.append(f"Error in {name}.construct(): {exc}")
+        timelines.append(timeline)
 
-                traceback.print_exc()
-        finally:
-            for restore_name, module_value in original_modules.items():
-                if module_value is None:
-                    sys.modules.pop(restore_name, None)
-                else:
-                    sys.modules[restore_name] = module_value
-            if path_added:
-                try:
-                    sys.path.remove(module_dir)
-                except ValueError:
-                    pass
+    return timelines, warnings
 
-        scenes[scene_name] = collector.subtitles
-        all_overflows.extend(collector.overflows)
 
+def report(timelines, warnings):
     for warning in warnings:
         print(f"Warning: {warning}", file=sys.stderr)
 
-    all_overlaps = []
-    for scene_name, subtitles in scenes.items():
-        for current, next_sub in find_overlaps(subtitles):
-            all_overlaps.append(
-                {
-                    "scene": scene_name,
-                    "current": current,
-                    "next": next_sub,
-                    "overlap": current.end - next_sub.start,
-                }
-            )
+    overlaps = [(tl.scene, prev, sub) for tl in timelines for prev, sub in tl.overlaps]
+    overflows = [(tl.scene, o) for tl in timelines for o in tl.overflows]
 
-    if not all_overlaps and not all_overflows:
-        total = sum(len(subs) for subs in scenes.values())
-        print(f"No issues found ({total} subtitles in {len(scenes)} scenes)")
+    if not overlaps and not overflows:
+        total = sum(len(tl.subs) for tl in timelines)
+        print(f"No issues found ({total} subtitles in {len(timelines)} scenes)")
         return 0
 
-    if all_overlaps:
-        print(f"Found {len(all_overlaps)} overlapping subtitle(s):\n")
-        for issue in all_overlaps:
-            curr, next_sub = issue["current"], issue["next"]
-            print(f"  Scene: {issue['scene']}")
-            print(f'  Line {curr.line_number}: ends at {curr.end:.2f}s - "{curr.text}"')
-            print(f'  Line {next_sub.line_number}: starts at {next_sub.start:.2f}s - "{next_sub.text}"')
-            print(f"  Overlap: {issue['overlap']:.2f}s\n")
+    if overlaps:
+        print(f"Found {len(overlaps)} overlapping subtitle(s):\n")
+        for scene, prev, sub in overlaps:
+            print(f"  Scene: {scene}")
+            print(f'  Line {prev["line"]}: ends at {prev["end"]:.2f}s - "{prev["text"]}"')
+            print(f'  Line {sub["line"]}: starts at {sub["start"]:.2f}s - "{sub["text"]}"')
+            print(f"  Overlap: {prev['end'] - sub['start']:.2f}s\n")
 
-    if all_overflows:
-        print(f"Found {len(all_overflows)} subtitle timeline overflow(s):\n")
-        for overflow in all_overflows:
-            event = overflow.get("event", "timeline")
-            print(f"  Scene: {overflow['scene']}")
-            print(f"  Line {overflow['subtitle_line']}: subtitle ends at {overflow['subtitle_end']:.2f}s")
-            print(f"  Line {overflow['line']}: {event} ends at {overflow['event_end']:.2f}s")
-            print(f"  Overflow: {overflow['overflow']:.2f}s\n")
+    if overflows:
+        print(f"Found {len(overflows)} subtitle timeline overflow(s):\n")
+        for scene, o in overflows:
+            print(f"  Scene: {scene}")
+            print(f"  Line {o['sub']['line']}: subtitle ends at {o['sub']['end']:.2f}s")
+            print(f"  Line {o['line']}: {o['event']} ends at {o['end']:.2f}s")
+            print(f"  Overflow: {o['end'] - o['sub']['end']:.2f}s\n")
 
     print("Fix: adjust subtitle durations, play run_times, or waits so each segment stays covered.")
     return 1
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Lint Manim scripts for subtitle timing issues")
-    parser.add_argument("file", help="Manim script to lint")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed timing")
-    args = parser.parse_args()
-
-    print(f"Checking subtitles in: {args.file}\n")
-    sys.exit(lint_file(args.file, verbose=args.verbose))
+def main():
+    if len(sys.argv) != 2:
+        print("usage: python lint-subtitles.py <script.py>", file=sys.stderr)
+        return 2
+    print(f"Checking subtitles in: {sys.argv[1]}\n")
+    try:
+        timelines, warnings = simulate(os.path.abspath(sys.argv[1]))
+    except (OSError, SyntaxError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    return report(timelines, warnings)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
