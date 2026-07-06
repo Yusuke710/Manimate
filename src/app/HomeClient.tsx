@@ -74,7 +74,7 @@ function usePreferredModel() {
   return [model, set] as const;
 }
 
-function ModelSelector({ model, onChange, disabled }: { model: string; onChange: (model: string) => void; disabled?: boolean }) {
+function ModelSelector({ model, onChange, disabled, lockReason }: { model: string; onChange: (model: string) => void; disabled?: boolean; lockReason?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -88,7 +88,7 @@ function ModelSelector({ model, onChange, disabled }: { model: string; onChange:
   }, [isOpen]);
 
   return (
-    <div style={{ position: "relative" }} ref={ref}>
+    <div style={{ position: "relative" }} ref={ref} title={lockReason}>
       <button
         onClick={() => { if (!disabled && AVAILABLE_MODELS.length > 1) setIsOpen(!isOpen); }}
         style={{
@@ -889,6 +889,7 @@ function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange:
 function ComposerSettingsControls({
   model,
   onModelChange,
+  modelLocked,
   voice,
   onVoiceChange,
   aspectRatio,
@@ -900,6 +901,7 @@ function ComposerSettingsControls({
 }: {
   model: string;
   onModelChange: (model: string) => void;
+  modelLocked?: boolean;
   voice: string;
   onVoiceChange: (voice: string) => void;
   aspectRatio: AspectRatio;
@@ -923,7 +925,12 @@ function ComposerSettingsControls({
 
   const controls = (
     <>
-      <ModelSelector model={model} onChange={onModelChange} disabled={disabled} />
+      <ModelSelector
+        model={model}
+        onChange={onModelChange}
+        disabled={disabled || modelLocked}
+        lockReason={modelLocked ? "The model is fixed for this session. Use Handoff to continue with another model in a new session." : undefined}
+      />
       <VoiceSelector voice={voice} onChange={onVoiceChange} disabled={disabled} />
       <AspectRatioSelector ratio={aspectRatio} onChange={onAspectRatioChange} disabled={disabled} />
     </>
@@ -1824,6 +1831,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
     <ComposerSettingsControls
       model={composerModel}
       onModelChange={setComposerModel}
+      modelLocked={!shouldShowFirstTurnConfig}
       voice={composerVoice}
       onVoiceChange={setComposerVoice}
       aspectRatio={composerAspectRatio}

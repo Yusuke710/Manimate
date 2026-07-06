@@ -77,14 +77,25 @@ export async function POST(request: NextRequest): Promise<Response> {
       voice_id: requestedVoiceId,
     });
   } else {
+    // A session is locked to one model for its lifetime (cross-CLI resume is
+    // impossible). Legacy sessions with pre-local model ids may adopt one —
+    // handleLocalChatRequest performs that adoption.
+    if (
+      requestedModel &&
+      isRegisteredModelId(session.model) &&
+      requestedModel !== session.model
+    ) {
+      return NextResponse.json(
+        {
+          error: `Session ${session.id} uses ${session.model}. Use POST /api/sessions/${session.id}/handoff to continue with ${requestedModel} in a new session.`,
+        },
+        { status: 409 }
+      );
+    }
     const updates: {
-      model?: string;
       aspect_ratio?: string | null;
       voice_id?: string | null;
     } = {};
-    if (requestedModel && requestedModel !== session.model) {
-      updates.model = requestedModel;
-    }
     if (requestedAspectRatio && requestedAspectRatio !== session.aspect_ratio) {
       updates.aspect_ratio = requestedAspectRatio;
     }

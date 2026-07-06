@@ -17,13 +17,11 @@ import {
   createLocalRun,
   getLocalSession,
   insertLocalMessage,
-  listLocalMessages,
   updateLocalRun,
   updateLocalSession,
 } from "@/lib/local/session-store";
 import { copyAgentTranscript } from "@/lib/local/transcripts";
 import { queueLocalCloudSync } from "@/lib/local/cloud-sync";
-import { isSessionFeedbackMetadata } from "@/lib/local/feedback";
 import {
   beginLocalRunStart,
   endLocalRunStart,
@@ -42,7 +40,6 @@ import {
   isAspectRatio,
 } from "@/lib/aspect-ratio";
 import { DEFAULT_VOICE_ID, NONE_VOICE_ID, isValidVoiceId } from "@/lib/voices";
-import { buildConversationRecoveryContext } from "@/lib/conversation-recovery";
 import type { TerminalStatus } from "@/lib/types";
 
 type LocalChatRequest = {
@@ -392,8 +389,21 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         return;
       }
 
-      modelForRun = requestedModel || session.model;
-      const canReuseAgentSession = sessionModelIsValid && session.model === modelForRun;
+      // A session is locked to one model for its lifetime: cross-CLI resume
+      // is impossible, so switching would silently drop the agent's context.
+      // Handoff is the explicit way to continue with another model. Legacy
+      // sessions (pre-local model ids like "opus") adopt a model on their
+      // first new message instead.
+      if (requestedModel && sessionModelIsValid && requestedModel !== session.model) {
+        await sendEvent({
+          type: "error",
+          state: "error",
+          message: `This session uses ${session.model}. To continue with ${requestedModel}, use Handoff to start a new session from the current results.`,
+        });
+        return;
+      }
+
+      modelForRun = sessionModelIsValid ? session.model : requestedModel;
       const voiceId = requestedVoiceId || session.voice_id || DEFAULT_VOICE_ID;
       const aspectRatio = isAspectRatio(requestedAspectRatio)
         ? requestedAspectRatio
@@ -406,7 +416,9 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         voice_id?: string | null;
         aspect_ratio?: string | null;
       } = {};
-      if (session.model !== modelForRun) {
+      if (!sessionModelIsValid) {
+        // Legacy session adopting a local model: any stored agent session id
+        // belongs to a different runtime and cannot be resumed.
         sessionUpdates.model = modelForRun;
         sessionUpdates.agent_session_id = null;
       }
@@ -420,13 +432,13 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         updateLocalSession(sessionId, sessionUpdates);
         session = getLocalSession(sessionId) || session;
       }
-      const resumeSessionId = canReuseAgentSession
+      const resumeSessionId = sessionModelIsValid
         ? session.agent_session_id || body.agent_session_id || null
         : null;
       agentSessionId = resumeSessionId || "";
 
       sandboxId = session.sandbox_id || getLocalSandboxId(sessionId);
-      const { projectDir, sessionRoot } = ensureLocalSessionLayout(sessionId, {
+      const { projectDir } = ensureLocalSessionLayout(sessionId, {
         model: modelForRun,
       });
 
@@ -446,9 +458,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           updateLocalSession(sessionId, { title: truncated });
         }
       }
-      const conversationMessages = listLocalMessages(sessionId).filter(
-        (message) => !isSessionFeedbackMetadata(message.metadata)
-      );
       const userMessageMetadata: Record<string, unknown> = {};
       if (hasVisibleImages) userMessageMetadata.images = visibleRequestImages;
 
@@ -501,39 +510,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       }
       const preparedRequestImageCount = promptImages.length;
 
-      let promptBody = rawPrompt;
-      if (!resumeSessionId) {
-        const recovered = buildConversationRecoveryContext({
-          messages: conversationMessages,
-          projectPath: projectDir,
-          userId: "local-user",
-          sessionId,
-          excludeMessageId: userMessageId,
-          allowedImagePathPrefixes: [`${path.resolve(sessionRoot)}${path.sep}`],
-        });
-
-        if (recovered.images.length > 0) {
-          for (const image of recovered.images) {
-            const resolved = resolveSessionFilePath(sessionId, image.path);
-            if (!resolved) continue;
-            try {
-              await fsp.mkdir(path.dirname(image.sandboxPath), { recursive: true });
-              await fsp.copyFile(resolved, image.sandboxPath);
-              promptImages.push({ path: image.sandboxPath, originalName: image.name });
-            } catch {
-              // Ignore bad history-image copies and continue run.
-            }
-          }
-        }
-
-        if (recovered.historyPrompt) {
-          const requestLine = rawPrompt
-            ? rawPrompt
-            : "[No text prompt in this turn. Use attached files if provided.]";
-          promptBody = `${recovered.historyPrompt}\n\nCurrent user request:\n${requestLine}`;
-        }
-      }
-
       if (requestedImageCount > 0 && preparedRequestImageCount === 0) {
         throw new Error("Attached files could not be prepared for local agent access");
       }
@@ -541,7 +517,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       prewarmLocalKokoroVoice({ cwd: projectDir, voiceId });
       const prompt = buildPrompt({
         projectDir,
-        prompt: promptBody,
+        prompt: rawPrompt,
         aspectRatio,
         voiceId,
         renderProfile: inferRenderProfile(rawPrompt),
