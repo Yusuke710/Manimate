@@ -79,6 +79,76 @@ describe("ImageLightbox keyboard navigation", () => {
     expect(onIndexChange).not.toHaveBeenCalled();
   });
 
+  it("confirms the annotation when Enter is pressed in the note input", async () => {
+    const onAnnotationConfirm = vi.fn();
+    const onClose = vi.fn();
+
+    await act(async () => {
+      root?.render(
+        <ImageLightbox
+          images={[{ url: "/first.png" }]}
+          index={0}
+          onIndexChange={vi.fn()}
+          onClose={onClose}
+          onImageChange={vi.fn()}
+          onAnnotationConfirm={onAnnotationConfirm}
+        />,
+      );
+    });
+    await flushEffects();
+
+    const noteInput = document.querySelector<HTMLInputElement>('input[aria-label="Frame instruction"]');
+    expect(noteInput).not.toBeNull();
+    if (!noteInput) throw new Error("Expected frame instruction input");
+
+    await act(async () => {
+      noteInput.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      }));
+    });
+
+    expect(onAnnotationConfirm).toHaveBeenCalledWith(0, null, "");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("confirms the annotation when Enter is pressed with the dialog focused", async () => {
+    const onAnnotationConfirm = vi.fn();
+    const onClose = vi.fn();
+
+    await act(async () => {
+      root?.render(
+        <ImageLightbox
+          images={[{ url: "/first.png" }]}
+          index={0}
+          onIndexChange={vi.fn()}
+          onClose={onClose}
+          onImageChange={vi.fn()}
+          onAnnotationConfirm={onAnnotationConfirm}
+        />,
+      );
+    });
+    await flushEffects();
+
+    const dialog = document.querySelector<HTMLDialogElement>("dialog");
+    expect(dialog).not.toBeNull();
+    if (!dialog) throw new Error("Expected image lightbox dialog");
+
+    dialog.focus();
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      }));
+    });
+
+    expect(onAnnotationConfirm).toHaveBeenCalledWith(0, null, "");
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it("rolls back a click mark when the annotation canvas is double-clicked", async () => {
     const snapshot = {} as ImageData;
     const context = {

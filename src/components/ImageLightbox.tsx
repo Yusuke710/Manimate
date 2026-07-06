@@ -5,6 +5,8 @@ import {
   useEffect,
   useRef,
   useState,
+  type FormEvent as ReactFormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent,
 } from "react";
@@ -88,7 +90,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
   useEffect(() => {
     if (!canNavigate) return;
 
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (isEditableKeyboardTarget(event.target) || isEditableKeyboardTarget(document.activeElement)) return;
 
       if (event.key === "ArrowLeft") {
@@ -229,7 +231,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
     lastClickStrokeSnapshotRef.current = null;
     setUndoStack((prev) => {
       const next = prev.at(-1) === snapshot ? prev.slice(0, -1) : prev;
-      setIsDirty(next.length > 0);
+      if (next !== prev) setIsDirty(next.length > 0);
       return next;
     });
   }, []);
@@ -320,6 +322,47 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
   const confirmAnnotation = useCallback(() => {
     commitAnnotation({ closeAfter: true, includeNote: true });
   }, [commitAnnotation]);
+
+  const handleAnnotationSubmit = useCallback((event: ReactFormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isSaving || !canConfirmAnnotation) return;
+    confirmAnnotation();
+  }, [canConfirmAnnotation, confirmAnnotation, isSaving]);
+
+  const handleNoteKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+
+    event.preventDefault();
+    if (isSaving || !canConfirmAnnotation) return;
+    confirmAnnotation();
+  }, [canConfirmAnnotation, confirmAnnotation, isSaving]);
+
+  useEffect(() => {
+    if (!canAnnotate || !canConfirmAnnotation) return;
+
+    const handleAnnotationEnter = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Enter" || event.isComposing || isSaving) return;
+
+      const dialog = ref.current;
+      if (!dialog?.open) return;
+
+      const target = event.target;
+      const activeElement = document.activeElement;
+      const eventInsideDialog = target instanceof Node && dialog.contains(target);
+      const focusInsideDialog = activeElement instanceof Node && dialog.contains(activeElement);
+      if (!eventInsideDialog && !focusInsideDialog) return;
+
+      if (target instanceof HTMLElement && target.closest("button")) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      confirmAnnotation();
+    };
+
+    document.addEventListener("keydown", handleAnnotationEnter, true);
+    return () => document.removeEventListener("keydown", handleAnnotationEnter, true);
+  }, [canAnnotate, canConfirmAnnotation, confirmAnnotation, isSaving]);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -425,7 +468,8 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
             }}
           />
 
-          <div
+          <form
+            onSubmit={handleAnnotationSubmit}
             style={{
               display: "flex",
               alignItems: "center",
@@ -439,7 +483,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
             <input
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              onKeyDown={(event) => event.stopPropagation()}
+              onKeyDown={handleNoteKeyDown}
               placeholder="Instruction for this frame"
               aria-label="Frame instruction"
               style={{
@@ -485,8 +529,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
             </button>
 
             <button
-              type="button"
-              onClick={confirmAnnotation}
+              type="submit"
               disabled={isSaving || !canConfirmAnnotation}
               aria-label="Apply frame instruction"
               title="Apply"
@@ -509,7 +552,7 @@ export default function ImageLightbox({ images, index, onIndexChange, onClose, o
                 <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
               </svg>
             </button>
-          </div>
+          </form>
         </div>
       ) : (
         <img

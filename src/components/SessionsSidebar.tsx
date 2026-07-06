@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useReducer, useCallback, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useReducer, useCallback, useRef, type MouseEvent, type ReactNode } from "react";
 import { StudioAccountCard } from "@/components/StudioStatus";
 import type { CloudAuthStatus } from "@/lib/studio-cloud-auth";
+
+const SESSION_LIST_POLL_INTERVAL_MS = 10_000;
 
 type Session = {
   id: string;
@@ -32,6 +34,20 @@ interface SessionsState {
 type SessionsAction =
   | { type: "SET_SESSIONS"; sessions: Session[] }
   | { type: "SET_LOADING"; loading: boolean };
+
+function areSessionsEqual(a: Session[], b: Session[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (
+      a[i].id !== b[i].id ||
+      a[i].title !== b[i].title ||
+      a[i].updated_at !== b[i].updated_at
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 interface SidebarNavButtonProps {
   active: boolean;
@@ -126,6 +142,9 @@ function SidebarNavButton({
 function sessionsReducer(state: SessionsState, action: SessionsAction): SessionsState {
   switch (action.type) {
     case "SET_SESSIONS":
+      if (areSessionsEqual(state.sessions, action.sessions)) {
+        return state.loading ? { ...state, loading: false } : state;
+      }
       return { ...state, sessions: action.sessions, loading: false };
     case "SET_LOADING":
       return { ...state, loading: action.loading };
@@ -151,11 +170,14 @@ export function SessionsSidebar({
     sessions: [],
     loading: true,
   });
+  const requestInFlightRef = useRef(false);
   const isHomeActive = !activeSessionId && !isLibraryActive && !isFeedbackActive;
 
   const fetchSessions = useCallback(async () => {
+    if (requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
     try {
-      const response = await fetch("/api/sessions");
+      const response = await fetch("/api/sessions", { cache: "no-store" });
       if (!response.ok) {
         dispatch({ type: "SET_LOADING", loading: false });
         return;
@@ -164,14 +186,34 @@ export function SessionsSidebar({
       dispatch({ type: "SET_SESSIONS", sessions: sessions || [] });
     } catch {
       dispatch({ type: "SET_LOADING", loading: false });
+    } finally {
+      requestInFlightRef.current = false;
     }
   }, []);
 
   useEffect(() => {
+    if (isCollapsed) return;
+
     fetchSessions();
-    const timer = setInterval(fetchSessions, 2000);
-    return () => clearInterval(timer);
-  }, [fetchSessions]);
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") {
+        void fetchSessions();
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void fetchSessions();
+      }
+    };
+    const timer = window.setInterval(refreshIfVisible, SESSION_LIST_POLL_INTERVAL_MS);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchSessions, isCollapsed]);
 
   if (isCollapsed) {
     return (

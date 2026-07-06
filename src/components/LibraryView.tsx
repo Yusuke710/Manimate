@@ -7,6 +7,8 @@ import {
   matchesLibrarySearchIndex,
 } from "@/lib/library-search";
 
+const LIBRARY_REFRESH_INTERVAL_MS = 60_000;
+
 type LibrarySession = {
   id: string;
   session_number: number;
@@ -591,11 +593,15 @@ export function LibraryView({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
+  const requestInFlightRef = useRef(false);
 
   const fetchSessions = useCallback(async () => {
+    if (requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
     try {
       const res = await fetch(
         mode === "videos" ? "/api/sessions?include_search_content=1" : "/api/sessions",
+        { cache: "no-store" },
       );
       if (!res.ok) return;
       const data = (await res.json()) as LibrarySession[];
@@ -603,6 +609,7 @@ export function LibraryView({
     } catch {
       // Keep the existing library state if refresh fails.
     } finally {
+      requestInFlightRef.current = false;
       setLoading(false);
     }
   }, [mode]);
@@ -636,8 +643,24 @@ export function LibraryView({
 
   useEffect(() => {
     fetchSessions();
-    const timer = setInterval(fetchSessions, 5000);
-    return () => clearInterval(timer);
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") {
+        void fetchSessions();
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void fetchSessions();
+      }
+    };
+    const timer = window.setInterval(refreshIfVisible, LIBRARY_REFRESH_INTERVAL_MS);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [fetchSessions]);
 
   return (
