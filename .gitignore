@@ -52,3 +52,4 @@ media/
 CLAUDE.md
 AGENT.md
 
+__pycache__/
