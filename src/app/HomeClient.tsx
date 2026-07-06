@@ -87,11 +87,6 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     }
   }, [isMobile]);
 
-  // Prewarm sandbox when user starts typing (guard in ChatInput prevents duplicates)
-  const handlePrewarm = useCallback(() => {
-    fetch("/api/sandbox/prewarm", { method: "POST" }).catch(() => {});
-  }, []);
-
   const hasPendingWelcomePayload = useCallback((sessionId: string) => {
     return pendingWelcomePayloadRef.current.has(sessionId);
   }, []);
@@ -328,7 +323,6 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
         ) : isWelcome ? (
           <WelcomeView
             onSend={handleWelcomeSend}
-            onPrewarm={handlePrewarm}
             aspectRatio={aspectRatio}
             onAspectRatioChange={setAspectRatio}
             isMobile={isMobile}
@@ -534,7 +528,6 @@ function SharedImportView({
 // Welcome page component
 function WelcomeView({
   onSend,
-  onPrewarm,
   aspectRatio,
   onAspectRatioChange,
   isMobile = false,
@@ -543,7 +536,6 @@ function WelcomeView({
   initialVoice,
 }: {
   onSend: (prompt: string, images?: File[], model?: string, voice?: string, ratioOverride?: AspectRatio) => void;
-  onPrewarm?: () => void;
   aspectRatio: AspectRatio;
   onAspectRatioChange: (ratio: AspectRatio) => void;
   isMobile?: boolean;
@@ -604,7 +596,6 @@ function WelcomeView({
       <div style={{ width: "100%", maxWidth: isMobile ? "100%" : 620 }}>
         <ChatInput
           onSend={handleSend}
-          onPrewarm={onPrewarm}
           placeholder="Describe a math concept to animate..."
           draftKey="chat-draft:welcome"
           initialPrompt={initialPrompt}

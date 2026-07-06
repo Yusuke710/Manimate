@@ -16,7 +16,6 @@ interface AttachmentPreview {
 interface ChatInputProps {
   onSend: (prompt: string, images?: File[]) => void;
   onStop?: () => void;
-  onPrewarm?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -40,14 +39,13 @@ export function appendFrameInstructionToPrompt(prev: string, instruction: string
   return `${base}${spacer}${trimmed}`;
 }
 
-export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false, disabled = false, placeholder, extraLeft, compact = false, draftKey, initialPrompt }: ChatInputProps) {
+export default function ChatInput({ onSend, onStop, isLoading = false, disabled = false, placeholder, extraLeft, compact = false, draftKey, initialPrompt }: ChatInputProps) {
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<AttachmentPreview[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const hasPrewarmedRef = useRef(false);
   const scrollToBottomRef = useRef(false);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredRef = useRef(false); // set true after restore to skip one debounced save
@@ -118,13 +116,6 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
     return () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current); };
   }, [prompt, draftKey]);
 
-  // Trigger prewarm once per component mount
-  const triggerPrewarm = useCallback(() => {
-    if (hasPrewarmedRef.current || !onPrewarm) return;
-    hasPrewarmedRef.current = true;
-    onPrewarm();
-  }, [onPrewarm]);
-
   const canSend = (prompt.trim().length > 0 || attachments.length > 0) && !disabled && !isLoading;
   const dense = attachments.length > 6;
   const thumbSize = dense ? 44 : 64;
@@ -155,8 +146,6 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
   const addAttachments = useCallback((files: File[]) => {
     const validFiles = files;
 
-    if (validFiles.length > 0) triggerPrewarm();
-
     setAttachments((prev) => {
       const remaining = MAX_ATTACHMENTS - prev.length;
       const toAdd = validFiles.slice(0, remaining);
@@ -166,7 +155,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
       }));
       return [...prev, ...newPreviews];
     });
-  }, [triggerPrewarm]);
+  }, []);
 
   const removeAttachment = useCallback((index: number) => {
     setAttachments((prev) => {
@@ -414,10 +403,7 @@ export default function ChatInput({ onSend, onStop, onPrewarm, isLoading = false
             ref={textareaRef}
             data-testid="chat-input"
             value={prompt}
-            onChange={(e) => {
-              setPrompt(e.target.value);
-              if (e.target.value.length > 0) triggerPrewarm();
-            }}
+            onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={placeholder || "Describe the animation you want to create..."}
