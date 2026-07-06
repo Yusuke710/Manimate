@@ -74,7 +74,7 @@ function usePreferredModel() {
   return [model, set] as const;
 }
 
-function ModelSelector({ model, onChange, disabled, lockReason }: { model: string; onChange: (model: string) => void; disabled?: boolean; lockReason?: string }) {
+function ModelSelector({ model, onChange, disabled }: { model: string; onChange: (model: string) => void; disabled?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -88,7 +88,7 @@ function ModelSelector({ model, onChange, disabled, lockReason }: { model: strin
   }, [isOpen]);
 
   return (
-    <div style={{ position: "relative" }} ref={ref} title={lockReason}>
+    <div style={{ position: "relative" }} ref={ref}>
       <button
         onClick={() => { if (!disabled && AVAILABLE_MODELS.length > 1) setIsOpen(!isOpen); }}
         style={{
@@ -925,12 +925,9 @@ function ComposerSettingsControls({
 
   const controls = (
     <>
-      <ModelSelector
-        model={model}
-        onChange={onModelChange}
-        disabled={disabled || modelLocked}
-        lockReason={modelLocked ? "The model is fixed for this session. Use Handoff to continue with another model in a new session." : undefined}
-      />
+      {/* The model is fixed per session (switch via Handoff), so mid-session
+          the picker disappears entirely — only voice and aspect ratio remain. */}
+      {!modelLocked && <ModelSelector model={model} onChange={onModelChange} disabled={disabled} />}
       <VoiceSelector voice={voice} onChange={onVoiceChange} disabled={disabled} />
       <AspectRatioSelector ratio={aspectRatio} onChange={onAspectRatioChange} disabled={disabled} />
     </>
