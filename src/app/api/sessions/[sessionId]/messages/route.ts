@@ -112,7 +112,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     videoUrl = localFileToApiUrl(sessionId, session.video_path, version);
   }
 
-  const artifacts = readLocalSessionArtifacts(sessionId);
+  const artifacts = await readLocalSessionArtifacts(sessionId);
 
   return NextResponse.json({
     messages,

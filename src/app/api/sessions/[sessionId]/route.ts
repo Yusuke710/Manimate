@@ -28,5 +28,5 @@ export async function GET(
     );
   }
 
-  return NextResponse.json({ ...session, ...readLocalSessionArtifacts(sessionId) });
+  return NextResponse.json({ ...session, ...(await readLocalSessionArtifacts(sessionId)) });
 }

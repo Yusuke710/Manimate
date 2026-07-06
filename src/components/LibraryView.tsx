@@ -2,10 +2,6 @@
 
 import Image from "next/image";
 import { useDeferredValue, useEffect, useState, useCallback, useMemo, useRef, type FormEvent, type MouseEvent } from "react";
-import {
-  buildLibrarySearchIndex,
-  matchesLibrarySearchIndex,
-} from "@/lib/library-search";
 
 const LIBRARY_REFRESH_INTERVAL_MS = 60_000;
 
@@ -16,8 +12,6 @@ type LibrarySession = {
   status: string;
   has_video: boolean;
   last_video_url: string | null;
-  plan_content?: string | null;
-  script_content?: string | null;
   aspect_ratio: string | null;
   created_at: string;
   updated_at: string;
@@ -600,7 +594,7 @@ export function LibraryView({
     requestInFlightRef.current = true;
     try {
       const res = await fetch(
-        mode === "videos" ? "/api/sessions?include_search_content=1" : "/api/sessions",
+        mode === "videos" ? "/api/sessions?full=1" : "/api/sessions",
         { cache: "no-store" },
       );
       if (!res.ok) return;
@@ -618,19 +612,36 @@ export function LibraryView({
     () => allSessions.filter((session) => session.has_video),
     [allSessions]
   );
-  const indexedVideoSessions = useMemo(
-    () => videoSessions.map((session) => ({
-      session,
-      searchIndex: buildLibrarySearchIndex(session),
-    })),
-    [videoSessions],
-  );
-  const filteredVideoSessions = useMemo(
-    () => indexedVideoSessions
-      .filter(({ searchIndex }) => matchesLibrarySearchIndex(searchIndex, deferredSearchQuery))
-      .map(({ session }) => session),
-    [deferredSearchQuery, indexedVideoSessions],
-  );
+
+  // Search runs server-side (title + plan + script) so artifact content is
+  // never shipped to the browser; see /api/sessions?full=1&q=…
+  const [searchResults, setSearchResults] = useState<LibrarySession[] | null>(null);
+  const trimmedDeferredQuery = deferredSearchQuery.trim();
+  useEffect(() => {
+    if (!trimmedDeferredQuery) {
+      setSearchResults(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/sessions?full=1&q=${encodeURIComponent(trimmedDeferredQuery)}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as LibrarySession[];
+        if (!cancelled) setSearchResults(data || []);
+      } catch {
+        // Keep the previous results if the search request fails.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [trimmedDeferredQuery]);
+
+  const filteredVideoSessions = searchResults ?? videoSessions;
   const trimmedSearchQuery = searchQuery.trim();
 
   const handleSessionOpenInNewTab = useCallback((sessionId: string) => {

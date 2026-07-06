@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LibraryView } from "@/components/LibraryView";
+import { matchesLibrarySearch } from "@/lib/library-search";
 
 vi.mock("next/image", () => ({
   default: ({
@@ -72,7 +73,21 @@ describe("LibraryView", () => {
     vi.useFakeTimers();
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
-    fetchMock = vi.fn(async () => Response.json(sessions));
+    // Emulates /api/sessions?full=1[&q=…]: search happens server-side with
+    // matchesLibrarySearch; plan/script content stays on the "server" (the
+    // fixture) and is never part of the response the component sees.
+    fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const q = new URL(String(input), "http://localhost").searchParams.get("q");
+      const visible = sessions.map(({ plan_content, script_content, ...session }) => {
+        void plan_content;
+        void script_content;
+        return session;
+      });
+      if (!q) return Response.json(visible);
+      return Response.json(
+        visible.filter((_, index) => matchesLibrarySearch(sessions[index], q))
+      );
+    });
     openMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     Object.defineProperty(window, "open", {

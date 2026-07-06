@@ -46,7 +46,7 @@ type CloudSyncAttachment = {
 type CloudSyncSnapshot = {
   version: 1;
   session: Omit<LocalSession, "session_number"> &
-    ReturnType<typeof readLocalSessionArtifacts>;
+    Awaited<ReturnType<typeof readLocalSessionArtifacts>>;
   messages: ReturnType<typeof listLocalMessages>;
   runs: ReturnType<typeof listLocalRuns>;
   // Tool-level activity is no longer persisted locally (the raw CLI transcript
@@ -163,7 +163,7 @@ async function buildSnapshot(session: LocalSession): Promise<{
     ...session,
     // Artifact content lives in project files locally; the hosted mirror
     // still receives it inline (wire format v1).
-    ...readLocalSessionArtifacts(session.id),
+    ...(await readLocalSessionArtifacts(session.id)),
     voice_id: normalizeCloudMirrorVoiceId(session.voice_id),
   };
   delete cloudSession.session_number;

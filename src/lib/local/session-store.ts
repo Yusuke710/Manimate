@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import path from "node:path";
 import {
   LOCAL_SESSIONS_ROOT,
@@ -417,21 +418,22 @@ export function getLocalSession(sessionId: string): LocalSession | null {
   return data ? mapSession(data) : null;
 }
 
-/** Read plan/script/subtitles from the project dir (they are never stored in session.json). */
-export function readLocalSessionArtifacts(sessionId: string): SessionArtifacts {
+/**
+ * Read plan/script/subtitles from the project dir (they are never stored in
+ * session.json). Async on purpose: callers like the library search endpoint
+ * read artifacts for hundreds of sessions per request, and synchronous reads
+ * at that volume block the event loop — stalling SSE streams of active runs.
+ */
+export async function readLocalSessionArtifacts(sessionId: string): Promise<SessionArtifacts> {
   const { projectDir } = getLocalSessionPaths(sessionId);
-  const readIfExists = (name: string): string | null => {
-    try {
-      return fs.readFileSync(path.join(projectDir, name), "utf8");
-    } catch {
-      return null;
-    }
-  };
-  return {
-    plan_content: readIfExists("plan.md"),
-    script_content: readIfExists("script.py"),
-    subtitles_content: readIfExists("subtitles.srt"),
-  };
+  const readIfExists = (name: string): Promise<string | null> =>
+    fsp.readFile(path.join(projectDir, name), "utf8").catch(() => null);
+  const [plan_content, script_content, subtitles_content] = await Promise.all([
+    readIfExists("plan.md"),
+    readIfExists("script.py"),
+    readIfExists("subtitles.srt"),
+  ]);
+  return { plan_content, script_content, subtitles_content };
 }
 
 export function findLocalSessionWithChaptersByTitle(title: string): LocalSession | null {
