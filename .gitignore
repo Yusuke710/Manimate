@@ -53,3 +53,4 @@ CLAUDE.md
 AGENT.md
 
 __pycache__/
+.next-bench/
