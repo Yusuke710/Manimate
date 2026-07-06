@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
-import { isAspectRatio, type AspectRatio } from "@/lib/aspect-ratio";
+import { isAspectRatio, type AspectRatio } from "@/lib/models";
 import { isValidVoiceId } from "@/lib/voices";
 import { matchesLibrarySearch } from "@/lib/library-search";
 import {

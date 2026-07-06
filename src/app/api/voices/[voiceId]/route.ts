@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getResolvedElevenLabsApiKey } from "@/lib/local/elevenlabs-config";
+import { getResolvedElevenLabsApiKey } from "@/lib/local/voiceover";
 
 export const runtime = "nodejs";
 

@@ -18,7 +18,7 @@ vi.mock("node:os", async (importOriginal) => {
 async function loadTranscripts(root: string) {
   process.env.MANIMATE_LOCAL_ROOT = root;
   vi.resetModules();
-  return import("@/lib/local/transcripts");
+  return import("@/lib/local/trajectory");
 }
 
 afterEach(() => {

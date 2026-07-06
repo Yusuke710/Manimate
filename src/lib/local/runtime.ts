@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { execFileSync, spawn } from "node:child_process";
-import { getResolvedElevenLabsApiKey } from "@/lib/local/elevenlabs-config";
+import { getResolvedElevenLabsApiKey } from "@/lib/local/voiceover";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { NONE_VOICE_ID } from "@/lib/voices";
 

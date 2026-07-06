@@ -31,10 +31,9 @@ async function loadModules(root: string) {
   const store = await import("@/lib/local/local-config-store");
   const db = await import("@/lib/local/session-store");
   const cloudSync = await import("@/lib/local/cloud-sync");
-  const feedbackRoute = await import("@/app/api/sessions/[sessionId]/feedback/route");
-  const messagesRoute = await import("@/app/api/sessions/[sessionId]/messages/route");
+  const actionRoute = await import("@/app/api/sessions/[sessionId]/[action]/route");
 
-  return { store, db, cloudSync, feedbackRoute, messagesRoute };
+  return { store, db, cloudSync, actionRoute };
 }
 
 async function waitForCloudSyncStatus(
@@ -80,7 +79,7 @@ describe("session feedback", () => {
     const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-session-feedback-"));
 
     try {
-      const { db, feedbackRoute, messagesRoute } = await loadModules(localRoot);
+      const { db, actionRoute } = await loadModules(localRoot);
 
       const firstSession = db.createLocalSession({ model: "claude" });
       const secondSession = db.createLocalSession({ model: "claude" });
@@ -94,14 +93,14 @@ describe("session feedback", () => {
         content: "Animate a parabola.",
       });
 
-      const feedbackResponse = await feedbackRoute.POST(
+      const feedbackResponse = await actionRoute.POST(
         new NextRequest(`http://localhost/api/sessions/${firstSession.id}/feedback`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ feedback: "The pacing was too fast in the middle section." }),
         }),
         {
-          params: Promise.resolve({ sessionId: firstSession.id }),
+          params: Promise.resolve({ sessionId: firstSession.id, action: "feedback" }),
         }
       );
       const feedbackPayload = await feedbackResponse.json();
@@ -125,10 +124,10 @@ describe("session feedback", () => {
         },
       });
 
-      const transcriptResponse = await messagesRoute.GET(
+      const transcriptResponse = await actionRoute.GET(
         new NextRequest(`http://localhost/api/sessions/${firstSession.id}/messages`),
         {
-          params: Promise.resolve({ sessionId: firstSession.id }),
+          params: Promise.resolve({ sessionId: firstSession.id, action: "messages" }),
         }
       );
       const transcriptPayload = await transcriptResponse.json();
@@ -151,18 +150,18 @@ describe("session feedback", () => {
     const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-session-feedback-sync-"));
 
     try {
-      const { store, db, cloudSync, feedbackRoute } = await loadModules(localRoot);
+      const { store, db, cloudSync, actionRoute } = await loadModules(localRoot);
 
       const session = db.createLocalSession({ model: "claude" });
 
-      await feedbackRoute.POST(
+      await actionRoute.POST(
         new NextRequest(`http://localhost/api/sessions/${session.id}/feedback`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ feedback: "Please keep subtitle timing tighter." }),
         }),
         {
-          params: Promise.resolve({ sessionId: session.id }),
+          params: Promise.resolve({ sessionId: session.id, action: "feedback" }),
         }
       );
 

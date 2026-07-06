@@ -33,6 +33,14 @@ export type CloudAuthStatus =
       browser_opened?: boolean;
     };
 
+export function getCloudSyncDisplayHost(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host.replace(/^www\./i, "");
+  } catch {
+    return baseUrl.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+  }
+}
+
 export function createCloudAuthErrorStatus(
   message: string,
   baseUrl = DEFAULT_CLOUD_SYNC_BASE_URL

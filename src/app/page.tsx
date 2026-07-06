@@ -1,5 +1,5 @@
 import HomeClient from "@/app/HomeClient";
-import { getLocalCloudSyncStatus } from "@/lib/local/cloud-sync-connect";
+import { getLocalCloudSyncStatus } from "@/lib/local/cloud-sync";
 
 export const dynamic = "force-dynamic";
 

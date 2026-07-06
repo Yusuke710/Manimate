@@ -10,7 +10,7 @@ import {
   localFileToApiUrl,
   sanitizeLocalId,
 } from "@/lib/local/config";
-import { shouldRetryCloudSyncSession } from "@/lib/local/cloud-sync-policy";
+import { shouldRetryCloudSyncSession } from "@/lib/local/cloud-sync";
 
 export const SESSION_FILE_VERSION = 2;
 const SESSION_FILE_NAME = "session.json";

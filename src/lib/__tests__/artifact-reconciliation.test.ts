@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldApplyArtifactSnapshot } from "@/app/HomeClient";
+import { shouldApplyArtifactSnapshot } from "@/components/ChatPanel";
 
 describe("artifact reconciliation", () => {
   it("applies changed SQLite snapshots over stale UI content", () => {

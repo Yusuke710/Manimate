@@ -3,7 +3,7 @@ import {
   clearSavedElevenLabsApiKey,
   getElevenLabsApiKeyStatus,
   writeSavedElevenLabsApiKey,
-} from "@/lib/local/elevenlabs-config";
+} from "@/lib/local/voiceover";
 
 export const runtime = "nodejs";
 

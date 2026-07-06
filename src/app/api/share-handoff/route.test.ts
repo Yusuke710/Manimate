@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCreateHandoffFromSharedSnapshot = vi.fn();
 
-vi.mock("@/lib/local/cloud-sync-connect", () => ({
+vi.mock("@/lib/local/cloud-sync", () => ({
   getDefaultCloudSyncBaseUrl: () => "https://www.manimate.ai",
 }));
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
-import { isAspectRatio } from "@/lib/aspect-ratio";
+import { isAspectRatio } from "@/lib/models";
 import { isValidVoiceId } from "@/lib/voices";
 import { handleLocalChatRequest } from "@/lib/local/chat";
 import { ensureLocalSessionLayout } from "@/lib/local/config";

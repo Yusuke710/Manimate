@@ -15,15 +15,19 @@ const {
 
 vi.mock("@/lib/local/cloud-sync", () => ({
   queueLocalCloudSync,
+  getLocalCloudSyncConfig,
+  getLocalCloudSyncEnvOverride,
 }));
 
 vi.mock("@/lib/local/session-store", () => ({
+  createLocalSession: vi.fn(),
+  getLocalActiveRun: vi.fn(),
   getLocalSession,
-}));
-
-vi.mock("@/lib/local/cloud-sync-config", () => ({
-  getLocalCloudSyncConfig,
-  getLocalCloudSyncEnvOverride,
+  insertLocalMessage: vi.fn(),
+  listLocalMessages: vi.fn(() => []),
+  listLocalRuns: vi.fn(() => []),
+  readLocalSessionArtifacts: vi.fn(async () => ({})),
+  updateLocalRun: vi.fn(),
 }));
 
 import {
@@ -42,6 +46,10 @@ function buildShareRequest() {
   return new NextRequest("http://localhost/api/sessions/session-1/share", {
     method: "POST",
   });
+}
+
+function shareParams() {
+  return { params: Promise.resolve({ sessionId: "session-1", action: "share" }) };
 }
 
 describe("POST /api/sessions/[sessionId]/share", () => {
@@ -76,9 +84,7 @@ describe("POST /api/sessions/[sessionId]/share", () => {
       headers: { "Content-Type": "application/json" },
     })));
 
-    const response = await POST(buildShareRequest(), {
-      params: Promise.resolve({ sessionId: "session-1" }),
-    });
+    const response = await POST(buildShareRequest(), shareParams());
     const payload = await response.json();
 
     expect(response.status).toBe(200);
@@ -111,9 +117,7 @@ describe("POST /api/sessions/[sessionId]/share", () => {
       cloud_last_error: null,
     });
 
-    const response = await POST(buildShareRequest(), {
-      params: Promise.resolve({ sessionId: "session-1" }),
-    });
+    const response = await POST(buildShareRequest(), shareParams());
     const payload = await response.json();
 
     expect(response.status).toBe(409);
@@ -138,9 +142,7 @@ describe("POST /api/sessions/[sessionId]/share", () => {
       headers: { "Content-Type": "application/json" },
     })));
 
-    const response = await POST(buildShareRequest(), {
-      params: Promise.resolve({ sessionId: "session-1" }),
-    });
+    const response = await POST(buildShareRequest(), shareParams());
     const payload = await response.json();
 
     expect(response.status).toBe(502);

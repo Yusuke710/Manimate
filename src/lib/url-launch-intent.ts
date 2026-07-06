@@ -1,4 +1,4 @@
-import { isAspectRatio, type AspectRatio } from "@/lib/aspect-ratio";
+import { isAspectRatio, type AspectRatio } from "@/lib/models";
 import { isRegisteredModelId } from "@/lib/models";
 import { isValidVoiceId } from "@/lib/voices";
 

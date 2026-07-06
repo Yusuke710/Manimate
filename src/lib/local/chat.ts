@@ -20,7 +20,7 @@ import {
   updateLocalRun,
   updateLocalSession,
 } from "@/lib/local/session-store";
-import { copyAgentTranscript } from "@/lib/local/transcripts";
+import { copyAgentTranscript } from "@/lib/local/trajectory";
 import { queueLocalCloudSync } from "@/lib/local/cloud-sync";
 import {
   beginLocalRunStart,
@@ -34,11 +34,11 @@ import {
   readLocalProjectChapters,
   serializeLocalChapters,
 } from "@/lib/local/chapters";
-import { readLocalProjectSubtitles } from "@/lib/local/subtitles";
+import { readLocalProjectSubtitles } from "@/lib/local/voiceover";
 import {
   DEFAULT_ASPECT_RATIO,
   isAspectRatio,
-} from "@/lib/aspect-ratio";
+} from "@/lib/models";
 import { DEFAULT_VOICE_ID, NONE_VOICE_ID, isValidVoiceId } from "@/lib/voices";
 import type { TerminalStatus } from "@/lib/types";
 

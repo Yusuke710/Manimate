@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDefaultCloudSyncBaseUrl } from "@/lib/local/cloud-sync-connect";
+import { getDefaultCloudSyncBaseUrl } from "@/lib/local/cloud-sync";
 import {
   createHandoffFromSharedSnapshot,
   type SharedHandoffSnapshot,

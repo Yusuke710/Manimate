@@ -6,7 +6,7 @@ import {
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { getLocalSession } from "@/lib/local/session-store";
-import { readLocalProjectSubtitles } from "@/lib/local/subtitles";
+import { readLocalProjectSubtitles } from "@/lib/local/voiceover";
 
 function subtitleResponse(content: string): Response {
   return new Response(content, {

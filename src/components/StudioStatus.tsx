@@ -1,7 +1,7 @@
 "use client";
 
 import type { CloudAuthStatus } from "@/lib/studio-cloud-auth";
-import { getCloudSyncDisplayHost } from "@/lib/local/cloud-sync-base-url";
+import { getCloudSyncDisplayHost } from "@/lib/studio-cloud-auth";
 
 function getBaseUrlLabel(baseUrl: string) {
   return getCloudSyncDisplayHost(baseUrl);

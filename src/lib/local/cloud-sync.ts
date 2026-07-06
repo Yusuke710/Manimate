@@ -1,26 +1,32 @@
 /**
- * Cloud sync: fire-and-forget mirror of a session to hosted Manimate.
+ * Cloud sync: everything that talks to hosted Manimate (manimate.ai).
  *
- * Runs deterministically after a render (chat.ts) or on explicit retry.
+ * One module, four concerns:
+ *   1. Config    — persisted connection (token/base URL) in ~/.manimate/config.json
+ *   2. Policy    — auth-failure detection and retry rules
+ *   3. Connect   — device-code connect flow against the hosted server
+ *   4. Sync      — fire-and-forget mirror of a session snapshot after a render
+ *
  * Each sync uploads the full session snapshot — request presigned upload
  * URLs, PUT files straight to storage, POST the snapshot JSON to finalize —
- * so a retry at any time converges to the correct remote state.
- *
- * The hosted server must support POST /api/local-sync/uploads (presigned
- * plan); the legacy multipart fallback was removed.
+ * so a retry at any time converges to the correct remote state. The hosted
+ * server must support POST /api/local-sync/uploads (presigned plan); the
+ * legacy multipart fallback was removed.
  */
 
+import os from "node:os";
 import fsp from "node:fs/promises";
+import { spawn } from "node:child_process";
+import {
+  DEFAULT_CLOUD_SYNC_BASE_URL,
+  type CloudAuthStatus,
+} from "@/lib/studio-cloud-auth";
 import { getLocalSessionPaths } from "@/lib/local/config";
-import { normalizeCloudSyncBaseUrl } from "@/lib/local/cloud-sync-base-url";
 import {
-  clearLocalCloudSyncConfig,
-  getLocalCloudSyncConfig,
-} from "@/lib/local/cloud-sync-config";
-import {
-  formatCloudSyncFailureMessage,
-  isCloudSyncAuthorizationError,
-} from "@/lib/local/cloud-sync-policy";
+  isRecord,
+  readStoredLocalConfig,
+  updateStoredLocalConfig,
+} from "@/lib/local/local-config-store";
 import {
   getLocalSession,
   listLocalMessages,
@@ -29,6 +35,529 @@ import {
   updateLocalSession,
 } from "@/lib/local/session-store";
 import { generateThumbnail, getExistingThumbnailPath } from "@/lib/local/thumbnail";
+
+// ---------------------------------------------------------------------------
+// Base URL normalization
+// ---------------------------------------------------------------------------
+
+export function normalizeCloudSyncBaseUrl(
+  baseUrl: string | null | undefined,
+  fallback?: string | null,
+): string {
+  const trimmed = baseUrl?.trim() || fallback?.trim() || "";
+  const normalized = trimmed.replace(/\/+$/, "");
+  if (!normalized) return "";
+
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol === "https:" && parsed.hostname.trim().toLowerCase() === "manimate.ai") {
+      parsed.hostname = "www.manimate.ai";
+    }
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return normalized;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Persisted connection config (~/.manimate/config.json)
+// ---------------------------------------------------------------------------
+
+export interface LocalCloudSyncConfig {
+  base_url: string;
+  token: string;
+  connected_at: string;
+  user_id?: string | null;
+  user_email?: string | null;
+  user_name?: string | null;
+  device_name?: string | null;
+}
+
+export interface LocalCloudSyncPendingConnect {
+  base_url: string;
+  request_id: string;
+  poll_token: string;
+  code: string;
+  connect_url: string;
+  device_name?: string | null;
+  started_at: string;
+  expires_at: string;
+}
+
+interface StoredLocalConfig {
+  cloud_sync?: LocalCloudSyncConfig;
+  cloud_sync_pending?: LocalCloudSyncPendingConnect;
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+}
+
+function shouldIgnoreStoredCloudSyncConfig(config: LocalCloudSyncConfig): boolean {
+  try {
+    return isLoopbackHost(new URL(config.base_url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function parseLocalCloudSyncConfig(value: unknown): LocalCloudSyncConfig | null {
+  if (!isRecord(value)) return null;
+
+  const baseUrl = typeof value.base_url === "string" ? value.base_url.trim() : "";
+  const token = typeof value.token === "string" ? value.token.trim() : "";
+  const connectedAt = typeof value.connected_at === "string" ? value.connected_at : "";
+  if (!baseUrl || !token || !connectedAt) return null;
+
+  return {
+    base_url: normalizeCloudSyncBaseUrl(baseUrl),
+    token,
+    connected_at: connectedAt,
+    user_id: typeof value.user_id === "string" ? value.user_id : null,
+    user_email: typeof value.user_email === "string" ? value.user_email : null,
+    user_name: typeof value.user_name === "string" ? value.user_name : null,
+    device_name: typeof value.device_name === "string" ? value.device_name : null,
+  };
+}
+
+function parseLocalCloudSyncPendingConnect(value: unknown): LocalCloudSyncPendingConnect | null {
+  if (!isRecord(value)) return null;
+
+  const baseUrl = typeof value.base_url === "string" ? value.base_url.trim() : "";
+  const requestId = typeof value.request_id === "string" ? value.request_id.trim() : "";
+  const pollToken = typeof value.poll_token === "string" ? value.poll_token.trim() : "";
+  const code = typeof value.code === "string" ? value.code.trim() : "";
+  const connectUrl = typeof value.connect_url === "string" ? value.connect_url.trim() : "";
+  const startedAt = typeof value.started_at === "string" ? value.started_at : "";
+  const expiresAt = typeof value.expires_at === "string" ? value.expires_at : "";
+  if (!baseUrl || !requestId || !pollToken || !code || !connectUrl || !startedAt || !expiresAt) {
+    return null;
+  }
+
+  return {
+    base_url: normalizeCloudSyncBaseUrl(baseUrl),
+    request_id: requestId,
+    poll_token: pollToken,
+    code,
+    connect_url: connectUrl,
+    device_name: typeof value.device_name === "string" ? value.device_name : null,
+    started_at: startedAt,
+    expires_at: expiresAt,
+  };
+}
+
+function readCloudSyncConfig(): StoredLocalConfig {
+  return readStoredLocalConfig() as StoredLocalConfig;
+}
+
+export function getLocalCloudSyncConfig(): LocalCloudSyncConfig | null {
+  const config = parseLocalCloudSyncConfig(readCloudSyncConfig().cloud_sync);
+  if (!config) return null;
+
+  // Persisted loopback cloud targets usually come from local development and
+  // should not suppress the real hosted connect flow in installed builds.
+  if (shouldIgnoreStoredCloudSyncConfig(config)) {
+    updateStoredLocalConfig((current) => ({
+      ...current,
+      cloud_sync: undefined,
+    }));
+    return null;
+  }
+
+  return config;
+}
+
+export function getLocalCloudSyncEnvOverride(): LocalCloudSyncConfig | null {
+  const baseUrl = process.env.MANIMATE_CLOUD_SYNC_URL?.trim() || "";
+  const token = process.env.MANIMATE_CLOUD_SYNC_TOKEN?.trim() || "";
+  if (!baseUrl || !token) return null;
+
+  return {
+    base_url: normalizeCloudSyncBaseUrl(baseUrl),
+    token,
+    connected_at: new Date(0).toISOString(),
+    user_id: null,
+    user_email: null,
+    user_name: null,
+    device_name: null,
+  };
+}
+
+export function writeLocalCloudSyncConfig(config: LocalCloudSyncConfig): void {
+  const normalizedConfig: LocalCloudSyncConfig = {
+    ...config,
+    base_url: normalizeCloudSyncBaseUrl(config.base_url),
+  };
+  updateStoredLocalConfig((current) => ({
+    ...current,
+    cloud_sync: normalizedConfig,
+    cloud_sync_pending: undefined,
+  }));
+}
+
+export function clearLocalCloudSyncConfig(): void {
+  updateStoredLocalConfig((current) => ({
+    ...current,
+    cloud_sync: undefined,
+  }));
+}
+
+export function getLocalCloudSyncPendingConnect(): LocalCloudSyncPendingConnect | null {
+  return parseLocalCloudSyncPendingConnect(readCloudSyncConfig().cloud_sync_pending);
+}
+
+export function writeLocalCloudSyncPendingConnect(pending: LocalCloudSyncPendingConnect): void {
+  const normalizedPending: LocalCloudSyncPendingConnect = {
+    ...pending,
+    base_url: normalizeCloudSyncBaseUrl(pending.base_url),
+  };
+  updateStoredLocalConfig((current) => ({
+    ...current,
+    cloud_sync_pending: normalizedPending,
+  }));
+}
+
+export function clearLocalCloudSyncPendingConnect(): void {
+  updateStoredLocalConfig((current) => ({
+    ...current,
+    cloud_sync_pending: undefined,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Policy: auth-failure detection and retry rules
+// ---------------------------------------------------------------------------
+
+export const CLOUD_SYNC_AUTH_RECONNECT_MESSAGE =
+  "Cloud sync authorization was rejected. Local work is still saved here. Reconnect only if autosync should resume.";
+
+export function isCloudSyncAuthorizationError(
+  message: string | null | undefined,
+): boolean {
+  const normalized = message?.trim().toLowerCase() || "";
+  if (!normalized) return false;
+
+  return (
+    normalized.includes("unauthorized") ||
+    normalized.includes("not authorized") ||
+    normalized.includes("no longer authorized") ||
+    normalized.includes("authorization was rejected")
+  );
+}
+
+export function formatCloudSyncFailureMessage(
+  message: string | null | undefined,
+): string {
+  if (isCloudSyncAuthorizationError(message)) {
+    return CLOUD_SYNC_AUTH_RECONNECT_MESSAGE;
+  }
+
+  return message?.trim() || "Cloud sync failed";
+}
+
+export function shouldRetryCloudSyncSession(params: {
+  cloudSyncStatus: string | null | undefined;
+  cloudLastError: string | null | undefined;
+}): boolean {
+  if (
+    params.cloudSyncStatus !== "idle" &&
+    params.cloudSyncStatus !== "pending" &&
+    params.cloudSyncStatus !== "syncing" &&
+    params.cloudSyncStatus !== "failed"
+  ) {
+    return false;
+  }
+
+  if (
+    params.cloudSyncStatus === "failed" &&
+    isCloudSyncAuthorizationError(params.cloudLastError)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Connect flow: device-code auth against the hosted server
+// ---------------------------------------------------------------------------
+
+const configuredCloudSyncBaseUrl =
+  process.env.MANIMATE_CLOUD_SYNC_URL?.trim() || DEFAULT_CLOUD_SYNC_BASE_URL;
+
+type ConnectStartResponse = {
+  request_id: string;
+  poll_token: string;
+  code: string;
+  device_name: string | null;
+  expires_at: string;
+  connect_path: string;
+  connect_url: string;
+  poll_url: string;
+};
+
+type ConnectPollResponse = {
+  status: "pending" | "approved" | "expired";
+  requestId: string;
+  code: string;
+  deviceName: string | null;
+  expiresAt: string;
+  approvedAt?: string | null;
+  syncToken?: string;
+  user?: {
+    id: string;
+    email: string | null;
+    name: string | null;
+  };
+};
+
+export type LocalCloudSyncStatus = CloudAuthStatus;
+
+export function getDefaultCloudSyncBaseUrl(): string {
+  return normalizeBaseUrl();
+}
+
+function normalizeBaseUrl(baseUrl?: string | null): string {
+  return normalizeCloudSyncBaseUrl(baseUrl, configuredCloudSyncBaseUrl);
+}
+
+function normalizeErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isExpired(expiresAt: string): boolean {
+  const expiresMs = Date.parse(expiresAt);
+  return !Number.isFinite(expiresMs) || expiresMs <= Date.now();
+}
+
+async function hostedFetchJson<T>(
+  input: string,
+  init?: RequestInit
+): Promise<T> {
+  const response = await fetch(input, init);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = typeof (data as { error?: unknown }).error === "string"
+      ? (data as { error: string }).error
+      : `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  return data as T;
+}
+
+export async function startHostedCloudSyncConnect(input?: {
+  baseUrl?: string | null;
+  deviceName?: string | null;
+}): Promise<LocalCloudSyncPendingConnect> {
+  const baseUrl = normalizeBaseUrl(input?.baseUrl);
+  const response = await hostedFetchJson<ConnectStartResponse>(`${baseUrl}/api/local-sync/connect/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      device_name: input?.deviceName || os.hostname(),
+    }),
+  });
+
+  return {
+    base_url: baseUrl,
+    request_id: response.request_id,
+    poll_token: response.poll_token,
+    code: response.code,
+    connect_url: response.connect_url,
+    device_name: response.device_name,
+    started_at: new Date().toISOString(),
+    expires_at: response.expires_at,
+  };
+}
+
+export async function pollHostedCloudSyncConnect(
+  pending: LocalCloudSyncPendingConnect
+): Promise<ConnectPollResponse> {
+  const baseUrl = normalizeBaseUrl(pending.base_url);
+  return hostedFetchJson<ConnectPollResponse>(
+    `${baseUrl}/api/local-sync/connect/poll?request_id=${encodeURIComponent(pending.request_id)}&poll_token=${encodeURIComponent(pending.poll_token)}`
+  );
+}
+
+export function openExternalBrowser(url: string): boolean {
+  const command: [string, string[]] = process.platform === "darwin"
+    ? ["open", [url]]
+    : process.platform === "win32"
+      ? ["cmd", ["/c", "start", "", url]]
+      : ["xdg-open", [url]];
+
+  try {
+    const child = spawn(command[0], command[1], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function mapConnectedStatus(config: LocalCloudSyncConfig): LocalCloudSyncStatus {
+  return {
+    status: "connected",
+    base_url: normalizeBaseUrl(config.base_url),
+    user_email: config.user_email ?? null,
+    user_name: config.user_name ?? null,
+    device_name: config.device_name ?? null,
+    connected_at: config.connected_at,
+  };
+}
+
+export function mapPendingStatus(pending: LocalCloudSyncPendingConnect): LocalCloudSyncStatus {
+  return {
+    status: "pending",
+    base_url: normalizeBaseUrl(pending.base_url),
+    code: pending.code,
+    connect_url: pending.connect_url,
+    device_name: pending.device_name ?? null,
+    expires_at: pending.expires_at,
+  };
+}
+
+export function mapDisconnectedStatus(baseUrl = getDefaultCloudSyncBaseUrl()): LocalCloudSyncStatus {
+  return {
+    status: "disconnected",
+    base_url: normalizeBaseUrl(baseUrl),
+  };
+}
+
+export async function refreshPendingCloudSyncConnect(
+  pending: LocalCloudSyncPendingConnect
+): Promise<LocalCloudSyncStatus> {
+  if (isExpired(pending.expires_at)) {
+    clearLocalCloudSyncPendingConnect();
+    return {
+      status: "error",
+      base_url: normalizeBaseUrl(pending.base_url),
+      message: "Connection request expired. Retry to open manimate.ai again.",
+      code: pending.code,
+      connect_url: pending.connect_url,
+      device_name: pending.device_name ?? null,
+      expires_at: pending.expires_at,
+    };
+  }
+
+  try {
+    const result = await pollHostedCloudSyncConnect(pending);
+    if (result.status === "approved" && typeof result.syncToken === "string") {
+      const config: LocalCloudSyncConfig = {
+        base_url: normalizeBaseUrl(pending.base_url),
+        token: result.syncToken,
+        connected_at: result.approvedAt || new Date().toISOString(),
+        user_id: result.user?.id ?? null,
+        user_email: result.user?.email ?? null,
+        user_name: result.user?.name ?? null,
+        device_name: result.deviceName ?? pending.device_name ?? null,
+      };
+      writeLocalCloudSyncConfig(config);
+      return mapConnectedStatus(config);
+    }
+
+    if (result.status === "expired") {
+      clearLocalCloudSyncPendingConnect();
+      return {
+        status: "error",
+        base_url: normalizeBaseUrl(pending.base_url),
+        message: "Connection request expired. Retry to open manimate.ai again.",
+        code: pending.code,
+        connect_url: pending.connect_url,
+        device_name: pending.device_name ?? null,
+        expires_at: pending.expires_at,
+      };
+    }
+
+    return mapPendingStatus(pending);
+  } catch (error) {
+    return {
+      status: "error",
+      base_url: normalizeBaseUrl(pending.base_url),
+      message: normalizeErrorMessage(error),
+      code: pending.code,
+      connect_url: pending.connect_url,
+      device_name: pending.device_name ?? null,
+      expires_at: pending.expires_at,
+    };
+  }
+}
+
+export async function getLocalCloudSyncStatus(): Promise<LocalCloudSyncStatus> {
+  const envOverride = getLocalCloudSyncEnvOverride();
+  if (envOverride) {
+    return mapConnectedStatus(envOverride);
+  }
+
+  const config = getLocalCloudSyncConfig();
+  if (config) {
+    return mapConnectedStatus(config);
+  }
+
+  const pending = getLocalCloudSyncPendingConnect();
+  if (pending) {
+    return refreshPendingCloudSyncConnect(pending);
+  }
+
+  return mapDisconnectedStatus();
+}
+
+export async function beginLocalCloudSyncConnect(input?: {
+  baseUrl?: string | null;
+  deviceName?: string | null;
+  reopen?: boolean;
+}): Promise<LocalCloudSyncStatus & { browser_opened?: boolean }> {
+  const pending = await startHostedCloudSyncConnect(input);
+  writeLocalCloudSyncPendingConnect(pending);
+  const browserOpened = input?.reopen === false ? false : openExternalBrowser(pending.connect_url);
+  return {
+    ...mapPendingStatus(pending),
+    browser_opened: browserOpened,
+  };
+}
+
+export async function beginOrResumeLocalCloudSyncConnect(input?: {
+  baseUrl?: string | null;
+  deviceName?: string | null;
+  reopen?: boolean;
+}): Promise<LocalCloudSyncStatus & { browser_opened?: boolean }> {
+  const envOverride = getLocalCloudSyncEnvOverride();
+  if (envOverride) {
+    return mapConnectedStatus(envOverride);
+  }
+
+  const existingConfig = getLocalCloudSyncConfig();
+  if (existingConfig) {
+    return mapConnectedStatus(existingConfig);
+  }
+
+  const pending = getLocalCloudSyncPendingConnect();
+  if (pending) {
+    if (isExpired(pending.expires_at)) {
+      clearLocalCloudSyncPendingConnect();
+    } else {
+      const refreshed = await refreshPendingCloudSyncConnect(pending);
+      if (refreshed.status !== "pending") {
+        return refreshed;
+      }
+
+      return {
+        ...refreshed,
+        browser_opened: input?.reopen === true ? openExternalBrowser(pending.connect_url) : false,
+      };
+    }
+  }
+
+  return beginLocalCloudSyncConnect(input);
+}
+
+// ---------------------------------------------------------------------------
+// Session snapshot sync
+// ---------------------------------------------------------------------------
 
 type LocalSession = NonNullable<ReturnType<typeof getLocalSession>>;
 
@@ -83,21 +612,12 @@ function hasCloudSyncEnvOverride(): boolean {
 }
 
 function getCloudSyncSettings(): CloudSyncSettings | null {
-  const envBaseUrl = process.env.MANIMATE_CLOUD_SYNC_URL?.trim() || "";
-  const envToken = process.env.MANIMATE_CLOUD_SYNC_TOKEN?.trim() || "";
-  if (envBaseUrl && envToken) {
-    return {
-      baseUrl: normalizeCloudSyncBaseUrl(envBaseUrl),
-      token: envToken,
-    };
-  }
-
-  const stored = getLocalCloudSyncConfig();
-  if (!stored?.base_url || !stored.token) return null;
+  const config = getLocalCloudSyncEnvOverride() || getLocalCloudSyncConfig();
+  if (!config?.base_url || !config.token) return null;
 
   return {
-    baseUrl: normalizeCloudSyncBaseUrl(stored.base_url),
-    token: stored.token,
+    baseUrl: config.base_url,
+    token: config.token,
   };
 }
 

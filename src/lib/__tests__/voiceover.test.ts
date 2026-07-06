@@ -8,7 +8,8 @@ vi.mock("../local/command", () => ({
 }));
 
 import { runLocalCommand } from "../local/command";
-import { readLocalProjectSubtitles } from "../local/subtitles";
+import { parseConcatFile } from "../local/chapters";
+import { readLocalProjectSubtitles } from "../local/voiceover";
 
 const mockedRunLocalCommand = vi.mocked(runLocalCommand);
 const tempDirs: string[] = [];
@@ -25,6 +26,24 @@ afterEach(async () => {
   await Promise.all(
     tempDirs.splice(0).map((dir) => fsp.rm(dir, { recursive: true, force: true }))
   );
+});
+
+describe("parseConcatFile", () => {
+  it("parses single-quoted, double-quoted, and unquoted entries", () => {
+    const content = [
+      "file 'media/videos/script/480p15/Scene1.mp4'",
+      'file "media/videos/script/854p15/Scene2.mp4"',
+      "file media/videos/script/854p15/Scene3.mp4",
+      "# comment",
+      "",
+    ].join("\n");
+
+    expect(parseConcatFile(content)).toEqual([
+      "media/videos/script/480p15/Scene1.mp4",
+      "media/videos/script/854p15/Scene2.mp4",
+      "media/videos/script/854p15/Scene3.mp4",
+    ]);
+  });
 });
 
 describe("readLocalProjectSubtitles", () => {
