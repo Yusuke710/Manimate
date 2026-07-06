@@ -138,8 +138,10 @@ describe("session feedback", () => {
       expect(transcriptPayload.messages[0]).toMatchObject({
         content: "Animate a parabola.",
       });
-      // Tool-level activity is SSE-only now; history replays messages only.
-      expect(transcriptPayload.activityEvents).toEqual([]);
+      // Poll responses omit activityEvents entirely (an empty array would
+      // wipe the client's loaded trajectory); it only appears when the
+      // client requests include_trajectory=1.
+      expect(transcriptPayload.activityEvents).toBeUndefined();
     } finally {
       fs.rmSync(localRoot, { recursive: true, force: true });
     }

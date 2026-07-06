@@ -1316,7 +1316,10 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
     dispatch({ type: "SET_LOADING_MESSAGES", isLoadingMessages: true });
 
     let cancelled = false;
-    fetch(`/api/sessions/${sessionId}/messages`)
+    // include_trajectory: replay archived tool activity (parsed from the
+    // session's transcripts/) once on load; the 2s/30s polls omit it and the
+    // live SSE stream appends new activity on top.
+    fetch(`/api/sessions/${sessionId}/messages?include_trajectory=1`)
       .then(async (response) => {
         if (cancelled) return null;
         if (!response.ok) throw new Error(`Failed to fetch messages: ${response.status}`);

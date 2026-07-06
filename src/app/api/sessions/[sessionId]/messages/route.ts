@@ -17,9 +17,11 @@ import {
   getLocalActiveRun,
   getLocalSession,
   listLocalMessages,
+  listLocalRuns,
   readLocalSessionArtifacts,
   updateLocalRun,
 } from "@/lib/local/session-store";
+import { readSessionTrajectory } from "@/lib/local/trajectory";
 import {
   getActiveLocalRunBySessionId,
   killOrphanedAgentProcessGroup,
@@ -51,8 +53,10 @@ function isOlderThan(timestamp: string | null | undefined, thresholdMs: number):
   return Date.now() - parsed > thresholdMs;
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams): Promise<Response> {
+export async function GET(request: NextRequest, { params }: RouteParams): Promise<Response> {
   const { sessionId } = await params;
+  const includeTrajectory =
+    request.nextUrl.searchParams.get("include_trajectory") === "1";
 
   // Local single-user mode: a URL can reference a session before it is persisted.
   // Materialize it on first read to avoid stale "Session not found" loops.
@@ -129,9 +133,23 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
 
   return NextResponse.json({
     messages,
-    // Tool-level activity is streamed live over SSE and preserved verbatim in
-    // <session>/transcripts/*.jsonl; it is no longer replayed after reload.
-    activityEvents: [],
+    // Live tool activity streams over SSE. The archived trajectory (parsed
+    // from <session>/transcripts/*.jsonl) is expensive-ish to build, so it is
+    // only included when the client asks — the UI requests it once per
+    // session load, not on every poll. The key is OMITTED otherwise: an
+    // empty array would wipe the client's loaded trajectory on each poll.
+    ...(includeTrajectory
+      ? {
+          activityEvents: readSessionTrajectory(
+            sessionId,
+            listLocalRuns(sessionId).map((run) => ({
+              runId: run.id,
+              turnId: run.user_message_id,
+              createdAt: run.created_at,
+            }))
+          ),
+        }
+      : {}),
     session: {
       sandbox_id: session.sandbox_id,
       agent_session_id: session.agent_session_id,
