@@ -3,7 +3,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { normalizeAttachmentExtension, resolveAttachmentContentType } from "@/lib/chat-attachments";
 import { ensureLocalSessionLayout } from "@/lib/local/config";
-import { getLocalSession } from "@/lib/local/db";
+import { getLocalSession } from "@/lib/local/session-store";
 import type { ImageAttachment } from "@/lib/types";
 
 const MAX_ATTACHMENTS = 12;

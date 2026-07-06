@@ -10,7 +10,7 @@ import {
   getLocalSession,
   type LocalSession,
   updateLocalSession,
-} from "@/lib/local/db";
+} from "@/lib/local/session-store";
 import {
   readLocalProjectChapters,
   serializeLocalChapters,
@@ -191,17 +191,17 @@ export async function createHandoffFromLocalSession(
     copyTextArtifact({
       sourcePath: path.join(sourcePaths.projectDir, "plan.md"),
       targetPath: path.join(targetPaths.projectDir, "plan.md"),
-      fallbackContent: sourceSession.plan_content,
+      fallbackContent: null,
     }),
     copyTextArtifact({
       sourcePath: path.join(sourcePaths.projectDir, "script.py"),
       targetPath: path.join(targetPaths.projectDir, "script.py"),
-      fallbackContent: sourceSession.script_content,
+      fallbackContent: null,
     }),
     copyTextArtifact({
       sourcePath: path.join(sourcePaths.projectDir, "subtitles.srt"),
       targetPath: path.join(targetPaths.projectDir, "subtitles.srt"),
-      fallbackContent: sourceSession.subtitles_content,
+      fallbackContent: null,
     }),
     copyVideoArtifact({
       sourceVideoPath: sourceSession.video_path,
@@ -216,16 +216,8 @@ export async function createHandoffFromLocalSession(
 
   updateLocalSession(handoffSession.id, {
     title,
-    plan_content: planContent,
-    script_content: scriptContent,
-    subtitles_content: subtitlesContent,
     chapters,
-    ...(videoArtifact
-      ? {
-          video_path: videoArtifact.path,
-          last_video_url: videoArtifact.url,
-        }
-      : {}),
+    ...(videoArtifact ? { video_path: videoArtifact.path } : {}),
   });
 
   const nextSession = getLocalSession(handoffSession.id) ?? handoffSession;
@@ -278,16 +270,8 @@ export async function createHandoffFromSharedSnapshot(
 
   updateLocalSession(handoffSession.id, {
     title: `Handoff: ${stripHandoffPrefix(sourceTitle)}`,
-    plan_content: planContent,
-    script_content: scriptContent,
-    subtitles_content: subtitlesContent,
     chapters,
-    ...(videoArtifact
-      ? {
-          video_path: videoArtifact.path,
-          last_video_url: videoArtifact.url,
-        }
-      : {}),
+    ...(videoArtifact ? { video_path: videoArtifact.path } : {}),
   });
 
   const nextSession = getLocalSession(handoffSession.id) ?? handoffSession;

@@ -3,7 +3,9 @@ import {
   ensureLocalSessionLayout,
   getSessionIdFromSandboxId,
 } from "@/lib/local/config";
-import { getLocalSession, updateLocalSession } from "@/lib/local/db";
+import fsp from "node:fs/promises";
+import path from "node:path";
+import { getLocalSession } from "@/lib/local/session-store";
 import { readLocalProjectSubtitles } from "@/lib/local/subtitles";
 
 function subtitleResponse(content: string): Response {
@@ -37,8 +39,12 @@ export async function GET(request: NextRequest): Promise<Response> {
   const { projectDir } = ensureLocalSessionLayout(resolvedSessionId);
   const content = await readLocalProjectSubtitles(projectDir);
   if (content?.trim()) {
-    if (content !== session.subtitles_content) {
-      updateLocalSession(resolvedSessionId, { subtitles_content: content });
+    // Cache the derived subtitles as a plain project file (replaces the old
+    // subtitles_content DB column).
+    const cachePath = path.join(projectDir, "subtitles.srt");
+    const cached = await fsp.readFile(cachePath, "utf8").catch(() => null);
+    if (content !== cached) {
+      await fsp.writeFile(cachePath, content, "utf8").catch(() => {});
     }
     return subtitleResponse(content);
   }

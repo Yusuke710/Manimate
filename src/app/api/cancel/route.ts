@@ -4,7 +4,7 @@ import {
   getLocalRun,
   insertLocalMessage,
   updateLocalRun,
-} from "@/lib/local/db";
+} from "@/lib/local/session-store";
 import { cancelLocalRunProcess } from "@/lib/local/runtime";
 
 interface CancelRequest {
@@ -32,10 +32,10 @@ export async function POST(request: NextRequest): Promise<Response> {
       pid: Number.isInteger(body.command_pid) ? body.command_pid : null,
     });
 
-    if (result.runId) {
-      const run = getLocalRun(result.runId);
+    if (result.runId && sessionId) {
+      const run = getLocalRun(sessionId, result.runId);
       if (run && (run.status === "queued" || run.status === "running")) {
-        updateLocalRun(result.runId, {
+        updateLocalRun(sessionId, result.runId, {
           status: "canceled",
           finished_at: new Date().toISOString(),
           error_message: "Stopped by user",

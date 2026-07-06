@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getLocalSession,
-} from "@/lib/local/db";
+} from "@/lib/local/session-store";
 import { createHandoffFromLocalSession } from "@/lib/local/handoff";
 import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
 import { isValidVoiceId } from "@/lib/voices";

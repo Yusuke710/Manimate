@@ -17,7 +17,7 @@ async function loadCloudSyncModules(root: string) {
 
   const store = await import("@/lib/local/local-config-store");
   const config = await import("@/lib/local/cloud-sync-config");
-  const db = await import("@/lib/local/db");
+  const db = await import("@/lib/local/session-store");
   const cloudSync = await import("@/lib/local/cloud-sync");
 
   return { store, config, db, cloudSync };
@@ -91,21 +91,41 @@ describe("queueLocalCloudSync", () => {
       });
 
       let capturedSnapshot: { session?: { voice_id?: unknown } } | null = null;
+      const uploadedUrls: string[] = [];
       const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         if (url === "https://www.manimate.ai/api/local-sync/uploads") {
-          return new Response(JSON.stringify({ error: "Not Found" }), {
-            status: 404,
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({
+              session_id: session.id,
+              target_user_id: "user-1",
+              attachments: [],
+              video: {
+                storage_path: "sessions/test/video.mp4",
+                upload_url: "https://storage.test/video.mp4",
+                headers: { "Content-Type": "video/mp4" },
+              },
+              thumbnail: {
+                storage_path: "sessions/test/thumbnail.jpg",
+                upload_url: "https://storage.test/thumbnail.jpg",
+                headers: { "Content-Type": "image/jpeg" },
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (url.startsWith("https://storage.test/")) {
+          expect(init?.method).toBe("PUT");
+          uploadedUrls.push(url);
+          return new Response(null, { status: 200 });
         }
 
         if (url === "https://www.manimate.ai/api/local-sync/sessions") {
-          expect(init?.body).toBeInstanceOf(FormData);
-          const snapshotRaw = (init?.body as FormData).get("snapshot");
-          capturedSnapshot = JSON.parse(String(snapshotRaw)) as {
-            session?: { voice_id?: unknown };
+          const body = JSON.parse(String(init?.body)) as {
+            snapshot?: { session?: { voice_id?: unknown } };
           };
+          capturedSnapshot = body.snapshot ?? null;
           return new Response(JSON.stringify({ public_video_url: "https://manimate.ai/v/test" }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
@@ -123,6 +143,10 @@ describe("queueLocalCloudSync", () => {
         "synced",
       );
 
+      expect(uploadedUrls).toEqual([
+        "https://storage.test/video.mp4",
+        "https://storage.test/thumbnail.jpg",
+      ]);
       expect(capturedSnapshot?.session?.voice_id).toBeNull();
       expect(db.getLocalSession(session.id)).toMatchObject({
         voice_id: "af_heart",

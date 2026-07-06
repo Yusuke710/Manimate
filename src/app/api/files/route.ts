@@ -7,7 +7,7 @@ import {
   getSessionIdFromSandboxId,
   resolveSessionFilePath,
 } from "@/lib/local/config";
-import { getLocalSession } from "@/lib/local/db";
+import { getLocalSession } from "@/lib/local/session-store";
 
 const MIME_BY_EXT: Record<string, { mime: string; binary: boolean }> = {
   ".py": { mime: "text/x-python", binary: false },

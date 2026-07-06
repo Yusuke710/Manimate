@@ -16,17 +16,10 @@ interface SyncedFeedbackMessage {
   };
 }
 
-interface SyncedFeedbackActivityEvent {
-  type: string;
-  payload?: {
-    session_number?: number;
-  };
-}
-
 interface CapturedCloudSnapshot {
   session: Record<string, unknown>;
   messages: SyncedFeedbackMessage[];
-  activity_events: SyncedFeedbackActivityEvent[];
+  activity_events: unknown[];
 }
 
 async function loadModules(root: string) {
@@ -36,7 +29,7 @@ async function loadModules(root: string) {
   vi.resetModules();
 
   const store = await import("@/lib/local/local-config-store");
-  const db = await import("@/lib/local/db");
+  const db = await import("@/lib/local/session-store");
   const cloudSync = await import("@/lib/local/cloud-sync");
   const feedbackRoute = await import("@/app/api/sessions/[sessionId]/feedback/route");
   const messagesRoute = await import("@/app/api/sessions/[sessionId]/messages/route");
@@ -100,11 +93,6 @@ describe("session feedback", () => {
         role: "user",
         content: "Animate a parabola.",
       });
-      db.insertLocalActivityEvent({
-        session_id: firstSession.id,
-        type: "progress",
-        message: "Running Manimate...",
-      });
 
       const feedbackResponse = await feedbackRoute.POST(
         new NextRequest(`http://localhost/api/sessions/${firstSession.id}/feedback`, {
@@ -137,17 +125,6 @@ describe("session feedback", () => {
         },
       });
 
-      const persistedActivity = db.listLocalActivityEvents(firstSession.id);
-      expect(persistedActivity).toHaveLength(2);
-      expect(persistedActivity[1]).toMatchObject({
-        type: "feedback_submitted",
-        message: "Library feedback submitted for Session #1",
-        payload: {
-          kind: "session_feedback",
-          session_number: 1,
-        },
-      });
-
       const transcriptResponse = await messagesRoute.GET(
         new NextRequest(`http://localhost/api/sessions/${firstSession.id}/messages`),
         {
@@ -161,11 +138,8 @@ describe("session feedback", () => {
       expect(transcriptPayload.messages[0]).toMatchObject({
         content: "Animate a parabola.",
       });
-      expect(transcriptPayload.activityEvents).toHaveLength(1);
-      expect(transcriptPayload.activityEvents[0]).toMatchObject({
-        type: "progress",
-        message: "Running Manimate...",
-      });
+      // Tool-level activity is SSE-only now; history replays messages only.
+      expect(transcriptPayload.activityEvents).toEqual([]);
     } finally {
       fs.rmSync(localRoot, { recursive: true, force: true });
     }
@@ -202,10 +176,16 @@ describe("session feedback", () => {
       const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         if (url === "https://www.manimate.ai/api/local-sync/uploads") {
-          return new Response(JSON.stringify({ error: "Not Found" }), {
-            status: 404,
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({
+              session_id: session.id,
+              target_user_id: "user-1",
+              attachments: [],
+              video: null,
+              thumbnail: null,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
         }
 
         if (url === "https://www.manimate.ai/api/local-sync/sessions") {
@@ -213,9 +193,8 @@ describe("session feedback", () => {
           expect(init?.headers).toMatchObject({
             Authorization: "Bearer token-123",
           });
-          expect(init?.body).toBeInstanceOf(FormData);
-          const snapshotRaw = (init?.body as FormData).get("snapshot");
-          capturedSnapshot = JSON.parse(String(snapshotRaw)) as CapturedCloudSnapshot;
+          const body = JSON.parse(String(init?.body)) as { snapshot?: CapturedCloudSnapshot };
+          capturedSnapshot = body.snapshot ?? null;
           return new Response(JSON.stringify({ public_video_url: null }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
@@ -247,13 +226,9 @@ describe("session feedback", () => {
             message.content.includes("Library feedback for Session #1"),
         )
       ).toBe(true);
-      expect(
-        capturedSnapshot?.activity_events.some(
-          (event) =>
-            event.type === "feedback_submitted" &&
-            event.payload?.session_number === 1,
-        )
-      ).toBe(true);
+      // Feedback reaches the hosted mirror through the message metadata; the
+      // wire format keeps activity_events as an (empty) key.
+      expect(capturedSnapshot?.activity_events).toEqual([]);
     } finally {
       fs.rmSync(localRoot, { recursive: true, force: true });
     }

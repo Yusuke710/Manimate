@@ -11,7 +11,7 @@ async function loadHandoffModules() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-handoff-"));
   process.env.MANIMATE_LOCAL_ROOT = root;
   vi.resetModules();
-  const db = await import("@/lib/local/db");
+  const db = await import("@/lib/local/session-store");
   const handoff = await import("@/lib/local/handoff");
   return { db, handoff };
 }

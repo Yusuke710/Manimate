@@ -3,7 +3,7 @@ import {
   ensureLocalSessionLayout,
   getSessionIdFromSandboxId,
 } from "@/lib/local/config";
-import { getLocalSession, updateLocalSession } from "@/lib/local/db";
+import { getLocalSession, updateLocalSession } from "@/lib/local/session-store";
 import {
   parseStoredLocalChapters,
   readLocalProjectChapters,

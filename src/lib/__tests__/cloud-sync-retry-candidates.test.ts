@@ -9,7 +9,7 @@ const AUTH_ERROR_MESSAGE = "Cloud sync is no longer authorized. Reopen Manimate 
 async function loadDbModule(root: string) {
   process.env.MANIMATE_LOCAL_ROOT = root;
   vi.resetModules();
-  return import("@/lib/local/db");
+  return import("@/lib/local/session-store");
 }
 
 afterEach(() => {

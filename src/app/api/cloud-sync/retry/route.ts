@@ -3,7 +3,7 @@ import { queueLocalCloudSync } from "@/lib/local/cloud-sync";
 import {
   getLocalSession,
   listLocalCloudSyncRetryCandidates,
-} from "@/lib/local/db";
+} from "@/lib/local/session-store";
 
 export async function POST(request: NextRequest): Promise<Response> {
   let sessionId: string | null = null;

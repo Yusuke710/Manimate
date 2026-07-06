@@ -9,7 +9,7 @@ import {
   createLocalSession,
   getLocalSession,
   updateLocalSession,
-} from "@/lib/local/db";
+} from "@/lib/local/session-store";
 
 type ToolGenerateBody = {
   prompt?: string;

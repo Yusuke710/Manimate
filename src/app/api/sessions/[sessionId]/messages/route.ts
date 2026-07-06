@@ -11,19 +11,15 @@ import {
   ensureLocalSessionLayout,
   localFileToApiUrl,
 } from "@/lib/local/config";
+import { isSessionFeedbackMetadata } from "@/lib/local/feedback";
 import {
-  isSessionFeedbackActivityType,
-  isSessionFeedbackMetadata,
-} from "@/lib/local/feedback";
-import {
-  backfillLocalActivityTurnIds,
   createLocalSession,
   getLocalActiveRun,
   getLocalSession,
-  listLocalActivityEvents,
   listLocalMessages,
+  readLocalSessionArtifacts,
   updateLocalRun,
-} from "@/lib/local/db";
+} from "@/lib/local/session-store";
 import {
   getActiveLocalRunBySessionId,
   killOrphanedAgentProcessGroup,
@@ -100,7 +96,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
       if (activeRun.pid) {
         killOrphanedAgentProcessGroup(activeRun.pid);
       }
-      updateLocalRun(activeRun.id, {
+      updateLocalRun(sessionId, activeRun.id, {
         status: "canceled",
         finished_at: new Date().toISOString(),
         error_message: "Run was interrupted before completion",
@@ -109,11 +105,6 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     }
   }
 
-  backfillLocalActivityTurnIds(sessionId);
-  const activityEvents = listLocalActivityEvents(sessionId).filter(
-    (event) => !isSessionFeedbackActivityType(event.type)
-  );
-
   let videoUrl = session.last_video_url;
   if (!videoUrl && session.video_path) {
     const stat = await fsp.stat(session.video_path).catch(() => null);
@@ -121,16 +112,20 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     videoUrl = localFileToApiUrl(sessionId, session.video_path, version);
   }
 
+  const artifacts = readLocalSessionArtifacts(sessionId);
+
   return NextResponse.json({
     messages,
-    activityEvents,
+    // Tool-level activity is streamed live over SSE and preserved verbatim in
+    // <session>/transcripts/*.jsonl; it is no longer replayed after reload.
+    activityEvents: [],
     session: {
       sandbox_id: session.sandbox_id,
       agent_session_id: session.agent_session_id,
       last_video_url: videoUrl,
-      plan_content: session.plan_content,
-      script_content: session.script_content,
-      subtitles_content: session.subtitles_content,
+      plan_content: artifacts.plan_content,
+      script_content: artifacts.script_content,
+      subtitles_content: artifacts.subtitles_content,
       voice_id: session.voice_id,
       model: session.model,
       aspect_ratio: session.aspect_ratio,

@@ -5,15 +5,14 @@
  *
  * Serves the pre-generated thumbnail.jpg from the session directory.
  * Thumbnails are generated at video completion time (chat.ts) using ffmpeg's
- * `thumbnail` filter. This route falls back to lazy generation for older
- * sessions that predate the push-based generation.
+ * `thumbnail` filter. This route never generates thumbnails on read.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "node:fs";
-import { getLocalSession } from "@/lib/local/db";
+import { getLocalSession } from "@/lib/local/session-store";
 import { getLocalSessionPaths } from "@/lib/local/config";
-import { ensureThumbnail } from "@/lib/local/thumbnail";
+import { getExistingThumbnailPath } from "@/lib/local/thumbnail";
 
 export async function GET(request: NextRequest): Promise<Response> {
   const sessionId = request.nextUrl.searchParams.get("session_id");
@@ -23,7 +22,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   if (!session) return new Response(null, { status: 404 });
 
   const { sessionRoot } = getLocalSessionPaths(sessionId);
-  const thumbPath = await ensureThumbnail(sessionRoot, session.video_path);
+  const thumbPath = getExistingThumbnailPath(sessionRoot);
   if (!thumbPath) return new Response(null, { status: 404 });
 
   try {

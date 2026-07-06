@@ -5,7 +5,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getLocalSession } from "@/lib/local/db";
+import {
+  getLocalSession,
+  readLocalSessionArtifacts,
+} from "@/lib/local/session-store";
 
 interface RouteContext {
   params: Promise<{ sessionId: string }>;
@@ -25,5 +28,5 @@ export async function GET(
     );
   }
 
-  return NextResponse.json(session);
+  return NextResponse.json({ ...session, ...readLocalSessionArtifacts(sessionId) });
 }

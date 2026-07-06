@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queueLocalCloudSync } from "@/lib/local/cloud-sync";
 import {
-  buildSessionFeedbackActivityMessage,
   buildSessionFeedbackMessageContent,
   MAX_SESSION_FEEDBACK_LENGTH,
   normalizeSessionFeedbackContent,
-  SESSION_FEEDBACK_ACTIVITY_TYPE,
   SESSION_FEEDBACK_MESSAGE_KIND,
   SESSION_FEEDBACK_SOURCE_LIBRARY,
 } from "@/lib/local/feedback";
 import {
   getLocalSession,
-  insertLocalActivityEvent,
   insertLocalMessage,
-} from "@/lib/local/db";
+} from "@/lib/local/session-store";
 
 interface RouteContext {
   params: Promise<{ sessionId: string }>;
@@ -66,19 +63,11 @@ export async function POST(
     submitted_at: submittedAt,
   };
 
-  const messageId = insertLocalMessage({
+  insertLocalMessage({
     session_id: session.id,
     role: "user",
     content: buildSessionFeedbackMessageContent(session.session_number, feedbackText),
     metadata: feedbackMetadata,
-  });
-
-  insertLocalActivityEvent({
-    session_id: session.id,
-    type: SESSION_FEEDBACK_ACTIVITY_TYPE,
-    turn_id: messageId,
-    message: buildSessionFeedbackActivityMessage(session.session_number),
-    payload: feedbackMetadata,
   });
 
   queueLocalCloudSync(session.id);

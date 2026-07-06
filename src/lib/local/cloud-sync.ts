@@ -12,11 +12,11 @@ import {
 } from "@/lib/local/cloud-sync-policy";
 import {
   getLocalSession,
-  listLocalActivityEvents,
   listLocalMessages,
   listLocalRuns,
+  readLocalSessionArtifacts,
   updateLocalSession,
-} from "@/lib/local/db";
+} from "@/lib/local/session-store";
 import { ensureThumbnail } from "@/lib/local/thumbnail";
 
 type CloudSyncAttachment = {
@@ -31,11 +31,15 @@ type CloudSyncAttachment = {
 type CloudSyncSession = Omit<
   NonNullable<ReturnType<typeof getLocalSession>>,
   "session_number"
->;
+> &
+  ReturnType<typeof readLocalSessionArtifacts>;
 
 type CloudSyncPayload = {
   version: 1;
-  activity_events: ReturnType<typeof listLocalActivityEvents>;
+  // Tool-level activity is no longer persisted locally (the raw CLI transcript
+  // in <session>/transcripts/ is the trace record); the key stays for the
+  // hosted server's wire format.
+  activity_events: never[];
   attachments: CloudSyncAttachment[];
   messages: ReturnType<typeof listLocalMessages>;
   runs: ReturnType<typeof listLocalRuns>;
@@ -217,7 +221,12 @@ function normalizeCloudMirrorVoiceId(voiceId: string | null): string | null {
 function toCloudSyncSession(
   session: NonNullable<ReturnType<typeof getLocalSession>>
 ): CloudSyncSession {
-  const cloudSession = { ...session };
+  const cloudSession = {
+    ...session,
+    // Artifact content lives in project files locally; the hosted mirror
+    // still receives it inline (wire format v1).
+    ...readLocalSessionArtifacts(session.id),
+  };
   delete (cloudSession as { session_number?: number }).session_number;
   cloudSession.voice_id = normalizeCloudMirrorVoiceId(session.voice_id);
   return cloudSession;
@@ -483,7 +492,7 @@ async function syncLocalSessionToCloud(sessionId: string): Promise<void> {
       session,
       messages: listLocalMessages(sessionId),
       runs: listLocalRuns(sessionId),
-      activity_events: listLocalActivityEvents(sessionId),
+      activity_events: [],
       attachments: [],
     });
 

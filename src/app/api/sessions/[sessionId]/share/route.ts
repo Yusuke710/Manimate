@@ -7,7 +7,7 @@ import {
 import {
   getLocalSession,
   type LocalSession,
-} from "@/lib/local/db";
+} from "@/lib/local/session-store";
 
 interface RouteContext {
   params: Promise<{ sessionId: string }>;

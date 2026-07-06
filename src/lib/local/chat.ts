@@ -16,12 +16,12 @@ import {
   createLocalSession,
   createLocalRun,
   getLocalSession,
-  insertLocalActivityEvent,
   insertLocalMessage,
   listLocalMessages,
   updateLocalRun,
   updateLocalSession,
-} from "@/lib/local/db";
+} from "@/lib/local/session-store";
+import { copyAgentTranscript } from "@/lib/local/transcripts";
 import { queueLocalCloudSync } from "@/lib/local/cloud-sync";
 import { isSessionFeedbackMetadata } from "@/lib/local/feedback";
 import {
@@ -313,25 +313,8 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
     let sandboxId: string | null = null;
     let agentSessionId = "";
     let modelForRun = DEFAULT_MODEL;
-    let currentTurnId: string | null = null;
     let artifactSnapshotInterval: ReturnType<typeof setInterval> | null = null;
     let runHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
-
-    const persistActivity = async (
-      type: string,
-      message: string,
-      payload?: Record<string, unknown>
-    ) => {
-      if (!sessionId) return;
-      insertLocalActivityEvent({
-        session_id: sessionId,
-        run_id: runId,
-        turn_id: currentTurnId,
-        type,
-        message,
-        payload: payload ?? null,
-      });
-    };
 
     try {
       const body = (await request.json()) as Partial<LocalChatRequest>;
@@ -475,12 +458,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         content: rawPrompt,
         metadata: Object.keys(userMessageMetadata).length > 0 ? userMessageMetadata : null,
       });
-      currentTurnId = userMessageId;
 
       const run = createLocalRun({
         session_id: sessionId,
         user_message_id: userMessageId,
-        sandbox_id: sandboxId,
         agent_session_id: resumeSessionId,
       });
       runId = run.id;
@@ -494,9 +475,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         tools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
         sandbox_id: sandboxId,
         agent_session_id: resumeSessionId || undefined,
-      });
-      await persistActivity("system_init", initMessage, {
-        model: modelForRun,
       });
 
       const promptImages: Array<{ path: string; originalName: string }> = [];
@@ -571,8 +549,12 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       });
 
       const preRunVideo = await detectVideoFile(projectDir);
-      let streamedPlanContent: string | null = session.plan_content;
-      let streamedScriptContent: string | null = session.script_content;
+      let streamedPlanContent: string | null = await readTextFileIfExists(
+        path.join(projectDir, "plan.md")
+      );
+      let streamedScriptContent: string | null = await readTextFileIfExists(
+        path.join(projectDir, "script.py")
+      );
 
       const syncArtifactSnapshot = async () => {
         if (!sessionId) return;
@@ -589,11 +571,9 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         streamedPlanContent = nextPlanContent;
         streamedScriptContent = nextScriptContent;
         const midRunPlanTitle = nextPlanContent ? extractPlanTitle(nextPlanContent) : null;
-        updateLocalSession(sessionId, {
-          plan_content: nextPlanContent,
-          script_content: nextScriptContent,
-          ...(midRunPlanTitle ? { title: midRunPlanTitle } : {}),
-        });
+        if (midRunPlanTitle) {
+          updateLocalSession(sessionId, { title: midRunPlanTitle });
+        }
         await sendEvent({
           type: "artifact_update",
           message: "Artifacts updated",
@@ -620,11 +600,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       const trackedRun = getActiveLocalRunBySandboxId(sandboxId);
 
       const now = new Date().toISOString();
-      updateLocalRun(runId, {
+      updateLocalRun(sessionId, runId, {
         status: "running",
         started_at: now,
         last_event_at: now,
-        sandbox_id: sandboxId,
         agent_session_id: resumeSessionId,
         pid: process.pid ?? null,
       });
@@ -633,9 +612,12 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       // (e.g. a manim render). Keep last_event_at fresh while the process is
       // alive so the stale-run reaper in the messages route never cancels a
       // run that is still working.
+      const heartbeatSessionId = sessionId;
       const heartbeatRunId = runId;
       runHeartbeatInterval = setInterval(() => {
-        updateLocalRun(heartbeatRunId, { last_event_at: new Date().toISOString() });
+        updateLocalRun(heartbeatSessionId, heartbeatRunId, {
+          last_event_at: new Date().toISOString(),
+        });
       }, 15_000);
 
       let state: ExecutionState = "planning";
@@ -646,7 +628,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         sandbox_id: sandboxId,
         run_id: runId,
       });
-      await persistActivity("progress", "Running Manimate...");
 
       let ndjsonBuffer = "";
       let rawStdoutTail = "";
@@ -679,7 +660,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           sandbox_id: sandboxId || undefined,
           agent_session_id: agentSessionId || undefined,
         });
-        await persistActivity("progress", stateMessage);
       };
 
       const emitToolUse = async (
@@ -696,10 +676,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           sandbox_id: sandboxId || undefined,
           agent_session_id: agentSessionId || undefined,
         });
-        await persistActivity("tool_use", message, {
-          tool_name: toolName,
-          tool_input: toolInput,
-        });
       };
 
       const emitToolResult = async (
@@ -714,10 +690,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           is_error: isError,
           sandbox_id: sandboxId || undefined,
           agent_session_id: agentSessionId || undefined,
-        });
-        await persistActivity("tool_result", message, {
-          tool_result: toolResult,
-          is_error: isError,
         });
       };
 
@@ -758,7 +730,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   sandbox_id: sandboxId || undefined,
                   agent_session_id: agentSessionId || undefined,
                 });
-                await persistActivity("assistant_text", obj.message);
               }
 
               if (itemType === "agent_message" && typeof item?.text === "string") {
@@ -769,7 +740,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   sandbox_id: sandboxId || undefined,
                   agent_session_id: agentSessionId || undefined,
                 });
-                await persistActivity("assistant_text", item.text);
               }
 
               if (itemType === "command_execution") {
@@ -843,7 +813,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                   sandbox_id: sandboxId || undefined,
                   agent_session_id: agentSessionId || undefined,
                 });
-                await persistActivity("assistant_text", block.text);
               }
 
               if (messageType === "assistant" && block.type === "tool_use") {
@@ -885,9 +854,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
               progress,
               sandbox_id: sandboxId || undefined,
               agent_session_id: agentSessionId || undefined,
-            });
-            await persistActivity("progress", `Rendering video... ${progress}%`, {
-              progress,
             });
           }
         });
@@ -940,6 +906,13 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       const planContent = await readTextFileIfExists(path.join(projectDir, "plan.md"));
       const scriptContent = await readTextFileIfExists(path.join(projectDir, "script.py"));
       const subtitlesContent = await readLocalProjectSubtitles(projectDir);
+      // subtitles.srt in the project dir is the canonical on-disk cache of the
+      // derived subtitles (replaces the old subtitles_content DB column).
+      if (subtitlesContent?.trim()) {
+        await fsp
+          .writeFile(path.join(projectDir, "subtitles.srt"), subtitlesContent, "utf8")
+          .catch(() => {});
+      }
 
       const postRunVideo = await detectVideoFile(projectDir);
       const videoChanged = Boolean(
@@ -965,28 +938,32 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
 
       const finishedAt = new Date().toISOString();
 
+      // Preserve the exact agentic trace before the CLI's own copy expires
+      // (Claude Code auto-cleans transcripts after ~30 days).
+      await copyAgentTranscript({
+        sessionId,
+        runId,
+        model: modelForRun,
+        cwd: projectDir,
+        agentSessionId: agentSessionId || session.agent_session_id || "",
+      });
+
       if (wasCanceled) {
-        updateLocalRun(runId, {
+        updateLocalRun(sessionId, runId, {
           status: "canceled",
           finished_at: finishedAt,
-          sandbox_id: sandboxId,
           agent_session_id: agentSessionId || session.agent_session_id,
           error_message: "Stopped by user",
         });
         const canceledPlanTitle = planContent ? extractPlanTitle(planContent) : null;
         updateLocalSession(sessionId, {
           status: "active",
-          sandbox_id: sandboxId,
           agent_session_id: agentSessionId || session.agent_session_id,
           model: modelForRun,
           ...(canceledPlanTitle ? { title: canceledPlanTitle } : {}),
-          plan_content: planContent,
-          script_content: scriptContent,
-          subtitles_content: subtitlesContent,
           ...(videoChanged && postRunVideo
             ? {
                 video_path: postRunVideo.path,
-                last_video_url: videoUrl,
                 chapters: serializedChapters,
               }
             : {}),
@@ -1009,9 +986,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           run_id: runId,
           video_url: videoUrl || undefined,
         });
-        await persistActivity("complete", "Stopped by user", {
-          terminal_status: "canceled",
-        });
         return;
       }
 
@@ -1022,23 +996,18 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           stderrTail.trim(),
           modelForRun
         );
-        updateLocalRun(runId, {
+        updateLocalRun(sessionId, runId, {
           status: "failed",
           finished_at: finishedAt,
-          sandbox_id: sandboxId,
           agent_session_id: agentSessionId || session.agent_session_id,
           error_message: message,
         });
         const failedPlanTitle = planContent ? extractPlanTitle(planContent) : null;
         updateLocalSession(sessionId, {
           status: "active",
-          sandbox_id: sandboxId,
           agent_session_id: agentSessionId || session.agent_session_id,
           model: modelForRun,
           ...(failedPlanTitle ? { title: failedPlanTitle } : {}),
-          plan_content: planContent,
-          script_content: scriptContent,
-          subtitles_content: subtitlesContent,
         });
         await sendEvent({
           type: "artifact_update",
@@ -1055,7 +1024,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           sandbox_id: sandboxId,
           agent_session_id: agentSessionId || undefined,
         });
-        await persistActivity("error", message);
         return;
       }
 
@@ -1070,16 +1038,11 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       const planTitle = planContent ? extractPlanTitle(planContent) : null;
       updateLocalSession(sessionId, {
         status: "active",
-        sandbox_id: sandboxId,
         agent_session_id: agentSessionId || session.agent_session_id,
         model: modelForRun,
         ...(planTitle ? { title: planTitle } : {}),
-        plan_content: planContent,
-        script_content: scriptContent,
-        subtitles_content: subtitlesContent,
         chapters: videoChanged ? serializedChapters : session.chapters,
         video_path: videoChanged && postRunVideo ? postRunVideo.path : session.video_path,
-        last_video_url: videoUrl || session.last_video_url,
       });
       await sendEvent({
         type: "artifact_update",
@@ -1090,10 +1053,9 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         script_content: scriptContent,
       });
 
-      updateLocalRun(runId, {
+      updateLocalRun(sessionId, runId, {
         status: "completed",
         finished_at: finishedAt,
-        sandbox_id: sandboxId,
         agent_session_id: agentSessionId || session.agent_session_id,
         video_url: videoUrl,
       });
@@ -1108,19 +1070,14 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         run_id: runId,
         video_url: videoUrl || undefined,
       });
-      await persistActivity("complete", "Complete", {
-        ...(videoUrl ? { video_url: videoUrl } : {}),
-        terminal_status: "completed",
-      });
       queueLocalCloudSync(sessionId);
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : "An unexpected local-mode error occurred";
       const message = normalizeLocalAgentCliSetupError(modelForRun, rawMessage) || rawMessage;
-      if (runId) {
-        updateLocalRun(runId, {
+      if (sessionId && runId) {
+        updateLocalRun(sessionId, runId, {
           status: "failed",
           finished_at: new Date().toISOString(),
-          sandbox_id: sandboxId,
           agent_session_id: agentSessionId || null,
           error_message: message,
         });
@@ -1128,7 +1085,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       if (sessionId) {
         updateLocalSession(sessionId, {
           status: "active",
-          sandbox_id: sandboxId,
           agent_session_id: agentSessionId || null,
           model: modelForRun,
         });
@@ -1140,14 +1096,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         sandbox_id: sandboxId || undefined,
         agent_session_id: agentSessionId || undefined,
       });
-      if (sessionId) {
-        insertLocalActivityEvent({
-          session_id: sessionId,
-          run_id: runId,
-          type: "error",
-          message,
-        });
-      }
     } finally {
       if (artifactSnapshotInterval) {
         clearInterval(artifactSnapshotInterval);

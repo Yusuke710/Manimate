@@ -17,7 +17,7 @@ vi.mock("@/lib/local/cloud-sync", () => ({
   queueLocalCloudSync,
 }));
 
-vi.mock("@/lib/local/db", () => ({
+vi.mock("@/lib/local/session-store", () => ({
   getLocalSession,
 }));
 
