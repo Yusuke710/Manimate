@@ -500,14 +500,12 @@ export function updateLocalSession(sessionId: string, updates: SessionUpdateInpu
         };
       }
     }
-    if (updates.chapters !== undefined) {
-      const chapters = parseChapters(updates.chapters);
-      if (data.video) {
-        data.video.chapters = chapters;
-      } else if (chapters) {
-        // Chapters can arrive before the video path is recorded (handoff).
-        data.video = { path: "project/video.mp4", version: null, chapters };
-      }
+    if (updates.chapters !== undefined && data.video) {
+      // Chapters only make sense attached to a video. Never fabricate a video
+      // entry for them: mid-run chapter caching (via /api/chapters polling)
+      // would otherwise mark videoless sessions as has_video. Callers that
+      // set both keys in one update are safe — video_path is applied above.
+      data.video.chapters = parseChapters(updates.chapters);
     }
 
     if (updates.cloud_sync_status !== undefined) data.cloud.status = updates.cloud_sync_status;

@@ -707,6 +707,12 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           for (const obj of parsed.lines as Array<Record<string, unknown>>) {
             const nextAgentSessionId = getAgentSessionIdFromEvent(obj);
             if (nextAgentSessionId) {
+              // Persist immediately (not just at run end): if this handler
+              // dies with the server, the stale-run reaper needs the agent
+              // session id to preserve the CLI transcript.
+              if (nextAgentSessionId !== agentSessionId && sessionId && runId) {
+                updateLocalRun(sessionId, runId, { agent_session_id: nextAgentSessionId });
+              }
               agentSessionId = nextAgentSessionId;
             }
 

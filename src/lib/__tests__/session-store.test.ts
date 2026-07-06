@@ -119,6 +119,26 @@ describe("session-store", () => {
     }
   });
 
+  it("never fabricates a video entry when chapters arrive before a video", async () => {
+    const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-store-chapters-"));
+
+    try {
+      const store = await loadStore(localRoot);
+      const session = store.createLocalSession({ model: "codex" });
+
+      // Mid-run chapter caching (via /api/chapters) on a videoless session.
+      store.updateLocalSession(session.id, {
+        chapters: JSON.stringify([{ name: "Scene1", start: 0, duration: 10 }]),
+      });
+
+      const reloaded = store.getLocalSession(session.id);
+      expect(reloaded?.video_path).toBeNull();
+      expect(store.listLocalSessionSummaries()[0].has_video).toBe(false);
+    } finally {
+      fs.rmSync(localRoot, { recursive: true, force: true });
+    }
+  });
+
   it("assigns monotonically increasing session numbers", async () => {
     const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-store-numbers-"));
 

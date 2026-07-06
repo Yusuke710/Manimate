@@ -24,6 +24,7 @@ import {
   getActiveLocalRunBySessionId,
   killOrphanedAgentProcessGroup,
 } from "@/lib/local/runtime";
+import { copyAgentTranscript } from "@/lib/local/transcripts";
 
 type MessageMetadata = {
   images?: Array<{
@@ -95,6 +96,18 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
       // server restart). Kill it so it doesn't keep working in the background.
       if (activeRun.pid) {
         killOrphanedAgentProcessGroup(activeRun.pid);
+      }
+      // The chat handler that would normally archive the CLI transcript died
+      // with the server; preserve the trace here before closing the run out.
+      if (activeRun.agent_session_id) {
+        const { projectDir } = ensureLocalSessionLayout(sessionId);
+        await copyAgentTranscript({
+          sessionId,
+          runId: activeRun.id,
+          model: session.model,
+          cwd: projectDir,
+          agentSessionId: activeRun.agent_session_id,
+        });
       }
       updateLocalRun(sessionId, activeRun.id, {
         status: "canceled",
