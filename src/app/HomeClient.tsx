@@ -74,6 +74,39 @@ function usePreferredModel() {
   return [model, set] as const;
 }
 
+/**
+ * Read-only model indicator for sessions that already have a conversation.
+ * The model is fixed per session (switch via Handoff), so this is a fact
+ * badge, not a control: no button semantics, no chevron, muted styling —
+ * deliberately distinct from a disabled selector, which would read as a bug.
+ */
+function ModelBadge({ model }: { model: string }) {
+  return (
+    <div
+      title={`This session runs on ${getModelDisplayLabel(model)}. The model is fixed per session — use Handoff to continue with another model in a new session.`}
+      style={{
+        display: "flex", alignItems: "center", gap: 5,
+        background: "var(--bg-subtle, var(--bg-white))",
+        border: "1px dashed var(--border-main)",
+        borderRadius: 20,
+        padding: "4px 10px",
+        cursor: "default",
+        fontFamily: "var(--font)",
+      }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
+      </svg>
+      <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)" }}>
+        {getModelDisplayLabel(model)}
+      </span>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+    </div>
+  );
+}
+
 function ModelSelector({ model, onChange, disabled }: { model: string; onChange: (model: string) => void; disabled?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -925,9 +958,11 @@ function ComposerSettingsControls({
 
   const controls = (
     <>
-      {/* The model is fixed per session (switch via Handoff), so mid-session
-          the picker disappears entirely — only voice and aspect ratio remain. */}
-      {!modelLocked && <ModelSelector model={model} onChange={onModelChange} disabled={disabled} />}
+      {/* The model is fixed per session (switch via Handoff): pickable on the
+          first turn, then shown as a read-only fact badge. */}
+      {modelLocked
+        ? <ModelBadge model={model} />
+        : <ModelSelector model={model} onChange={onModelChange} disabled={disabled} />}
       <VoiceSelector voice={voice} onChange={onVoiceChange} disabled={disabled} />
       <AspectRatioSelector ratio={aspectRatio} onChange={onAspectRatioChange} disabled={disabled} />
     </>
