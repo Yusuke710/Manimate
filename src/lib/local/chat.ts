@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { readConfiguredCliModels } from "@/lib/local/cli-models";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { parseNDJSONChunk } from "@/lib/ndjson-parser";
@@ -283,6 +284,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
 
   let clientAborted = false;
   let activeSessionId: string | null = null;
+  let activeTurnId: string | undefined;
   request.signal.addEventListener("abort", async () => {
     clientAborted = true;
     try {
@@ -298,7 +300,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       const payload = activeSessionId && !event.session_id
         ? { ...event, session_id: activeSessionId }
         : event;
-      await writer.write(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      await writer.write(encoder.encode(`data: ${JSON.stringify({ ...payload, turn_id: activeTurnId })}\n\n`));
     } catch {
       clientAborted = true;
     }
@@ -458,7 +460,8 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           updateLocalSession(sessionId, { title: truncated });
         }
       }
-      const userMessageMetadata: Record<string, unknown> = {};
+      const configuredCliModel = readConfiguredCliModels().find(entry => entry.id === modelForRun);
+      const userMessageMetadata: Record<string, unknown> = { cli_model: configuredCliModel?.configuredModel || "CLI default" };
       if (hasVisibleImages) userMessageMetadata.images = visibleRequestImages;
 
       const userMessageId = insertLocalMessage({
@@ -468,6 +471,8 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         metadata: Object.keys(userMessageMetadata).length > 0 ? userMessageMetadata : null,
       });
 
+      activeTurnId = userMessageId;
+
       const run = createLocalRun({
         session_id: sessionId,
         user_message_id: userMessageId,
@@ -475,12 +480,12 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       });
       runId = run.id;
       const didResume = Boolean(resumeSessionId);
-      const initMessage = didResume ? "Manimate reconnected" : "Manimate initialized";
+      const initMessage = didResume ? "Manimate reconnected" : "Manimate connected";
 
       await sendEvent({
         type: "system_init",
-        message: initMessage,
-        model: modelForRun,
+        message: `${initMessage} · ${configuredCliModel?.configuredModel || "CLI default"}`,
+        model: configuredCliModel?.configuredModel || "CLI default",
         tools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
         sandbox_id: sandboxId,
         agent_session_id: resumeSessionId || undefined,
@@ -690,6 +695,12 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                 updateLocalRun(sessionId, runId, { agent_session_id: nextAgentSessionId });
               }
               agentSessionId = nextAgentSessionId;
+            }
+
+            // Claude resolves aliases such as opus to the actual model at init.
+            if (obj.type === "system" && obj.subtype === "init" && typeof obj.model === "string") {
+              const resolvedLabel = obj.model;
+              await sendEvent({ type: "system_init", message: `${initMessage} · ${resolvedLabel}`, model: resolvedLabel });
             }
 
             if (obj.type === "result" && typeof obj.result === "string") {

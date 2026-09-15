@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { readConfiguredCliModels } from "@/lib/local/cli-models";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,16 +11,16 @@ import { getLocalSessionPaths } from "@/lib/local/config";
  *
  * This is a read-only, best-effort view over the Claude Code / Codex native
  * formats: unknown line shapes are skipped, text is truncated, and parses are
- * cached — transcripts are written once at run end and never change, so a
- * (path, size) key is sufficient. Nothing here is a second store of events;
- * the JSONL stays the single source of truth.
+ * cached by path, run start, and file size. Completed runs use their durable
+ * archives; active runs read the growing CLI transcript to recover live
+ * activity after refresh. Nothing here is a second store of events.
  */
 
 export interface TrajectoryEvent {
   id: number;
   run_id: string;
   turn_id: string | null;
-  type: "assistant_text" | "tool_use" | "tool_result";
+  type: "system_init" | "assistant_text" | "tool_use" | "tool_result";
   message: string;
   payload: Record<string, unknown> | null;
   created_at: string;
@@ -181,10 +182,12 @@ function parseTranscript(filePath: string, runId: string, fallbackTime: string):
     return [];
   }
 
-  const cached = trajectoryCache.get(filePath);
+  const cacheKey = `${filePath}:${fallbackTime}`;
+  const cached = trajectoryCache.get(cacheKey);
   if (cached && cached.size === stats.size) return cached.events;
 
   const events: RawEvent[] = [];
+  let detectedModel: string | null = null;
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, "utf8");
@@ -201,13 +204,26 @@ function parseTranscript(filePath: string, runId: string, fallbackTime: string):
     } catch {
       continue;
     }
+    // Resumed CLI archives contain the entire session. Exclude previous
+    // turns before applying the event limit, otherwise old history crowds
+    // out the current run and appears under the wrong user message.
+    if (typeof obj.timestamp === "string" &&
+        Date.parse(obj.timestamp) < Date.parse(fallbackTime)) continue;
+    const messageModel = (obj.message as { model?: unknown } | undefined)?.model;
+    const contextModel = obj.type === "turn_context" ? (obj.payload as { model?: unknown } | undefined)?.model : null;
+    const candidate = messageModel || contextModel;
+    if (!detectedModel && typeof candidate === "string" && candidate !== "<synthetic>") detectedModel = candidate;
     events.push(
       ...parseClaudeLine(obj, runId, fallbackTime),
       ...parseCodexLine(obj, runId, fallbackTime)
     );
   }
 
-  trajectoryCache.set(filePath, { size: stats.size, events });
+  if (detectedModel) events.unshift({
+    ...eventBase(runId, fallbackTime), type: "system_init",
+    message: "Manimate connected", payload: { model: detectedModel },
+  });
+  trajectoryCache.set(cacheKey, { size: stats.size, events });
   return events;
 }
 
@@ -218,20 +234,59 @@ function parseTranscript(filePath: string, runId: string, fallbackTime: string):
  */
 export function readSessionTrajectory(
   sessionId: string,
-  runs: Array<{ runId: string; turnId: string | null; createdAt: string }>
+  runs: Array<{ runId: string; turnId: string | null; createdAt: string; transcriptPath?: string }>
 ): TrajectoryEvent[] {
   const { sessionRoot } = getLocalSessionPaths(sessionId);
   const events: TrajectoryEvent[] = [];
   let id = 1;
 
   for (const run of runs) {
-    const filePath = path.join(sessionRoot, "transcripts", `${run.runId}.jsonl`);
+    const filePath = run.transcriptPath || path.join(sessionRoot, "transcripts", `${run.runId}.jsonl`);
     for (const event of parseTranscript(filePath, run.runId, run.createdAt)) {
       events.push({ ...event, id: id++, turn_id: run.turnId });
     }
   }
 
   return events;
+}
+
+/** Reconnect to an in-progress CLI transcript without creating an archive. */
+export async function readSessionDisplayTrajectory(
+  sessionId: string,
+  model: string,
+  runs: Array<{
+    runId: string;
+    turnId: string | null;
+    createdAt: string;
+    agentSessionId?: string | null;
+    active?: boolean;
+    cliModel?: string | null;
+  }>,
+): Promise<TrajectoryEvent[]> {
+  const { projectDir } = getLocalSessionPaths(sessionId);
+  const sources = await Promise.all(runs.map(async run => {
+    if (!run.active || !run.agentSessionId) return run;
+    const transcriptPath = model === "codex"
+      ? await findCodexTranscriptPath(run.agentSessionId)
+      : claudeTranscriptPath(projectDir, run.agentSessionId);
+    return { ...run, transcriptPath: transcriptPath || undefined };
+  }));
+  const events = readSessionTrajectory(sessionId, sources);
+  let id = 1;
+  return runs.flatMap((run, index) => {
+    const runEvents = events.filter(event => event.run_id === run.runId);
+    const detected = runEvents.find(event => event.type === "system_init")?.payload?.model;
+    const cliModel = typeof detected === "string" ? detected : run.cliModel
+      || (run.active ? readConfiguredCliModels().find(entry => entry.id === model)?.configuredModel : null)
+      || "CLI default";
+    const label = cliModel;
+    const connection: TrajectoryEvent = {
+      id: id++, run_id: run.runId, turn_id: run.turnId, created_at: run.createdAt,
+      type: "system_init", message: `${index === 0 ? "Manimate connected" : "Manimate reconnected"} · ${label}`,
+      payload: { model: label },
+    };
+    return [connection, ...runEvents.filter(event => event.type !== "system_init").map(event => ({ ...event, id: id++ }))];
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -39,7 +39,7 @@ import {
   updateLocalRun,
   type LocalSession,
 } from "@/lib/local/session-store";
-import { copyAgentTranscript, readSessionTrajectory } from "@/lib/local/trajectory";
+import { copyAgentTranscript, readSessionDisplayTrajectory } from "@/lib/local/trajectory";
 import {
   getActiveLocalRunBySessionId,
   killOrphanedAgentProcessGroup,
@@ -115,7 +115,8 @@ async function getMessages(request: NextRequest, sessionId: string): Promise<Res
     ensureLocalSessionLayout(session.id, { model: session.model });
   }
 
-  const messages = listLocalMessages(sessionId)
+  const storedMessages = listLocalMessages(sessionId);
+  const messages = storedMessages
     .filter((message) => !isSessionFeedbackMetadata(message.metadata))
     .map((message) => {
       const storedMetadata = (message.metadata || null) as MessageMetadata | null;
@@ -177,19 +178,21 @@ async function getMessages(request: NextRequest, sessionId: string): Promise<Res
 
   return NextResponse.json({
     messages,
-    // Live tool activity streams over SSE. The archived trajectory (parsed
-    // from <session>/transcripts/*.jsonl) is expensive-ish to build, so it is
-    // only included when the client asks — the UI requests it once per
-    // session load, not on every poll. The key is OMITTED otherwise: an
-    // empty array would wipe the client's loaded trajectory on each poll.
+    // The original tab receives SSE. Refreshed tabs request transcript
+    // activity on load and while reconnecting to an active run. Ordinary
+    // polls omit this key so they cannot wipe the live SSE activity.
     ...(includeTrajectory
       ? {
-          activityEvents: readSessionTrajectory(
+          activityEvents: await readSessionDisplayTrajectory(
             sessionId,
+            session.model,
             listLocalRuns(sessionId).map((run) => ({
               runId: run.id,
               turnId: run.user_message_id,
               createdAt: run.created_at,
+              agentSessionId: run.agent_session_id,
+              active: run.id === activeRun?.id,
+              cliModel: storedMessages.find(message => message.id === run.user_message_id)?.metadata?.cli_model as string | undefined,
             }))
           ),
         }

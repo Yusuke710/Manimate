@@ -389,7 +389,7 @@ describe("queueLocalCloudSync", () => {
         video_path: videoPath,
       });
 
-      let capturedSnapshot: { session?: { voice_id?: unknown } } | null = null;
+      const captured: { snapshot: { session?: { voice_id?: unknown } } | null } = { snapshot: null };
       const uploadedUrls: string[] = [];
       const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
@@ -424,7 +424,7 @@ describe("queueLocalCloudSync", () => {
           const body = JSON.parse(String(init?.body)) as {
             snapshot?: { session?: { voice_id?: unknown } };
           };
-          capturedSnapshot = body.snapshot ?? null;
+          captured.snapshot = body.snapshot ?? null;
           return new Response(JSON.stringify({ public_video_url: "https://manimate.ai/v/test" }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
@@ -446,7 +446,7 @@ describe("queueLocalCloudSync", () => {
         "https://storage.test/video.mp4",
         "https://storage.test/thumbnail.jpg",
       ]);
-      expect(capturedSnapshot?.session?.voice_id).toBeNull();
+      expect(captured.snapshot?.session?.voice_id).toBeNull();
       expect(db.getLocalSession(session.id)).toMatchObject({
         voice_id: "af_heart",
         cloud_sync_status: "synced",

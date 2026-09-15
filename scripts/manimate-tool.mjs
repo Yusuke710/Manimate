@@ -851,6 +851,10 @@ function buildLoopbackBaseUrl(protocol, host, port) {
   return `${protocol}//${host}:${port}`;
 }
 
+/**
+ * @param {{ preferredPort: number, reservedCloudPort?: number | null, restart?: boolean,
+ *   scanResults?: Array<{ port: number, status: string }> }} options
+ */
 export function chooseAutomaticOpenPort({ preferredPort, reservedCloudPort = null, restart = false, scanResults = [] }) {
   let firstFreePort = null;
   let firstExistingHealthyPort = null;

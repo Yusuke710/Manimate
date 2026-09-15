@@ -40,6 +40,7 @@ interface ChatState {
 }
 
 type ChatAction =
+  | { type: "RECONCILE_TURN"; from: string; to: string }
   | { type: "ADD_USER_MESSAGE"; message: Message }
   | { type: "ADD_ASSISTANT_MESSAGE"; message: Message }
   | { type: "UPDATE_ASSISTANT_MESSAGE"; id: string; content: string; isError?: boolean }
@@ -57,8 +58,18 @@ type ChatAction =
   | { type: "SET_SCRIPT_CONTENT"; content: string | null }
   | { type: "SET_MODEL"; model: string };
 
-function chatReducer(state: ChatState, action: ChatAction): ChatState {
+export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
+    case "RECONCILE_TURN":
+      return {
+        ...state,
+        messages: state.messages.flatMap(message => message.id !== action.from
+          ? [message]
+          : state.messages.some(other => other.id === action.to)
+            ? [] : [{ ...message, id: action.to }]),
+        activityEvents: state.activityEvents.map(event => event.turnId === action.from
+          ? { ...event, turnId: action.to } : event),
+      };
     case "ADD_USER_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
 
@@ -97,8 +108,15 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         agentSessionId: action.agentSessionId !== undefined ? action.agentSessionId : state.agentSessionId,
       };
 
-    case "ADD_ACTIVITY":
-      return { ...state, activityEvents: [...state.activityEvents, action.event] };
+    case "ADD_ACTIVITY": {
+      const existingInit = action.event.type === "system_init"
+        ? state.activityEvents.find(event => event.type === "system_init" && event.turnId === action.event.turnId)
+        : undefined;
+      return { ...state, activityEvents: existingInit
+        ? state.activityEvents.map(event => event === existingInit
+          ? { ...event, ...action.event, id: event.id, timestamp: event.timestamp } : event)
+        : [...state.activityEvents, action.event] };
+    }
 
     case "SET_VIDEO_URL": {
       // Dedup: same base URL without nonce bump → skip (prevents redundant reloads)
@@ -142,7 +160,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
   }
 }
 
-const initialState: ChatState = {
+export const initialState: ChatState = {
   messages: [],
   isLoading: false,
   isLoadingMessages: false,
@@ -345,9 +363,8 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
     dispatch({ type: "SET_LOADING_MESSAGES", isLoadingMessages: true });
 
     let cancelled = false;
-    // include_trajectory: replay archived tool activity (parsed from the
-    // session's transcripts/) once on load; the 2s/30s polls omit it and the
-    // live SSE stream appends new activity on top.
+    // Replay archived turns and the active CLI transcript on refresh.
+    // Reconnected runs keep polling activity until their final archive exists.
     fetch(`/api/sessions/${sessionId}/messages?include_trajectory=1`)
       .then(async (response) => {
         if (cancelled) return null;
@@ -400,7 +417,8 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
 
     const doRefetch = async (): Promise<boolean> => {
       try {
-        const response = await fetch(`/api/sessions/${sessionId}/messages`);
+        const includeTrajectory = Boolean(reconnectedRunIdRef.current) && !abortControllerRef.current;
+        const response = await fetch(`/api/sessions/${sessionId}/messages${includeTrajectory ? "?include_trajectory=1" : ""}`);
         if (!response.ok) return false;
 
         const data = (await response.json()) as SessionMessagesResponse;
@@ -530,7 +548,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   ) => {
     const currentSandboxId = sandboxIdRef.current;
     const currentAgentSessionId = agentSessionIdRef.current;
-    const turnId = crypto.randomUUID();
+    let turnId: string = crypto.randomUUID();
     const visibleFiles = images ?? [];
 
     const imagePreviewAttachments: ImageAttachment[] | undefined = visibleFiles.length > 0
@@ -649,6 +667,10 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
 
           try {
 
+            if (event.turn_id && event.turn_id !== turnId) {
+              dispatch({ type: "RECONCILE_TURN", from: turnId, to: event.turn_id });
+              turnId = event.turn_id;
+            }
             if (event.sandbox_id) dispatch({ type: "SET_SESSION", sandboxId: event.sandbox_id });
             if (event.agent_session_id) dispatch({ type: "SET_SESSION", agentSessionId: event.agent_session_id });
 

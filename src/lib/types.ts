@@ -10,6 +10,7 @@ export interface SSEEvent {
   state?: "planning" | "coding" | "rendering" | "complete" | "error";
   message: string;
   session_id?: string;
+  turn_id?: string;
   sandbox_id?: string;
   agent_session_id?: string;
   video_url?: string;

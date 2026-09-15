@@ -31,11 +31,15 @@ interface LightboxState {
 }
 
 // Merge messages and activities into a unified chronological timeline
-function buildTimeline(messages: Message[], activities: ActivityEvent[]): TimelineItem[] {
-  const assistantMessageContents = new Set<string>();
-  for (const msg of messages) {
-    if (msg.role === "assistant") {
-      assistantMessageContents.add(msg.content.trim().slice(0, 200));
+export function buildTimeline(messages: Message[], activities: ActivityEvent[]): TimelineItem[] {
+  const assistantContentsByTurn = new Map<string, Set<string>>();
+  let turnId = "__orphan__";
+  for (const message of messages) {
+    if (message.role === "user") turnId = message.id;
+    else {
+      const contents = assistantContentsByTurn.get(turnId) ?? new Set<string>();
+      contents.add(message.content.trim());
+      assistantContentsByTurn.set(turnId, contents);
     }
   }
 
@@ -46,8 +50,7 @@ function buildTimeline(messages: Message[], activities: ActivityEvent[]): Timeli
       return a.message.trim().toLowerCase() === "stopped by user";
     }
     if (a.type === "assistant_text") {
-      const normalized = a.message.trim().slice(0, 200);
-      if (assistantMessageContents.has(normalized)) return false;
+      if (assistantContentsByTurn.get(a.turnId || "__orphan__")?.has(a.message.trim())) return false;
     }
     return true;
   });

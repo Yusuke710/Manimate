@@ -173,7 +173,7 @@ describe("session feedback", () => {
         },
       });
 
-      let capturedSnapshot: CapturedCloudSnapshot | null = null;
+      const captured: { snapshot: CapturedCloudSnapshot | null } = { snapshot: null };
       const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         if (url === "https://www.manimate.ai/api/local-sync/uploads") {
@@ -195,7 +195,7 @@ describe("session feedback", () => {
             Authorization: "Bearer token-123",
           });
           const body = JSON.parse(String(init?.body)) as { snapshot?: CapturedCloudSnapshot };
-          capturedSnapshot = body.snapshot ?? null;
+          captured.snapshot = body.snapshot ?? null;
           return new Response(JSON.stringify({ public_video_url: null }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
@@ -214,13 +214,13 @@ describe("session feedback", () => {
       );
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(capturedSnapshot).not.toBeNull();
-      expect(capturedSnapshot?.session).toMatchObject({
+      expect(captured.snapshot).not.toBeNull();
+      expect(captured.snapshot?.session).toMatchObject({
         id: session.id,
       });
-      expect(capturedSnapshot?.session.session_number).toBeUndefined();
+      expect(captured.snapshot?.session.session_number).toBeUndefined();
       expect(
-        capturedSnapshot?.messages.some(
+        captured.snapshot?.messages.some(
           (message) =>
             message.metadata?.kind === "session_feedback" &&
             message.metadata?.session_number === 1 &&
@@ -229,7 +229,7 @@ describe("session feedback", () => {
       ).toBe(true);
       // Feedback reaches the hosted mirror through the message metadata; the
       // wire format keeps activity_events as an (empty) key.
-      expect(capturedSnapshot?.activity_events).toEqual([]);
+      expect(captured.snapshot?.activity_events).toEqual([]);
     } finally {
       fs.rmSync(localRoot, { recursive: true, force: true });
     }
