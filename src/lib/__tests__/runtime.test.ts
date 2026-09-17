@@ -55,8 +55,8 @@ describe("local agent CLI args", () => {
     expect(args).toContain("--output-format");
     expect(args).toContain("stream-json");
     expect(args).toContain("--dangerously-skip-permissions");
-    expect(args).toContain("-p");
-    expect(args.at(-1)).toBe("make animation");
+    expect(args).toContain("--input-format");
+    expect(args).not.toContain("make animation");
     expect(args).not.toContain("--model");
   });
 
@@ -68,7 +68,8 @@ describe("local agent CLI args", () => {
 
     expect(args).toContain("--resume");
     expect(args).toContain("claude-session-1");
-    expect(args.at(-1)).toBe("continue");
+    expect(args).not.toContain("continue");
+    expect(args).toContain("--input-format");
   });
 
   it("builds Codex exec args without pinning a model", () => {

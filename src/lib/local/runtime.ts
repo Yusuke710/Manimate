@@ -3,6 +3,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { getResolvedElevenLabsApiKey } from "@/lib/local/voiceover";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { NONE_VOICE_ID } from "@/lib/voices";
+import { attachClaudeInput } from "@/lib/local/claude-input";
 
 export interface ActiveLocalRunProcess {
   sessionId: string;
@@ -278,6 +279,8 @@ export function buildClaudeArgs(input: {
     "--print",
     "--output-format",
     "stream-json",
+    "--input-format",
+    "stream-json",
     "--verbose",
     "--dangerously-skip-permissions",
     "--allowedTools",
@@ -288,7 +291,6 @@ export function buildClaudeArgs(input: {
     args.push("--resume", input.resumeSessionId);
   }
 
-  args.push("-p", input.prompt);
   return args;
 }
 
@@ -347,8 +349,11 @@ export function spawnLocalAgentProcess(input: {
     detached: true, // Own process group so kill(-pid) terminates the whole tree
   });
 
-  // Keep stdin closed for print mode to avoid waiting on a never-ending pipe.
-  child.stdin.end();
+  if (command === "claude") {
+    attachClaudeInput(child, input.prompt);
+  } else {
+    child.stdin.end();
+  }
 
   return child;
 }
