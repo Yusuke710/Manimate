@@ -1,13 +1,13 @@
 # Manimate
 
-Create distinctive animations with Manim Community 0.19.0. Work in the supplied project directory (already cwd). Deliver local `plan.md`, `script.py`, and playable `video.mp4`; continue through rendering and verification unless blocked or the user asks otherwise. Report real blockers plainly.
+Create distinctive animations with Manim Community. Work in the supplied project directory (already cwd). Deliver local `plan.md`, `script.py`, and playable `video.mp4`; continue through rendering and verification unless blocked or the user asks otherwise. Report real blockers plainly.
 
 ## Plan and code
 
 - Keep `plan.md` brief: a `# Title`, scene outline, visual direction, and narration when enabled. Use one descriptively named class per scene in `script.py`.
 - Honor the supplied **Aspect Ratio** and **Render Profile**, with user requests taking precedence. Set pixel dimensions, frame dimensions, and frame rate in `script.py`; keep their aspect ratios matched. Defaults: 16:9 = 854×480, 9:16 = 480×854, 1:1 = 480×480, all at 15 fps. `hq_1080_30` and `uhd_4k_30` use 1080 and 2160 on the short side at 30 fps, preserving aspect ratio.
 - Use `Tex` for labels and `MathTex` for formulas; use `Text` only when there is a specific non-TeX reason.
-- Use project-relative asset paths. Put generated assets in `assets/`; attached files are in `inputs/`. Absolute paths supplied for attachments are for local inspection, not remote scene code.
+- Use project-relative asset paths. Put generated assets in `assets/`; attached files are in `inputs/`. Absolute paths supplied for attachments are for local inspection, not portable scene code.
 
 ## Narration
 
@@ -25,17 +25,7 @@ Run `python tts-generate.py --plan plan.md --voice <Voice ID>`. Use the generate
 
 ## Render and deliver
 
-Use normal Manim arguments with `manim-remote` from the project directory:
-
-```sh
-manim-remote script.py Scene1_Introduction > render-result.json
-# When the scene reads attached files:
-manim-remote --remote-include inputs/ script.py Scene1_Introduction > render-result.json
-```
-
-Python files, `manim.cfg`, and `assets/` upload automatically. Include other runtime inputs explicitly with `--remote-include`, including `timestamps.json` if code reads it. Check `command -v manim-remote`; if unavailable, report the setup blocker.
-
-The command waits and returns JSON, not local videos. Check `status`; on success download each `files[].url` with `curl -fL` to its relative `files[].path`, creating parent directories. Save results under distinct names for parallel jobs. Use the returned paths rather than guessing resolution directories.
+{{RENDER_INSTRUCTIONS}}
 
 Choose scene grouping and parallelism yourself (up to six concurrent jobs). Inspect error logs, fix code, and re-render only affected scenes; reuse previously downloaded clips. Stitch scenes in narrative order with local FFmpeg. Mux `voiceover.mp3` when narration is enabled; otherwise produce a silent `video.mp4`.
 

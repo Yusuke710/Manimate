@@ -42,23 +42,19 @@ export function getLocalSessionPaths(sessionId: string): {
   };
 }
 
-const CLAUDE_PROMPT_PATH = path.join(
-  PACKAGE_ROOT,
-  "src",
-  "lib",
-  "local",
-  "prompts",
-  "CLAUDE.md"
-);
+const PROMPTS_PATH = path.join(PACKAGE_ROOT, "src", "lib", "local", "prompts");
+export type RenderMode = "cloud" | "local";
 
-const AGENTS_PROMPT_PATH = path.join(
-  PACKAGE_ROOT,
-  "src",
-  "lib",
-  "local",
-  "prompts",
-  "AGENTS.md"
-);
+export function getRenderMode(): RenderMode {
+  let mode = process.env.MANIMATE_RENDER_MODE;
+  if (!mode) {
+    const configPath = path.join(LOCAL_ROOT, "config.json");
+    if (fs.existsSync(configPath)) mode = JSON.parse(fs.readFileSync(configPath, "utf8")).render_mode;
+  }
+  if (mode === undefined || mode === "") return "cloud";
+  if (mode !== "cloud" && mode !== "local") throw new Error("render_mode must be cloud or local");
+  return mode;
+}
 
 const TTS_GENERATE_PATH = path.join(
   PACKAGE_ROOT,
@@ -72,43 +68,20 @@ const SUBTITLE_LINTER_PATH = path.join(
   "lint-subtitles.py"
 );
 
-function copyFileIfMissingOrChanged(sourcePath: string, destPath: string): void {
-  try {
-    const nextContent = fs.readFileSync(sourcePath);
-    const currentContent = fs.existsSync(destPath) ? fs.readFileSync(destPath) : null;
-    if (!currentContent || !currentContent.equals(nextContent)) {
-      fs.writeFileSync(destPath, nextContent);
-    }
-  } catch {
-    // Non-fatal: Claude can still run, but may miss optional bundled helpers.
+function syncRuntimePrompt(projectDir: string, mode: RenderMode): void {
+  const common = fs.readFileSync(path.join(PROMPTS_PATH, "AGENTS.md"), "utf8");
+  const rendering = fs.readFileSync(path.join(PROMPTS_PATH, `render-${mode}.md`), "utf8");
+  const content = common.replace("{{RENDER_INSTRUCTIONS}}", rendering.trim());
+  const destination = path.join(projectDir, "AGENTS.md");
+  if (!fs.existsSync(destination) || fs.readFileSync(destination, "utf8") !== content) {
+    fs.writeFileSync(destination, content);
   }
-}
-
-function removeFileIfExists(filePath: string): void {
-  try {
-    fs.rmSync(filePath, { force: true });
-  } catch {
-    // Non-fatal: stale prompt cleanup should not block the run.
-  }
-}
-
-function syncRuntimePrompt(projectDir: string, model: string): void {
-  const destClaudeMd = path.join(projectDir, "CLAUDE.md");
-  const destAgentsMd = path.join(projectDir, "AGENTS.md");
-
-  if (model === "codex") {
-    copyFileIfMissingOrChanged(AGENTS_PROMPT_PATH, destAgentsMd);
-    removeFileIfExists(destClaudeMd);
-    return;
-  }
-
-  copyFileIfMissingOrChanged(CLAUDE_PROMPT_PATH, destClaudeMd);
-  removeFileIfExists(destAgentsMd);
+  fs.rmSync(path.join(projectDir, "CLAUDE.md"), { force: true });
 }
 
 export function ensureLocalSessionLayout(
   sessionId: string,
-  options?: { model?: string | null }
+  options?: { model?: string | null; renderMode?: RenderMode }
 ): {
   sessionRoot: string;
   projectDir: string;
@@ -121,7 +94,7 @@ export function ensureLocalSessionLayout(
   fs.mkdirSync(paths.artifactsDir, { recursive: true });
 
   if (options?.model) {
-    syncRuntimePrompt(paths.projectDir, options.model);
+    syncRuntimePrompt(paths.projectDir, options.renderMode ?? getRenderMode());
   }
 
   // Copy TTS generator into project dir so the selected agent can run:

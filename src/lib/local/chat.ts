@@ -106,7 +106,7 @@ function extractPlanTitle(planContent: string): string | null {
 
 /**
  * Detect the output video in the project dir.
- * CLAUDE.md instructs Claude to output `video.mp4`, but the manim-skill plugin
+ * AGENTS.md instructs the agent to output `video.mp4`, but the manim-skill plugin
  * may output `final.mp4` instead. Returns the most recently modified file
  * so a new `final.mp4` isn't masked by a stale `video.mp4`.
  */

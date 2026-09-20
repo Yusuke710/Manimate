@@ -27,6 +27,7 @@ async function main() {
   await fs.mkdir(path.dirname(NEXT_STANDALONE_STATIC_PATH), { recursive: true });
   await fs.rm(NEXT_STANDALONE_STATIC_PATH, { recursive: true, force: true });
   await fs.cp(NEXT_STATIC_PATH, NEXT_STANDALONE_STATIC_PATH, { recursive: true });
+  await fs.rm(PROMPTS_STANDALONE_PATH, { recursive: true, force: true });
   await fs.mkdir(PROMPTS_STANDALONE_PATH, { recursive: true });
   await fs.cp(PROMPTS_SOURCE_PATH, PROMPTS_STANDALONE_PATH, { recursive: true });
   await fs.mkdir(SCRIPTS_STANDALONE_PATH, { recursive: true });

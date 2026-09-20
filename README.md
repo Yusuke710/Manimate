@@ -2,16 +2,18 @@
 
 Run manimate.ai with your own local agent runtime.
 
-- Claude Code or Codex, Manim, and rendering run locally
+- Claude Code or Codex runs locally; Manim rendering can run in the cloud or locally
 - sessions are stored locally in SQLite and the filesystem
 - finished work can autosync to `manimate.ai` to view and share easily
 
 ## Requirements
 
 - Node.js 22+
-- Claude Code CLI (`claude`) authenticated locally
+- Claude Code 2.1.277+ (`claude`) authenticated locally, with native `AGENTS.md` loading enabled
 - optional: Codex CLI (`codex`) authenticated locally for `-m codex`
-- Manim CE (`manim`), `ffmpeg`, LaTeX, and `dvisvgm`
+- FFmpeg (`ffmpeg` and `ffprobe`) for stitching and frame inspection
+- cloud rendering: `manim-remote` or a configured Manim Remote MCP connection
+- local rendering: Manim CE (`manim`), LaTeX, and `dvisvgm`
 - optional: `ELEVENLABS_API_KEY` for voiceover, or paste it in the Studio voice menu
 
 ## Install
@@ -37,6 +39,14 @@ Then run:
 ```bash
 manimate
 ```
+
+## Rendering instructions
+
+Claude and Codex use the same project `AGENTS.md`. Manimate combines shared visualization instructions with either `render-cloud.md` or `render-local.md`; both agents load the generated `AGENTS.md` natively. No `CLAUDE.md` is generated.
+
+Cloud rendering remains the default. Set `"render_mode": "local"` or `"render_mode": "cloud"` in `~/.manimate/config.json` (preserve existing settings). The choice is read before each agent run. `MANIMATE_RENDER_MODE` overrides it when starting the server. Restart an already-running server to change its environment override.
+
+Cloud mode uses `manim-remote` or a configured Manim Remote MCP connection; local mode uses `manim`. Both use local FFmpeg for stitching and frame inspection and deliver `video.mp4` to the local library. This setting selects instructions; it does not install dependencies or configure an MCP connection.
 
 ## From Source
 
