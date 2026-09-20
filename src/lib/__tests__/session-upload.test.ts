@@ -12,55 +12,45 @@ async function setup(mode: "local" | "cloud") {
  const session=store.createLocalSession({model:"claude"});
  return {root,...store,session,...await import("@/lib/local/session-upload")};
 }
-afterEach(()=>{vi.unstubAllEnvs();run.mockClear();for(const root of roots.splice(0))fs.rmSync(root,{recursive:true,force:true});});
+afterEach(()=>{vi.unstubAllEnvs();vi.restoreAllMocks();run.mockReset();for(const root of roots.splice(0))fs.rmSync(root,{recursive:true,force:true});});
 it("never uploads local runs even if cloud is selected later",async()=>{
  const api=await setup("cloud");await api.uploadCloudSession(api.session.id,"local");expect(run).not.toHaveBeenCalled();
 });
 it("does not upload when the user switches to local",async()=>{
- const api=await setup("local");await api.uploadCloudSession(api.session.id,"cloud");expect(run).not.toHaveBeenCalled();
-});
-it("backs up completed cloud sessions using the authenticated CLI",async()=>{
- const api=await setup("cloud");await api.uploadCloudSession(api.session.id,"cloud");
- expect(run).toHaveBeenCalledOnce();expect(run.mock.calls[0][0]).toBe("manim-cloud");
- expect(JSON.parse(fs.readFileSync(path.join(api.root,"sessions",api.session.id,"cloud-backup.json"),"utf8")).status).toBe("uploaded");
- expect(api.getLocalSession(api.session.id)?.cloud_sync_status).toBe("idle");
-});
-it("records upload failures without failing the completed render",async()=>{
- const api=await setup("cloud");run.mockImplementationOnce((_f,_a,_o,cb)=>cb(new Error("offline")));
- await expect(api.uploadCloudSession(api.session.id,"cloud")).resolves.toBeUndefined();
- expect(JSON.parse(fs.readFileSync(path.join(api.root,"sessions",api.session.id,"cloud-backup.json"),"utf8")).status).toBe("failed");
-});
-it("automatically backs up existing library videos but skips unchanged backups",async()=>{
- const api=await setup("cloud");
- api.updateLocalSession(api.session.id,{video_path:"project/video.mp4",status:"completed"});
- api.backupCloudLibrary();
- await api.uploadCloudSession(api.session.id,"cloud");
- expect(run).toHaveBeenCalledOnce();
- const clock=vi.spyOn(Date,"now").mockReturnValue(Date.now()+61_000);
- try {api.backupCloudLibrary();await Promise.resolve();expect(run).toHaveBeenCalledOnce();}
- finally {clock.mockRestore();}
-});
-it("library backup is off in local mode",async()=>{
  const api=await setup("local");
  api.updateLocalSession(api.session.id,{video_path:"project/video.mp4",status:"completed"});
- api.backupCloudLibrary();await Promise.resolve();expect(run).not.toHaveBeenCalled();
+ await api.uploadCloudSession(api.session.id,"cloud");api.backupCloudLibrary();
+ await new Promise(resolve => setImmediate(resolve));expect(run).not.toHaveBeenCalled();
 });
-it("retries failed backups automatically on a later scan",async()=>{
- const api=await setup("cloud");
- api.updateLocalSession(api.session.id,{video_path:"project/video.mp4",status:"completed"});
- run.mockImplementationOnce((_f,_a,_o,cb)=>cb(new Error("offline")));
- api.backupCloudLibrary();await api.uploadCloudSession(api.session.id,"cloud");
- const clock=vi.spyOn(Date,"now").mockReturnValue(Date.now()+61_000);
- try {api.backupCloudLibrary();await api.uploadCloudSession(api.session.id,"cloud");expect(run).toHaveBeenCalledTimes(2);}
- finally {clock.mockRestore();}
-});
-it("uploads a changed library session again",async()=>{
- const api=await setup("cloud");
- api.updateLocalSession(api.session.id,{video_path:"project/video.mp4",status:"completed"});
- api.backupCloudLibrary();await api.uploadCloudSession(api.session.id,"cloud");
- const file=path.join(api.root,"sessions",api.session.id,"session.json");
- const session=JSON.parse(fs.readFileSync(file,"utf8"));session.updated_at="2099-01-01T00:00:00Z";fs.writeFileSync(file,JSON.stringify(session));
- const clock=vi.spyOn(Date,"now").mockReturnValue(Date.now()+61_000);
- try {api.backupCloudLibrary();await api.uploadCloudSession(api.session.id,"cloud");expect(run).toHaveBeenCalledTimes(2);}
- finally {clock.mockRestore();}
+it("automatically backs up videos, skips unchanged sessions and retries changed uploads", async () => {
+  const api = await setup("cloud");
+  let now = Date.now();
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  api.updateLocalSession(api.session.id, { video_path: "project/video.mp4", status: "completed" });
+  const backup = () => JSON.parse(fs.readFileSync(path.join(api.root, "sessions", api.session.id, "cloud-backup.json"), "utf8"));
+  api.backupCloudLibrary();
+  await vi.waitFor(() => expect(backup().status).toBe("uploaded"));
+  expect(run).toHaveBeenCalledOnce();
+  expect(run.mock.calls[0][0]).toBe("manim-cloud");
+
+  now += 61_000;
+  api.backupCloudLibrary();
+  await new Promise(resolve => setImmediate(resolve));
+  expect(run).toHaveBeenCalledOnce();
+
+  const file = path.join(api.root, "sessions", api.session.id, "session.json");
+  const session = JSON.parse(fs.readFileSync(file, "utf8"));
+  session.updated_at = "2099-01-01T00:00:00Z";
+  fs.writeFileSync(file, JSON.stringify(session));
+  run.mockImplementationOnce((_f, _a, _o, cb) => cb(new Error("offline")));
+  now += 61_000;
+  api.backupCloudLibrary();
+  await vi.waitFor(() => expect(backup().status).toBe("failed"));
+  expect(run).toHaveBeenCalledTimes(2);
+
+  now += 61_000;
+  api.backupCloudLibrary();
+  await vi.waitFor(() => expect(backup().status).toBe("uploaded"));
+  expect(run).toHaveBeenCalledTimes(3);
+  expect(backup().source_updated_at).toBe(session.updated_at);
 });

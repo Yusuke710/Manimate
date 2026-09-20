@@ -3,7 +3,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export const SESSION_FEEDBACK_MESSAGE_KIND = "session_feedback";
-export const SESSION_FEEDBACK_ACTIVITY_TYPE = "feedback_submitted";
 export const SESSION_FEEDBACK_SOURCE_LIBRARY = "library";
 export const MAX_SESSION_FEEDBACK_LENGTH = 4000;
 
@@ -34,10 +33,6 @@ export function isSessionFeedbackMetadata(
   );
 }
 
-export function isSessionFeedbackActivityType(type: string): boolean {
-  return type === SESSION_FEEDBACK_ACTIVITY_TYPE;
-}
-
 export function normalizeSessionFeedbackContent(raw: string): string {
   return raw.replace(/\r\n/g, "\n").trim();
 }
@@ -47,8 +42,4 @@ export function buildSessionFeedbackMessageContent(
   feedbackText: string
 ): string {
   return `Library feedback for Session #${sessionNumber}\n\n${feedbackText}`;
-}
-
-export function buildSessionFeedbackActivityMessage(sessionNumber: number): string {
-  return `Library feedback submitted for Session #${sessionNumber}`;
 }

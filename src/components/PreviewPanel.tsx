@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import HandoffButton from "@/components/HandoffButton";
-import ShareProjectButton from "@/components/ShareProjectButton";
 import { CodeTab, PlanTab } from "@/components/ArtifactTabs";
 import { PreviewTab } from "@/components/PreviewTab";
 import { buildPreviewLoadKey } from "@/lib/preview-load";
@@ -14,7 +13,6 @@ type Tab = "plan" | "code" | "preview";
 interface PreviewPanelProps {
   videoUrl: string | null;
   videoUpdateNonce?: number;
-  sandboxId: string | null;
   sessionId?: string | null;
   planContent?: string | null;
   scriptContent?: string | null;
@@ -26,7 +24,7 @@ interface PreviewPanelProps {
 }
 
 
-export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId, sessionId, planContent = null, scriptContent = null, sessionModel = null, isRendering = false, onRequestHqRender, onRequest4kRender, onPreviewReady }: PreviewPanelProps) {
+export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId, planContent = null, scriptContent = null, sessionModel = null, isRendering = false, onRequestHqRender, onRequest4kRender, onPreviewReady }: PreviewPanelProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("plan");
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
@@ -116,7 +114,6 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
             hasVideo={Boolean(effectiveVideoUrl)}
             onCreated={(nextSessionId) => router.push(`/?session=${nextSessionId}`)}
           />
-          <ShareProjectButton sessionId={sessionId} />
         </div>
 
         {/* Tab content - all tabs rendered but hidden for preloading */}
@@ -128,7 +125,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sandboxId
             <CodeTab content={scriptContent} />
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
-            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sandboxId={sandboxId} sessionId={sessionId} sessionModel={sessionModel} isVisible={activeTab === "preview"} isRendering={isRendering} onRequestHqRender={onRequestHqRender} onRequest4kRender={onRequest4kRender} onCanPlay={() => {
+            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sessionId={sessionId} sessionModel={sessionModel} isVisible={activeTab === "preview"} isRendering={isRendering} onRequestHqRender={onRequestHqRender} onRequest4kRender={onRequest4kRender} onCanPlay={() => {
               if (activePreviewKey && previewReadyKey !== activePreviewKey) {
                 setPreviewReadyKey(activePreviewKey);
                 onPreviewReady?.(videoUpdateNonce);

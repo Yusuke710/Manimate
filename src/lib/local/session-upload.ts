@@ -2,8 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { getLocalSessionPaths } from "./config";
-import { selectedRenderMode } from "./render-connection";
+import { getLocalSessionPaths, selectedRenderMode } from "./config";
 import { getLocalSession, listLocalSessions } from "./session-store";
 
 const execute = promisify(execFile);

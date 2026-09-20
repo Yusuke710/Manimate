@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   ensureLocalSessionLayout,
-  getSessionIdFromSandboxId,
 } from "@/lib/local/config";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -21,22 +20,20 @@ function subtitleResponse(content: string): Response {
 export async function GET(request: NextRequest): Promise<Response> {
   const searchParams = request.nextUrl.searchParams;
   const sessionId = searchParams.get("session_id");
-  const sandboxId = searchParams.get("sandbox_id");
 
-  const resolvedSessionId = sessionId || (sandboxId ? getSessionIdFromSandboxId(sandboxId) : null);
-  if (!resolvedSessionId) {
+  if (!sessionId) {
     return NextResponse.json(
-      { error: "Either session_id or sandbox_id query parameter is required" },
+      { error: "session_id is required" },
       { status: 400 }
     );
   }
 
-  const session = getLocalSession(resolvedSessionId);
+  const session = getLocalSession(sessionId);
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
-  const { projectDir } = ensureLocalSessionLayout(resolvedSessionId);
+  const { projectDir } = ensureLocalSessionLayout(sessionId);
   const content = await readLocalProjectSubtitles(projectDir);
   if (content?.trim()) {
     // Cache the derived subtitles as a plain project file (replaces the old

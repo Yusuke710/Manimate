@@ -11,7 +11,6 @@ export interface SSEEvent {
   message: string;
   session_id?: string;
   turn_id?: string;
-  sandbox_id?: string;
   agent_session_id?: string;
   video_url?: string;
   plan_content?: string | null;
@@ -24,7 +23,6 @@ export interface SSEEvent {
   is_error?: boolean;
   model?: string;
   tools?: string[];
-  sandbox_source?: "new" | "existing" | "snapshot" | "mapping";
   // Token usage tracking
   input_tokens?: number;
   output_tokens?: number;
@@ -51,7 +49,6 @@ export interface ActivityEvent {
   isError?: boolean;
   model?: string;
   tools?: string[];
-  sandboxSource?: "new" | "existing" | "snapshot" | "mapping";
   turnId?: string; // ID of the user message that triggered this activity
   errorCode?: string;
   timeoutMinutes?: number;
@@ -77,7 +74,6 @@ export interface DBActivityEvent {
     model?: string;
     tools?: string[];
     video_url?: string;
-    sandbox_source?: "new" | "existing" | "snapshot" | "mapping";
     error_code?: string;
     timeout_minutes?: number;
     timeout_ms?: number;
@@ -95,7 +91,6 @@ export interface ActiveRun {
   status: "queued" | "running" | "completed" | "failed" | "canceled";
   started_at: string | null;
   last_event_at: string | null;
-  sandbox_id: string | null;
   agent_session_id: string | null;
 }
 
@@ -114,7 +109,6 @@ export function dbActivityEventToUI(dbEvent: DBActivityEvent): ActivityEvent {
     isError: dbEvent.payload?.is_error,
     model: dbEvent.payload?.model,
     tools: dbEvent.payload?.tools,
-    sandboxSource: dbEvent.payload?.sandbox_source,
     errorCode: dbEvent.payload?.error_code,
     timeoutMinutes: dbEvent.payload?.timeout_minutes,
     timeoutMs: dbEvent.payload?.timeout_ms,
@@ -143,10 +137,4 @@ export interface Message {
   content: string;
   isError?: boolean;
   images?: ImageAttachment[];
-}
-
-// Session data stored in sessionStorage (per-tab isolation)
-export interface SessionData {
-  sandboxId: string;
-  agentSessionId: string;
 }

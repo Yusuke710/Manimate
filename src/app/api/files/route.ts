@@ -4,7 +4,6 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getSessionIdFromSandboxId,
   resolveSessionFilePath,
 } from "@/lib/local/config";
 import { getLocalSession } from "@/lib/local/session-store";
@@ -46,19 +45,17 @@ function parseRangeHeader(rangeHeader: string | null, fileSize: number): { start
 function resolveSessionFromQuery(request: NextRequest): { sessionId: string } | { error: Response } {
   const searchParams = request.nextUrl.searchParams;
   const sessionId = searchParams.get("session_id");
-  const sandboxId = searchParams.get("sandbox_id");
 
-  const resolvedSessionId = sessionId || (sandboxId ? getSessionIdFromSandboxId(sandboxId) : null);
-  if (!resolvedSessionId) {
-    return { error: NextResponse.json({ error: "session_id or sandbox_id is required" }, { status: 400 }) };
+  if (!sessionId) {
+    return { error: NextResponse.json({ error: "session_id is required" }, { status: 400 }) };
   }
 
-  const session = getLocalSession(resolvedSessionId);
+  const session = getLocalSession(sessionId);
   if (!session) {
     return { error: NextResponse.json({ error: "Session not found" }, { status: 404 }) };
   }
 
-  return { sessionId: resolvedSessionId };
+  return { sessionId: sessionId };
 }
 
 function resolveMime(filePath: string): { mime: string; binary: boolean } {

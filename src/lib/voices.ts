@@ -56,11 +56,6 @@ export function getVoicePageUrl(voiceId: string): string {
   return "https://elevenlabs.io/app/default-voices";
 }
 
-/** Get display label for a voice ID. Returns label from registry or null for unknown IDs. */
-export function getVoiceLabel(voiceId: string): string | null {
-  return VOICE_REGISTRY[voiceId]?.label ?? null;
-}
-
 export function isValidVoiceId(voiceId: string): boolean {
   return voiceId === NONE_VOICE_ID || VOICE_ID_PATTERN.test(voiceId);
 }

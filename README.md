@@ -1,9 +1,9 @@
 # Manimate
 
-Run manimate.ai with your own local agent runtime.
+Create Manim videos with Claude Code or Codex, using local or cloud rendering.
 
 - Claude Code or Codex runs locally; Manim rendering can run in the cloud or locally
-- sessions are stored locally in SQLite and the filesystem
+- sessions are stored locally as session.json and project files
 - choose local rendering without sign-in, or connect with Google for cloud rendering
 
 ## Requirements
@@ -46,9 +46,9 @@ manimate
 
 Claude and Codex use the same project `AGENTS.md`. Manimate copies one complete file—`prompts/cloud/AGENTS.md` or `prompts/local/AGENTS.md`—into the project based on the selected render mode. Both agents load that single file natively. No `CLAUDE.md` is generated.
 
-On first launch, choose **Local** or **Cloud**. Local installs or upgrades Manim to 0.21.0 before opening. Cloud connects through the same Google sign-in page as the MCP connector at `cloud.manimate.ai`. Change modes from the sidebar. The saved choice is in `~/.manimate/config.json`; `MANIMATE_RENDER_MODE` can override it.
+On first launch, choose **Local** or **Cloud**. Local installs or upgrades Manim to 0.21.0 before opening. Cloud connects through the same Google sign-in page as the MCP connector at `cloud.manimate.ai`. Change modes with `manimate --setup`; the local-mode sidebar also offers a cloud connection. The saved choice is in `~/.manimate/config.json`; `MANIMATE_RENDER_MODE` can override it.
 
-Cloud mode uses the `manim-cloud` CLI; local mode uses `manim`. Both use local FFmpeg for stitching and frame inspection and deliver `video.mp4` to the local library. Completed cloud-mode sessions are automatically backed up privately to Manim Cloud R2 using the same Google connection. Automatic backup runs only while Cloud mode is selected; selecting Cloud also backs up existing library videos. Backups include session history, source, assets, and final outputs; generated media caches and hidden files are excluded. Each compressed backup is limited to 100 MB. The old Studio/autosync service is not used. Dependencies must already be installed.
+Cloud mode uses the `manim-cloud` CLI; local mode uses `manim`. Both use local FFmpeg for stitching and frame inspection. The app reads `plan.md`, `script.py`, and the final `video.mp4` from each project. Narrated projects keep the fast `lint-subtitles.py` timing check. Completed cloud-mode sessions are automatically backed up privately to Manim Cloud R2 using the same Google connection. Automatic backup runs only while Cloud mode is selected; selecting Cloud also backs up existing library videos. Backups include session history, source, assets, and final outputs; generated media caches and hidden files are excluded. Each compressed backup is limited to 100 MB. Hosted sharing and its separate connection flow have been removed.
 
 ## From Source
 
@@ -79,7 +79,7 @@ In this repo, the equivalent command is:
 npm run manimate
 ```
 
-This starts the local app, opens the browser, and reconnects `manimate.ai` if needed.
+This starts the local app and opens the browser. Cloud rendering uses the saved Google connection to Manim Cloud.
 
 For direct local development:
 
@@ -131,14 +131,11 @@ Generate flags:
 
 Open flags:
 
-- `--cloud-base-url <url>`
 - `--no-open`
 - `--restart`
 - `--mode <auto|standalone|dev|start>`
 - `--port <number>`
 - `--host <hostname>`
-
-Legacy `manimate open`, `manimate generate`, and `manimate connect` were removed. Use plain `manimate` to open the app and `manimate "<prompt>"` to generate.
 
 Repo entrypoints:
 
@@ -173,7 +170,7 @@ Troubleshooting:
 
 - If Manimate cannot be reached, start it with `manimate` or pass `--base-url`.
 - If `status=failed`, inspect `/api/sessions/<session_id>/messages`.
-- If cloud auth expired, run plain `manimate` to reconnect.
+- If cloud auth expired, run `manim-cloud login` to reconnect.
 
 ## HTTP API
 
@@ -212,7 +209,7 @@ Examples:
 
 Default root: `~/.manimate/`
 
-- `db/app.db`
+- `sessions/<session_id>/session.json`
 - `sessions/<session_id>/project/`
 - `sessions/<session_id>/project/inputs/`
 - `sessions/<session_id>/artifacts/`

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   ensureLocalSessionLayout,
-  getSessionIdFromSandboxId,
 } from "@/lib/local/config";
 import { getLocalSession, updateLocalSession } from "@/lib/local/session-store";
 import {
@@ -21,17 +20,15 @@ function responseWithNoCache(chapters: LocalChapter[]): Response {
 export async function GET(request: NextRequest): Promise<Response> {
   const searchParams = request.nextUrl.searchParams;
   const sessionId = searchParams.get("session_id");
-  const sandboxId = searchParams.get("sandbox_id");
 
-  const resolvedSessionId = sessionId || (sandboxId ? getSessionIdFromSandboxId(sandboxId) : null);
-  if (!resolvedSessionId) {
+  if (!sessionId) {
     return NextResponse.json(
-      { error: "Either session_id or sandbox_id is required" },
+      { error: "session_id is required" },
       { status: 400 }
     );
   }
 
-  const session = getLocalSession(resolvedSessionId);
+  const session = getLocalSession(sessionId);
   if (!session) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -41,13 +38,13 @@ export async function GET(request: NextRequest): Promise<Response> {
     return responseWithNoCache(stored);
   }
 
-  const { projectDir } = ensureLocalSessionLayout(resolvedSessionId);
+  const { projectDir } = ensureLocalSessionLayout(sessionId);
 
   try {
     const chapters = await readLocalProjectChapters(projectDir);
     const serialized = serializeLocalChapters(chapters);
     if (serialized !== session.chapters) {
-      updateLocalSession(resolvedSessionId, { chapters: serialized });
+      updateLocalSession(sessionId, { chapters: serialized });
     }
     return responseWithNoCache(chapters);
   } catch {

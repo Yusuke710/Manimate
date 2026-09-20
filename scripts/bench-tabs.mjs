@@ -110,9 +110,8 @@ const server = spawn(
       MANIMATE_DIST_DIR: ".next-bench",
       FAKE_AGENT_DURATION_S: String(DURATION_S),
       PATH: `${shimDir}:${process.env.PATH}`,
-      // Ensure no cloud sync fires from bench sessions.
-      MANIMATE_CLOUD_SYNC_URL: "",
-      MANIMATE_CLOUD_SYNC_TOKEN: "",
+      // Benchmarks keep all sessions local.
+      MANIMATE_RENDER_MODE: "local",
     },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,

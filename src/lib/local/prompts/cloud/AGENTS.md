@@ -1,19 +1,14 @@
 # Manimate
 
-Create distinctive animations with Manim Community. Work in the supplied project directory (already cwd). Deliver local `plan.md`, `script.py`, and playable `video.mp4`; continue through rendering and verification unless blocked or the user asks otherwise. Report real blockers plainly.
+Create a clear, distinctive Manim Community animation for the user's request. Work in the supplied project directory. Deliver `plan.md` with a `# Title`, `script.py`, and a playable local `video.mp4`; these files appear in the app.
 
-## Plan and code
+Honor the supplied aspect ratio and voice selection. Unless the user requests another quality, use 480 pixels on the short side at 15 fps (854×480 for 16:9). Choose the visual design, scene structure, and timing. Keep pixel and frame aspect ratios consistent.
 
-- Keep `plan.md` brief: a `# Title`, scene outline, visual direction, and narration when enabled. Use one descriptively named class per scene in `script.py`.
-- Honor the supplied **Aspect Ratio** and **Render Profile**, with user requests taking precedence. Set pixel dimensions, frame dimensions, and frame rate in `script.py`; keep their aspect ratios matched. Defaults: 16:9 = 854×480, 9:16 = 480×854, 1:1 = 480×480, all at 15 fps. `hq_1080_30` and `uhd_4k_30` use 1080 and 2160 on the short side at 30 fps, preserving aspect ratio.
-- Use `Tex` for labels and `MathTex` for formulas; use `Text` only when there is a specific non-TeX reason.
-- Use project-relative asset paths. Put generated assets in `assets/`; attached files are in `inputs/`. Absolute paths supplied for attachments are for local inspection, not portable scene code.
+Use project-relative asset paths. Generated assets belong in `assets/`; attachments are in `inputs/`.
 
 ## Narration
 
-Only generate narration/subtitles when **Voice ID** is provided and the user has not disabled narration, TTS, or captions. Otherwise omit TTS and `add_subcaption()`.
-
-For narration, include this in `plan.md`:
+Generate narration only when a Voice ID is supplied, unless the user disables narration. Put narration in `plan.md` as:
 
 ```text
 subtitles:
@@ -21,22 +16,12 @@ subtitles:
 - Next narration line.
 ```
 
-Run `python tts-generate.py --plan plan.md --voice <Voice ID>`. Use the generated `timestamps.json` durations as literal timing budgets in the scene code, including waits and transitions. Add matching subcaptions, and run `python lint-subtitles.py script.py`; fix timing errors before rendering. The helper caches unchanged narration.
+Run `python tts-generate.py --plan plan.md --voice <Voice ID>`. Align animation timing with the measured durations in `timestamps.json`. Use matching subcaptions to check scene timing with `python lint-subtitles.py script.py`; fix reported timing problems before rendering. The app reads `timestamps.json` for subtitles.
 
-## Render and deliver
+## Render and verify
 
-Use normal Manim arguments with `manim-cloud` from the project directory:
+Render with `manim-cloud script.py <SceneNames>`. Independent jobs may run concurrently; the service queues them. Python files, `manim.cfg`, and `assets/` upload automatically. Include other runtime inputs with `--remote-include PATH`, such as `inputs/` or `timestamps.json` when the scene reads them.
 
-```sh
-manim-cloud script.py Scene1_Introduction > render-result.json
-# When the scene reads attached files:
-manim-cloud --remote-include inputs/ script.py Scene1_Introduction > render-result.json
-```
+The CLI submits and polls, then returns JSON. Check `status`; failures include logs. Download successful `files[].url` values with `curl -fL` into their relative `files[].path`, creating parent directories. Use distinct result filenames for parallel jobs. The app needs local videos, not just their URLs.
 
-Python files, `manim.cfg`, and `assets/` upload automatically. Include other runtime inputs explicitly with `--remote-include`, including `timestamps.json` if code reads it. Check `command -v manim-cloud`; if unavailable, report the setup blocker.
-
-The command handles submission and polling, then returns JSON, not local videos. Check `status`; on failure inspect the returned logs before fixing the scene. On success, download each `files[].url` with `curl -fL` to its relative `files[].path`, creating parent directories. Save results under distinct names for parallel jobs. Use the returned paths rather than guessing resolution directories.
-
-Choose scene grouping and parallelism yourself (up to six concurrent jobs). Inspect error logs, fix code, and re-render only affected scenes; reuse previously downloaded clips. Stitch scenes in narrative order with local FFmpeg. Mux `voiceover.mp3` when narration is enabled; otherwise produce a silent `video.mp4`.
-
-Verify the final file with `ffprobe` and inspect representative frames for layout/readability before finishing. The app previews local `video.mp4`; a remote URL alone is not the deliverable.
+Assemble the clips in narrative order into `video.mp4` with local FFmpeg. Include `voiceover.mp3` when narration is enabled; otherwise keep it silent. Verify the final file with `ffprobe`, check audio/video timing when narrated, and inspect representative frames for readability and layout. Report any blocker preventing delivery.

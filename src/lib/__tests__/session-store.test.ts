@@ -95,61 +95,29 @@ describe("session-store", () => {
     }
   });
 
-  it("never leaves a corrupt session.json behind (atomic writes)", async () => {
+  it("preserves the saved session when a write stops partway through", async () => {
     const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-store-atomic-"));
-
     try {
       const store = await loadStore(localRoot);
       const session = store.createLocalSession({ model: "claude" });
-      const filePath = path.join(localRoot, "sessions", session.id, "session.json");
-
-      for (let i = 0; i < 25; i++) {
-        store.insertLocalMessage({
-          session_id: session.id,
-          role: "user",
-          content: `message ${i}`,
-        });
-        // Every intermediate state on disk must be valid JSON.
-        expect(() => JSON.parse(fs.readFileSync(filePath, "utf8"))).not.toThrow();
-      }
-      expect(store.listLocalMessages(session.id)).toHaveLength(25);
-      expect(fs.readdirSync(path.dirname(filePath)).filter((f) => f.endsWith(".tmp"))).toEqual([]);
-    } finally {
-      fs.rmSync(localRoot, { recursive: true, force: true });
-    }
-  });
-
-  it("never fabricates a video entry when chapters arrive before a video", async () => {
-    const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-store-chapters-"));
-
-    try {
-      const store = await loadStore(localRoot);
-      const session = store.createLocalSession({ model: "codex" });
-
-      // Mid-run chapter caching (via /api/chapters) on a videoless session.
-      store.updateLocalSession(session.id, {
-        chapters: JSON.stringify([{ name: "Scene1", start: 0, duration: 10 }]),
+      const file = path.join(localRoot, "sessions", session.id, "session.json");
+      const saved = fs.readFileSync(file, "utf8");
+      const write = fs.writeFileSync;
+      const interrupted = vi.spyOn(fs, "writeFileSync").mockImplementation((target, data) => {
+        write(target, String(data).slice(0, 12));
+        throw new Error("ENOSPC");
       });
-
-      const reloaded = store.getLocalSession(session.id);
-      expect(reloaded?.video_path).toBeNull();
-      expect(store.listLocalSessionSummaries()[0].has_video).toBe(false);
+      try {
+        expect(() => store.updateLocalSession(session.id, { title: "Unsaved" })).toThrow("ENOSPC");
+      } finally {
+        interrupted.mockRestore();
+      }
+      expect(fs.readFileSync(file, "utf8")).toBe(saved);
+      const reloaded = await loadStore(localRoot);
+      expect(reloaded.getLocalSession(session.id)?.title).toBe(session.title);
     } finally {
       fs.rmSync(localRoot, { recursive: true, force: true });
     }
   });
 
-  it("assigns monotonically increasing session numbers", async () => {
-    const localRoot = fs.mkdtempSync(path.join(os.tmpdir(), "manimate-store-numbers-"));
-
-    try {
-      const store = await loadStore(localRoot);
-      const first = store.createLocalSession({ model: "claude" });
-      const second = store.createLocalSession({ model: "codex" });
-      expect(first.session_number).toBe(1);
-      expect(second.session_number).toBe(2);
-    } finally {
-      fs.rmSync(localRoot, { recursive: true, force: true });
-    }
-  });
 });

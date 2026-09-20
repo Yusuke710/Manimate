@@ -15,10 +15,9 @@ const packageMetadata = require("../package.json");
 const DEFAULT_APP_HOST = process.env.MANIMATE_APP_HOST || "127.0.0.1";
 const DEFAULT_APP_PORT = parsePositiveInteger(process.env.MANIMATE_APP_PORT, 32179);
 const DEFAULT_BASE_URL = process.env.MANIMATE_BASE_URL || `http://${DEFAULT_APP_HOST}:${DEFAULT_APP_PORT}`;
-const DEFAULT_CLOUD_BASE_URL = process.env.MANIMATE_CLOUD_SYNC_URL || "https://manimate.ai";
 const DEFAULT_OPEN_TIMEOUT_SECONDS = 45;
 const NONE_VOICE_ID = "none";
-const STATUS_ENDPOINT_PATH = "/api/cloud-sync/status";
+const STATUS_ENDPOINT_PATH = "/api/status";
 const STATUS_MARKER_HEADER_NAME = "x-manimate-studio";
 const STATUS_MARKER_HEADER_VALUE = "local";
 const CLI_VERSION = typeof packageMetadata.version === "string" ? packageMetadata.version.trim() : "";
@@ -30,7 +29,7 @@ const NEXT_STANDALONE_ROOT = path.join(PROJECT_ROOT, ".next", "standalone");
 const NEXT_STANDALONE_SERVER_PATH = path.join(PROJECT_ROOT, ".next", "standalone", "server.js");
 const NEXT_STANDALONE_STATIC_PATH = path.join(NEXT_STANDALONE_ROOT, ".next", "static");
 const REMOVED_SUBCOMMANDS = new Map([
-  ["connect", "Open `manimate` with no prompt to reconnect through the browser flow."],
+  ["connect", "Run `manimate --setup` to select Cloud and connect with Google."],
   ["generate", "Pass the prompt directly: `manimate \"your prompt\"`."],
   ["open", "Run `manimate` with no prompt to launch the app."],
 ]);
@@ -71,7 +70,6 @@ Generate Options:
 
 Open Options:
   --base-url <url>         Local app URL (default: ${DEFAULT_BASE_URL})
-  --cloud-base-url <url>   Hosted site URL for autosync auth (default: ${DEFAULT_CLOUD_BASE_URL})
   --port <number>          Local app port override (otherwise picked automatically)
   --host <hostname>        Local app host override (default: ${DEFAULT_APP_HOST})
   --mode <auto|standalone|dev|start>  Launch mode (default: auto)
@@ -204,26 +202,9 @@ function isLoopbackBaseUrl(value) {
   return Boolean(parsed && normalizeLoopbackHost(parsed.hostname) === "loopback");
 }
 
-function getUrlPort(url) {
-  return Number.parseInt(url.port || (url.protocol === "https:" ? "443" : "80"), 10);
-}
-
-function urlsUseSameLocalPort(left, right) {
-  const parsedLeft = parseUrlOrNull(left);
-  const parsedRight = parseUrlOrNull(right);
-  if (!parsedLeft || !parsedRight) return false;
-
-  return (
-    normalizeLoopbackHost(parsedLeft.hostname) === "loopback" &&
-    normalizeLoopbackHost(parsedRight.hostname) === "loopback" &&
-    getUrlPort(parsedLeft) === getUrlPort(parsedRight)
-  );
-}
-
 function parseOpenArgs(argv) {
   const options = {
     baseUrl: DEFAULT_BASE_URL,
-    cloudBaseUrl: DEFAULT_CLOUD_BASE_URL,
     host: DEFAULT_APP_HOST,
     port: DEFAULT_APP_PORT,
     mode: "auto",
@@ -243,10 +224,6 @@ function parseOpenArgs(argv) {
       case "--base-url":
         options.baseUrl = nextValue(argv, i, "--base-url");
         options.baseUrlExplicit = true;
-        i += 1;
-        break;
-      case "--cloud-base-url":
-        options.cloudBaseUrl = nextValue(argv, i, "--cloud-base-url");
         i += 1;
         break;
       case "--port":
@@ -292,7 +269,6 @@ function parseOpenArgs(argv) {
   }
 
   options.baseUrl = options.baseUrl.replace(/\/+$/, "");
-  options.cloudBaseUrl = options.cloudBaseUrl.replace(/\/+$/, "");
   options.mode = options.mode.trim().toLowerCase();
   if (!["auto", "standalone", "dev", "start"].includes(options.mode)) {
     throw new Error("--mode must be one of: auto, standalone, dev, start");
@@ -435,7 +411,6 @@ function rejectRemovedSubcommand(argv) {
 function printHumanResult(result) {
   console.log(`status: ${result.status}`);
   if (result.app_url) console.log(`app_url: ${result.app_url}`);
-  if (result.cloud_base_url) console.log(`cloud_base_url: ${result.cloud_base_url}`);
   if (result.session_id) console.log(`session_id: ${result.session_id}`);
   if (result.run_id) console.log(`run_id: ${result.run_id}`);
   if (result.video_url) console.log(`video_url: ${result.video_url}`);
@@ -532,7 +507,6 @@ async function streamGenerate(options) {
       const port = Number.parseInt(parsedBaseUrl.port || (parsedBaseUrl.protocol === "https:" ? "443" : "80"), 10);
       const openResult = await openLocalApp({
         baseUrl: options.baseUrl,
-        cloudBaseUrl: DEFAULT_CLOUD_BASE_URL,
         host: parsedBaseUrl.hostname,
         port,
         mode: "auto",
@@ -858,10 +832,10 @@ function buildLoopbackBaseUrl(protocol, host, port) {
 }
 
 /**
- * @param {{ preferredPort: number, reservedCloudPort?: number | null, restart?: boolean,
+ * @param {{ preferredPort: number, restart?: boolean,
  *   scanResults?: Array<{ port: number, status: string }> }} options
  */
-export function chooseAutomaticOpenPort({ preferredPort, reservedCloudPort = null, restart = false, scanResults = [] }) {
+export function chooseAutomaticOpenPort({ preferredPort, restart = false, scanResults = [] }) {
   let firstFreePort = null;
   let firstExistingHealthyPort = null;
   let firstRestartablePort = null;
@@ -869,13 +843,6 @@ export function chooseAutomaticOpenPort({ preferredPort, reservedCloudPort = nul
 
   for (const result of scanResults) {
     const port = result.port;
-
-    if (port === reservedCloudPort || result.status === "reserved-cloud") {
-      if (port === preferredPort) {
-        preferredPortBlocked = true;
-      }
-      continue;
-    }
 
     if (result.status === "free") {
       if (firstFreePort === null) {
@@ -932,10 +899,6 @@ export function chooseAutomaticOpenPort({ preferredPort, reservedCloudPort = nul
     return null;
   }
 
-  if (reservedCloudPort === preferredPort && chosenPort !== preferredPort) {
-    reason = "cloud-port-conflict";
-  }
-
   return {
     port: chosenPort,
     adjusted: chosenPort !== preferredPort,
@@ -950,19 +913,11 @@ async function resolveAutomaticOpenTarget(options) {
 
   const parsedBaseUrl = parseBaseUrl(options.baseUrl);
   const preferredPort = Number.parseInt(parsedBaseUrl.port || (parsedBaseUrl.protocol === "https:" ? "443" : "80"), 10);
-  const reservedCloudPort = urlsUseSameLocalPort(options.baseUrl, options.cloudBaseUrl)
-    ? getUrlPort(parseBaseUrl(options.cloudBaseUrl))
-    : null;
   const maxAttempts = 20;
   const scanResults = [];
 
   for (let offset = 0; offset < maxAttempts; offset += 1) {
     const port = preferredPort + offset;
-    if (reservedCloudPort === port) {
-      scanResults.push({ port, status: "reserved-cloud" });
-      continue;
-    }
-
     const pids = await listListeningPids(port);
     if (pids.length === 0) {
       scanResults.push({ port, status: "free" });
@@ -991,7 +946,6 @@ async function resolveAutomaticOpenTarget(options) {
 
   const selection = chooseAutomaticOpenPort({
     preferredPort,
-    reservedCloudPort,
     restart: options.restart,
     scanResults,
   });
@@ -1241,20 +1195,7 @@ export function hasVersionOrBuildMismatch({
 }
 
 export function isManimateStatusPayload(data, options = {}) {
-  const markedLocal = options.markedLocal === true;
-  if (!data || typeof data !== "object") return false;
-  if (typeof data.status !== "string") return false;
-
-  if (markedLocal) {
-    return true;
-  }
-
-  return (
-    typeof data.connected === "boolean" ||
-    typeof data.base_url === "string" ||
-    typeof data.connect_url === "string" ||
-    typeof data.message === "string"
-  );
+  return options.markedLocal === true && data?.status === "ready" && typeof data.version === "string";
 }
 
 function isMarkedLocalStudioResponse(response) {
@@ -1450,7 +1391,6 @@ async function startLocalApp(options) {
       MANIMATE_PACKAGE_ROOT: packageRoot,
       PORT: String(port),
       HOSTNAME: host,
-      MANIMATE_CLOUD_SYNC_URL: options.cloudBaseUrl,
       NEXT_PUBLIC_APP_URL: options.baseUrl,
     },
   });
@@ -1505,7 +1445,6 @@ async function openLocalApp(options) {
     ok: true,
     status: "ready",
     app_url: options.baseUrl,
-    cloud_base_url: options.cloudBaseUrl,
     server_started: serverStarted,
     server_restarted: stoppedPids.length > 0,
     server_mode: serverMode,
@@ -1514,9 +1453,7 @@ async function openLocalApp(options) {
     message: stoppedPids.length > 0
       ? `Restarted local Manimate on ${options.baseUrl}.`
       : options.portAdjusted
-      ? options.portAdjustedReason === "cloud-port-conflict"
-        ? `Cloud sync target already uses ${options.cloudBaseUrl}; local Manimate moved to ${options.baseUrl}.`
-        : options.portAdjustedReason === "existing-instance"
+      ? options.portAdjustedReason === "existing-instance"
           ? `Reusing local Manimate at ${options.baseUrl}.`
           : `Preferred local port was unavailable; local Manimate moved to ${options.baseUrl}.`
       : `Local Manimate is running at ${options.baseUrl}.`,

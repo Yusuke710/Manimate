@@ -6,26 +6,16 @@ const DEFAULT_LOCAL_ROOT = path.join(os.homedir(), ".manimate");
 const PACKAGE_ROOT = process.env.MANIMATE_PACKAGE_ROOT?.trim() || process.cwd();
 
 export const LOCAL_ROOT = process.env.MANIMATE_LOCAL_ROOT || DEFAULT_LOCAL_ROOT;
-export const LOCAL_DB_PATH = path.join(LOCAL_ROOT, "db", "app.db");
 export const LOCAL_SESSIONS_ROOT = path.join(LOCAL_ROOT, "sessions");
 export const LOCAL_LOGS_ROOT = path.join(LOCAL_ROOT, "logs");
 
 export function ensureLocalLayout(): void {
-  fs.mkdirSync(path.dirname(LOCAL_DB_PATH), { recursive: true });
   fs.mkdirSync(LOCAL_SESSIONS_ROOT, { recursive: true });
   fs.mkdirSync(LOCAL_LOGS_ROOT, { recursive: true });
 }
 
 export function sanitizeLocalId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
-export function getLocalSandboxId(sessionId: string): string {
-  return sessionId;
-}
-
-export function getSessionIdFromSandboxId(sandboxId: string): string {
-  return sandboxId;
 }
 
 export function getLocalSessionPaths(sessionId: string): {
@@ -45,13 +35,13 @@ export function getLocalSessionPaths(sessionId: string): {
 const PROMPTS_PATH = path.join(PACKAGE_ROOT, "src", "lib", "local", "prompts");
 export type RenderMode = "cloud" | "local";
 
-export function getRenderMode(): RenderMode {
+export function selectedRenderMode(): RenderMode | null {
   let mode = process.env.MANIMATE_RENDER_MODE;
   if (!mode) {
     const configPath = path.join(LOCAL_ROOT, "config.json");
     if (fs.existsSync(configPath)) mode = JSON.parse(fs.readFileSync(configPath, "utf8")).render_mode;
   }
-  if (mode === undefined || mode === "") return "cloud";
+  if (mode === undefined || mode === "") return null;
   if (mode !== "cloud" && mode !== "local") throw new Error("render_mode must be cloud or local");
   return mode;
 }
@@ -92,7 +82,7 @@ export function ensureLocalSessionLayout(
   fs.mkdirSync(paths.artifactsDir, { recursive: true });
 
   if (options?.model) {
-    syncRuntimePrompt(paths.projectDir, options.renderMode ?? getRenderMode());
+    syncRuntimePrompt(paths.projectDir, options.renderMode ?? selectedRenderMode() ?? "cloud");
   }
 
   // Copy TTS generator into project dir so the selected agent can run:

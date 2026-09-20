@@ -136,7 +136,7 @@ export function buildDownloadFilename(sessionId: string | null, model: string | 
   return `manimate-${safeModel}-${shortId}${suffix}.mp4`;
 }
 
-export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, sessionId, sessionModel = null, isVisible = true, isRendering = false, onRequestHqRender, onRequest4kRender, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sandboxId: string | null; sessionId?: string | null; sessionModel?: string | null; isVisible?: boolean; isRendering?: boolean; onRequestHqRender?: () => boolean; onRequest4kRender?: () => boolean; onCanPlay?: () => void }) {
+export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sessionId, sessionModel = null, isVisible = true, isRendering = false, onRequestHqRender, onRequest4kRender, onCanPlay }: { videoUrl: string | null; videoRefreshNonce?: number; sessionId?: string | null; sessionModel?: string | null; isVisible?: boolean; isRendering?: boolean; onRequestHqRender?: () => boolean; onRequest4kRender?: () => boolean; onCanPlay?: () => void }) {
   // Compute full video URL first (before any hooks that use it)
   const fullVideoUrl = videoUrl?.startsWith("http") || videoUrl?.startsWith("/") ? videoUrl : null;
 
@@ -814,7 +814,7 @@ export function PreviewTab({ videoUrl, videoRefreshNonce = 0, sandboxId, session
   if (!fullVideoUrl) {
     return (
       <Placeholder
-        message={sandboxId ? "Preview will appear here when a video is generated" : "No active session. Start a chat to generate a video."}
+        message={sessionId ? "Preview will appear here when a video is generated" : "No active session. Start a chat to generate a video."}
         icon="video"
         testId="video-placeholder"
       />

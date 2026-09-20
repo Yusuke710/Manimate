@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionIdFromSandboxId } from "@/lib/local/config";
 import {
   getLocalRun,
   insertLocalMessage,
@@ -8,7 +7,6 @@ import {
 import { cancelLocalRunProcess } from "@/lib/local/runtime";
 
 interface CancelRequest {
-  sandbox_id?: string;
   session_id?: string;
   command_pid?: number;
 }
@@ -16,18 +14,16 @@ interface CancelRequest {
 export async function POST(request: NextRequest): Promise<Response> {
   try {
     const body = (await request.json()) as CancelRequest;
-    const sandboxId = body.sandbox_id;
-    const sessionId = body.session_id || (sandboxId ? getSessionIdFromSandboxId(sandboxId) : null);
+    const sessionId = body.session_id;
 
-    if (!sandboxId && !sessionId) {
+    if (!sessionId) {
       return NextResponse.json(
-        { error: "sandbox_id or session_id is required" },
+        { error: "session_id is required" },
         { status: 400 }
       );
     }
 
     const result = await cancelLocalRunProcess({
-      sandboxId: sandboxId ?? null,
       sessionId: sessionId ?? null,
       pid: Number.isInteger(body.command_pid) ? body.command_pid : null,
     });

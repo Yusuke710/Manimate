@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { selectedRenderMode } from "./render-connection";
+import { selectedRenderMode } from "./config";
 import { uploadCloudSession } from "./session-upload";
 import { readConfiguredCliModels } from "@/lib/local/cli-models";
 import fsp from "node:fs/promises";
@@ -9,7 +9,6 @@ import { normalizeLocalAgentCliSetupError, transformCliError } from "@/lib/cli-e
 import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
 import {
   ensureLocalSessionLayout,
-  getLocalSandboxId,
   getLocalSessionPaths,
   localFileToApiUrl,
   resolveSessionFilePath,
@@ -27,7 +26,7 @@ import { copyAgentTranscript } from "@/lib/local/trajectory";
 import {
   beginLocalRunStart,
   endLocalRunStart,
-  getActiveLocalRunBySandboxId,
+  getActiveLocalRunBySessionId,
   prewarmLocalKokoroVoice,
   registerLocalRunProcess,
   spawnLocalAgentProcess,
@@ -59,7 +58,6 @@ type LocalSSEEvent = {
   state?: "planning" | "coding" | "rendering" | "complete" | "error";
   message: string;
   session_id?: string;
-  sandbox_id?: string;
   agent_session_id?: string;
   run_id?: string;
   video_url?: string;
@@ -105,29 +103,14 @@ function extractPlanTitle(planContent: string): string | null {
   return match[1].replace(/\s+#+\s*$/, "").trim();
 }
 
-/**
- * Detect the output video in the project dir.
- * AGENTS.md instructs the agent to output `video.mp4`, but the manim-skill plugin
- * may output `final.mp4` instead. Returns the most recently modified file
- * so a new `final.mp4` isn't masked by a stale `video.mp4`.
- */
-const VIDEO_CANDIDATES = ["video.mp4", "final.mp4"] as const;
+/** The preview consumes the agent's final video.mp4 artifact. */
 async function detectVideoFile(projectDir: string): Promise<{ path: string; stats: fs.Stats } | null> {
-  let best: { path: string; stats: fs.Stats } | null = null;
-  for (const name of VIDEO_CANDIDATES) {
-    const filePath = path.join(projectDir, name);
-    try {
-      const stats = await fsp.stat(filePath);
-      if (stats.isFile() && (!best || stats.mtimeMs > best.stats.mtimeMs)) {
-        best = { path: filePath, stats };
-      }
-    } catch {
-      // Not found, try next.
-    }
-  }
-  return best;
+  const filePath = path.join(projectDir, "video.mp4");
+  try {
+    const stats = await fsp.stat(filePath);
+    return stats.isFile() ? {path: filePath, stats} : null;
+  } catch { return null; }
 }
-
 
 function stringifyToolResult(content: unknown): string {
   if (typeof content === "string") return content;
@@ -155,7 +138,6 @@ const TOOL_RESULT_MAX_CHARS = 6000;
 const TOOL_RESULT_MESSAGE_MAX_CHARS = 280;
 const CLI_ERROR_OUTPUT_TAIL_MAX_CHARS = 64_000;
 
-type RenderProfile = "iterate_480" | "hq_1080_30" | "uhd_4k_30";
 
 function truncateText(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
@@ -255,23 +237,15 @@ function invalidModelMessage(model: string): string {
   return `Invalid model "${model}". Use one of: claude, codex.`;
 }
 
-export function inferRenderProfile(prompt: string): RenderProfile {
-  const normalized = prompt.toLowerCase();
-  if (/\b(4k|2160p|uhd)\b/.test(normalized)) return "uhd_4k_30";
-  if (/\b(1080p|1080|high quality|hq)\b/.test(normalized)) return "hq_1080_30";
-  return "iterate_480";
-}
-
 export function buildPrompt(input: {
   projectDir: string;
   prompt: string;
   aspectRatio: string;
   voiceId: string;
-  renderProfile: RenderProfile;
   images: Array<{ path: string; originalName: string }>;
 }): string {
   const voiceLine = input.voiceId === NONE_VOICE_ID ? "" : `\n**Voice ID**: ${input.voiceId}`;
-  const configSection = `\n\n**Aspect Ratio**: ${input.aspectRatio}${voiceLine}\n**Render Profile**: ${input.renderProfile}`;
+  const configSection = `\n\n**Aspect Ratio**: ${input.aspectRatio}${voiceLine}`;
   const imageSection = input.images.length
     ? `\n\nAttached files (use Read tool to inspect them as needed):\n${input.images.map((image) => `- ${image.path} (${image.originalName})`).join("\n")}`
     : "";
@@ -310,7 +284,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
   (async () => {
     let runId: string | null = null;
     let sessionId: string | null = null;
-    let sandboxId: string | null = null;
     let agentSessionId = "";
     let modelForRun = DEFAULT_MODEL;
     const renderModeForRun = selectedRenderMode();
@@ -441,7 +414,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         : null;
       agentSessionId = resumeSessionId || "";
 
-      sandboxId = session.sandbox_id || getLocalSandboxId(sessionId);
       const { projectDir } = ensureLocalSessionLayout(sessionId, {
         model: modelForRun,
       });
@@ -489,7 +461,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         message: `${initMessage} · ${configuredCliModel?.configuredModel || "CLI default"}`,
         model: configuredCliModel?.configuredModel || "CLI default",
         tools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
-        sandbox_id: sandboxId,
         agent_session_id: resumeSessionId || undefined,
       });
 
@@ -527,7 +498,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         prompt: rawPrompt,
         aspectRatio,
         voiceId,
-        renderProfile: inferRenderProfile(rawPrompt),
         images: promptImages,
       });
 
@@ -560,7 +530,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         await sendEvent({
           type: "artifact_update",
           message: "Artifacts updated",
-          sandbox_id: sandboxId || undefined,
           agent_session_id: agentSessionId || undefined,
           plan_content: nextPlanContent,
           script_content: nextScriptContent,
@@ -576,11 +545,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
 
       registerLocalRunProcess({
         sessionId,
-        sandboxId,
         runId,
         process,
       });
-      const trackedRun = getActiveLocalRunBySandboxId(sandboxId);
+      const trackedRun = getActiveLocalRunBySessionId(sessionId);
 
       const now = new Date().toISOString();
       updateLocalRun(sessionId, runId, {
@@ -608,7 +576,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         type: "progress",
         state,
         message: "Running Manimate...",
-        sandbox_id: sandboxId,
         run_id: runId,
       });
 
@@ -640,7 +607,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           type: "progress",
           state,
           message: stateMessage,
-          sandbox_id: sandboxId || undefined,
           agent_session_id: agentSessionId || undefined,
         });
       };
@@ -656,7 +622,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           message,
           tool_name: toolName,
           tool_input: toolInput,
-          sandbox_id: sandboxId || undefined,
           agent_session_id: agentSessionId || undefined,
         });
       };
@@ -671,7 +636,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           message,
           tool_result: toolResult,
           is_error: isError,
-          sandbox_id: sandboxId || undefined,
           agent_session_id: agentSessionId || undefined,
         });
       };
@@ -722,7 +686,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                 await sendEvent({
                   type: "assistant_text",
                   message: obj.message,
-                  sandbox_id: sandboxId || undefined,
                   agent_session_id: agentSessionId || undefined,
                 });
               }
@@ -732,7 +695,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                 await sendEvent({
                   type: "assistant_text",
                   message: item.text,
-                  sandbox_id: sandboxId || undefined,
                   agent_session_id: agentSessionId || undefined,
                 });
               }
@@ -805,7 +767,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
                 await sendEvent({
                   type: "assistant_text",
                   message: block.text,
-                  sandbox_id: sandboxId || undefined,
                   agent_session_id: agentSessionId || undefined,
                 });
               }
@@ -847,7 +808,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
               state: "rendering",
               message: `Rendering video... ${progress}%`,
               progress,
-              sandbox_id: sandboxId || undefined,
               agent_session_id: agentSessionId || undefined,
             });
           }
@@ -966,7 +926,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         await sendEvent({
           type: "artifact_update",
           message: "Artifacts updated",
-          sandbox_id: sandboxId,
           agent_session_id: agentSessionId || undefined,
           plan_content: planContent,
           script_content: scriptContent,
@@ -976,7 +935,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           state: "complete",
           message: "Stopped by user",
           terminal_status: "canceled",
-          sandbox_id: sandboxId,
           agent_session_id: agentSessionId || undefined,
           run_id: runId,
           video_url: videoUrl || undefined,
@@ -1007,7 +965,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         await sendEvent({
           type: "artifact_update",
           message: "Artifacts updated",
-          sandbox_id: sandboxId,
           agent_session_id: agentSessionId || undefined,
           plan_content: planContent,
           script_content: scriptContent,
@@ -1016,7 +973,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           type: "error",
           state: "error",
           message,
-          sandbox_id: sandboxId,
           agent_session_id: agentSessionId || undefined,
         });
         return;
@@ -1042,7 +998,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       await sendEvent({
         type: "artifact_update",
         message: "Artifacts updated",
-        sandbox_id: sandboxId,
         agent_session_id: agentSessionId || undefined,
         plan_content: planContent,
         script_content: scriptContent,
@@ -1061,7 +1016,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         state: "complete",
         message: "Complete",
         terminal_status: "completed",
-        sandbox_id: sandboxId,
         agent_session_id: agentSessionId || undefined,
         run_id: runId,
         video_url: videoUrl || undefined,
@@ -1088,7 +1042,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         type: "error",
         state: "error",
         message,
-        sandbox_id: sandboxId || undefined,
         agent_session_id: agentSessionId || undefined,
       });
     } finally {

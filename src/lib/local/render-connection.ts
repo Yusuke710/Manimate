@@ -1,15 +1,11 @@
+import { selectedRenderMode } from "./config";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
-import { readStoredLocalConfig, updateStoredLocalConfig } from "./local-config-store";
+import { updateStoredLocalConfig } from "./local-config-store";
 import type { RenderConnection } from "../render-connection";
 
 const execute = promisify(execFile);
 let login: {process: ChildProcess; url?: string; error?: string} | undefined;
-
-export function selectedRenderMode(): RenderConnection["mode"] {
-  const value = process.env.MANIMATE_RENDER_MODE || readStoredLocalConfig().render_mode;
-  return value === "local" || value === "cloud" ? value : null;
-}
 
 export async function renderConnection(): Promise<RenderConnection> {
   const mode = selectedRenderMode();

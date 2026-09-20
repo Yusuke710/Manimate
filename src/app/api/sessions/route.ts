@@ -38,8 +38,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     ...session,
     has_video: Boolean(
       session.video_path ||
-      session.last_video_url ||
-      session.cloud_public_video_url
+      session.last_video_url
     ),
   }));
 

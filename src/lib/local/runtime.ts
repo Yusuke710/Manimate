@@ -7,7 +7,6 @@ import { attachClaudeInput } from "@/lib/local/claude-input";
 
 export interface ActiveLocalRunProcess {
   sessionId: string;
-  sandboxId: string;
   runId: string | null;
   process: ChildProcessWithoutNullStreams;
   startedAt: string;
@@ -15,7 +14,7 @@ export interface ActiveLocalRunProcess {
 }
 
 interface LocalRunRegistry {
-  activeBySandboxId: Map<string, ActiveLocalRunProcess>;
+  activeBySessionId: Map<string, ActiveLocalRunProcess>;
   startingSessionIds: Set<string>;
   pendingCancelBySessionId: Set<string>;
 }
@@ -27,11 +26,11 @@ const registryHost = globalThis as typeof globalThis & {
   __manimateLocalRunRegistry?: LocalRunRegistry;
 };
 const localRunRegistry: LocalRunRegistry = (registryHost.__manimateLocalRunRegistry ??= {
-  activeBySandboxId: new Map(),
+  activeBySessionId: new Map(),
   startingSessionIds: new Set(),
   pendingCancelBySessionId: new Set(),
 });
-const { activeBySandboxId, startingSessionIds, pendingCancelBySessionId } = localRunRegistry;
+const { activeBySessionId, startingSessionIds, pendingCancelBySessionId } = localRunRegistry;
 
 const LOCAL_CLAUDE_ENV_KEYS_TO_REMOVE = [
   "ANTHROPIC_API_KEY",
@@ -41,11 +40,11 @@ const LOCAL_CLAUDE_ENV_KEYS_TO_REMOVE = [
   "OPENAI_API_KEY",
 ] as const;
 
-function cleanupEntry(sandboxId: string, pid: number | undefined): void {
-  const current = activeBySandboxId.get(sandboxId);
+function cleanupEntry(sessionId: string, pid: number | undefined): void {
+  const current = activeBySessionId.get(sessionId);
   if (!current) return;
   if (pid && current.process.pid !== pid) return;
-  activeBySandboxId.delete(sandboxId);
+  activeBySessionId.delete(sessionId);
 }
 
 function isProcessDone(process: ChildProcessWithoutNullStreams): boolean {
@@ -173,25 +172,23 @@ function isLocalRunStarting(sessionId: string): boolean {
 
 export function registerLocalRunProcess(input: {
   sessionId: string;
-  sandboxId: string;
   runId: string | null;
   process: ChildProcessWithoutNullStreams;
 }): void {
   const entry: ActiveLocalRunProcess = {
     sessionId: input.sessionId,
-    sandboxId: input.sandboxId,
     runId: input.runId,
     process: input.process,
     startedAt: new Date().toISOString(),
     canceled: false,
   };
-  activeBySandboxId.set(input.sandboxId, entry);
+  activeBySessionId.set(input.sessionId, entry);
 
   input.process.once("exit", () => {
-    cleanupEntry(input.sandboxId, input.process.pid);
+    cleanupEntry(input.sessionId, input.process.pid);
   });
   input.process.once("error", () => {
-    cleanupEntry(input.sandboxId, input.process.pid);
+    cleanupEntry(input.sessionId, input.process.pid);
   });
 
   if (pendingCancelBySessionId.delete(input.sessionId)) {
@@ -199,33 +196,16 @@ export function registerLocalRunProcess(input: {
   }
 }
 
-export function getActiveLocalRunBySandboxId(
-  sandboxId: string
-): ActiveLocalRunProcess | null {
-  return activeBySandboxId.get(sandboxId) || null;
-}
-
-export function getActiveLocalRunBySessionId(
-  sessionId: string
-): ActiveLocalRunProcess | null {
-  for (const entry of activeBySandboxId.values()) {
-    if (entry.sessionId === sessionId) return entry;
-  }
-  return null;
-}
-
-export function clearLocalRunProcess(sandboxId: string): void {
-  activeBySandboxId.delete(sandboxId);
+export function getActiveLocalRunBySessionId(sessionId: string): ActiveLocalRunProcess | null {
+  return activeBySessionId.get(sessionId) || null;
 }
 
 export async function cancelLocalRunProcess(input: {
-  sandboxId?: string | null;
   sessionId?: string | null;
   pid?: number | null;
 }): Promise<{ success: boolean; message: string; runId?: string | null }> {
-  const requestedSessionId = input.sessionId || input.sandboxId || null;
+  const requestedSessionId = input.sessionId || null;
   const target =
-    (input.sandboxId && getActiveLocalRunBySandboxId(input.sandboxId)) ||
     (input.sessionId && getActiveLocalRunBySessionId(input.sessionId)) ||
     null;
 

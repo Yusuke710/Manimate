@@ -5,12 +5,10 @@ import path from "node:path";
 import {
   LOCAL_SESSIONS_ROOT,
   ensureLocalLayout,
-  getLocalSandboxId,
   getLocalSessionPaths,
   localFileToApiUrl,
   sanitizeLocalId,
 } from "@/lib/local/config";
-import { shouldRetryCloudSyncSession } from "@/lib/local/cloud-sync";
 
 export const SESSION_FILE_VERSION = 2;
 const SESSION_FILE_NAME = "session.json";
@@ -59,17 +57,11 @@ export interface StoredSession {
     version: number | null;
     chapters: unknown[] | null;
   } | null;
-  cloud: {
-    status: string;
-    last_synced_at: string | null;
-    last_error: string | null;
-    public_video_url: string | null;
-  };
   messages: StoredMessage[];
 }
 
 // ---------------------------------------------------------------------------
-// Compatibility shapes (mirror the old db.ts types so call sites stay small)
+// Session views used by the app
 // ---------------------------------------------------------------------------
 
 export interface LocalSession {
@@ -77,7 +69,6 @@ export interface LocalSession {
   session_number: number;
   title: string;
   status: string;
-  sandbox_id: string | null;
   agent_session_id: string | null;
   model: string;
   aspect_ratio: string | null;
@@ -85,10 +76,6 @@ export interface LocalSession {
   video_path: string | null;
   last_video_url: string | null;
   chapters: string | null;
-  cloud_sync_status: string;
-  cloud_last_synced_at: string | null;
-  cloud_last_error: string | null;
-  cloud_public_video_url: string | null;
   last_user_activity_at: string | null;
   created_at: string;
   updated_at: string;
@@ -121,7 +108,6 @@ export interface LocalRun {
   session_id: string;
   user_message_id: string | null;
   status: StoredRun["status"];
-  sandbox_id: string | null;
   agent_session_id: string | null;
   pid: number | null;
   started_at: string | null;
@@ -147,10 +133,6 @@ type SessionUpdateInput = Partial<{
   voice_id: string | null;
   video_path: string | null;
   chapters: string | null;
-  cloud_sync_status: string;
-  cloud_last_synced_at: string | null;
-  cloud_last_error: string | null;
-  cloud_public_video_url: string | null;
 }>;
 
 type RunUpdateInput = Partial<{
@@ -237,7 +219,7 @@ function mutateStoredSession(
 }
 
 // ---------------------------------------------------------------------------
-// Mapping between stored schema and the compat shapes
+// Mapping between stored sessions and app views
 // ---------------------------------------------------------------------------
 
 function absoluteVideoPath(data: StoredSession): string | null {
@@ -283,7 +265,6 @@ function mapSession(data: StoredSession): LocalSession {
     session_number: data.session_number || 0,
     title: data.title,
     status: data.status || "active",
-    sandbox_id: getLocalSandboxId(data.id),
     agent_session_id: data.agent_session_id,
     model: data.model,
     aspect_ratio: data.aspect_ratio,
@@ -291,10 +272,6 @@ function mapSession(data: StoredSession): LocalSession {
     video_path: absoluteVideoPath(data),
     last_video_url: lastVideoUrl(data),
     chapters: serializeChapters(data),
-    cloud_sync_status: data.cloud?.status || "idle",
-    cloud_last_synced_at: data.cloud?.last_synced_at ?? null,
-    cloud_last_error: data.cloud?.last_error ?? null,
-    cloud_public_video_url: data.cloud?.public_video_url ?? null,
     last_user_activity_at: data.last_user_activity_at || null,
     created_at: data.created_at,
     updated_at: data.updated_at,
@@ -307,7 +284,7 @@ function mapSummary(data: StoredSession): LocalSessionSummary {
     session_number: data.session_number || 0,
     title: data.title,
     status: data.status || "active",
-    has_video: Boolean(data.video?.path || data.cloud?.public_video_url),
+    has_video: Boolean(data.video?.path),
     last_user_activity_at: data.last_user_activity_at || null,
     created_at: data.created_at,
     updated_at: data.updated_at,
@@ -321,7 +298,6 @@ function mapRun(data: StoredSession, message: StoredMessage): LocalRun {
     session_id: data.id,
     user_message_id: message.id,
     status: run.status,
-    sandbox_id: getLocalSandboxId(data.id),
     agent_session_id: run.agent_session_id,
     pid: run.pid,
     started_at: run.started_at,
@@ -400,12 +376,6 @@ export function createLocalSession(input: {
     updated_at: now,
     last_user_activity_at: now,
     video: null,
-    cloud: {
-      status: "idle",
-      last_synced_at: null,
-      last_error: null,
-      public_video_url: null,
-    },
     messages: [],
   };
 
@@ -442,34 +412,6 @@ export function findLocalSessionWithChaptersByTitle(title: string): LocalSession
     .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""))[0];
   return match ? mapSession(match) : null;
 }
-
-export function listLocalCloudSyncRetryCandidates(options?: {
-  includeAuthFailures?: boolean;
-}): LocalSession[] {
-  const candidates = listStoredSessions()
-    .filter(
-      (data) =>
-        Boolean(data.video?.path) &&
-        ["idle", "pending", "syncing", "failed"].includes(data.cloud?.status || "idle")
-    )
-    .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""))
-    .map(mapSession);
-
-  if (options?.includeAuthFailures) return candidates;
-  return candidates.filter((session) =>
-    shouldRetryCloudSyncSession({
-      cloudSyncStatus: session.cloud_sync_status,
-      cloudLastError: session.cloud_last_error,
-    })
-  );
-}
-
-const CLOUD_ONLY_KEYS: ReadonlySet<keyof SessionUpdateInput> = new Set([
-  "cloud_sync_status",
-  "cloud_last_synced_at",
-  "cloud_last_error",
-  "cloud_public_video_url",
-]);
 
 export function updateLocalSession(sessionId: string, updates: SessionUpdateInput): void {
   const keys = Object.keys(updates) as Array<keyof SessionUpdateInput>;
@@ -508,17 +450,9 @@ export function updateLocalSession(sessionId: string, updates: SessionUpdateInpu
       data.video.chapters = parseChapters(updates.chapters);
     }
 
-    if (updates.cloud_sync_status !== undefined) data.cloud.status = updates.cloud_sync_status;
-    if (updates.cloud_last_synced_at !== undefined) data.cloud.last_synced_at = updates.cloud_last_synced_at;
-    if (updates.cloud_last_error !== undefined) data.cloud.last_error = updates.cloud_last_error;
-    if (updates.cloud_public_video_url !== undefined) data.cloud.public_video_url = updates.cloud_public_video_url;
-
-    const touchesContent = keys.some((key) => !CLOUD_ONLY_KEYS.has(key));
-    if (touchesContent) {
-      const now = new Date().toISOString();
-      data.updated_at = now;
-      data.last_user_activity_at = now;
-    }
+    const now = new Date().toISOString();
+    data.updated_at = now;
+    data.last_user_activity_at = now;
   });
 }
 
