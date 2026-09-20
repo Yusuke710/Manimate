@@ -409,16 +409,12 @@ function rejectRemovedSubcommand(argv) {
 }
 
 function printHumanResult(result) {
+  if (result.status === "ready") {
+    console.log(`Manimate is ready at ${result.app_url}`);
+    return;
+  }
   console.log(`status: ${result.status}`);
   if (result.app_url) console.log(`app_url: ${result.app_url}`);
-  if (result.session_id) console.log(`session_id: ${result.session_id}`);
-  if (result.run_id) console.log(`run_id: ${result.run_id}`);
-  if (result.video_url) console.log(`video_url: ${result.video_url}`);
-  if (result.review_url) console.log(`review_url: ${result.review_url}`);
-  if (typeof result.server_started === "boolean") console.log(`server_started: ${result.server_started}`);
-  if (typeof result.server_restarted === "boolean") console.log(`server_restarted: ${result.server_restarted}`);
-  if (typeof result.server_stopped === "boolean") console.log(`server_stopped: ${result.server_stopped}`);
-  if (result.server_mode) console.log(`server_mode: ${result.server_mode}`);
 }
 
 function printEventLine(event) {

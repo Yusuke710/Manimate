@@ -10,24 +10,24 @@
     ".next/standalone/**/*",
     "README.md",
     "LICENSE",
-    "scripts/manimate-tool.mjs",
+    "scripts/cli.mjs",
     "scripts/render-setup.mjs",
     "scripts/setup-dependencies.sh",
     "scripts/install.sh"
   ],
   "bin": {
-    "manimate": "scripts/manimate-tool.mjs"
+    "manimate": "scripts/cli.mjs"
   },
   "scripts": {
-    "manimate": "node scripts/manimate-tool.mjs",
+    "manimate": "node scripts/cli.mjs",
     "dev": "next dev",
     "build": "next build && node scripts/prepare-standalone.mjs",
     "prepack": "npm run build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
-    "tool:open": "node scripts/manimate-tool.mjs",
-    "tool:generate": "node scripts/manimate-tool.mjs"
+    "tool:open": "node scripts/cli.mjs",
+    "tool:generate": "node scripts/cli.mjs"
   },
   "dependencies": {
     "@clack/prompts": "^1.8.1",

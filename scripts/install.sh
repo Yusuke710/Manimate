@@ -290,7 +290,7 @@ install_package() {
 
   PACKAGE_ARCHIVE="${TMP_DIR}/manimate.tgz"
   PACKAGE_INSTALL_DIR="${INSTALL_ROOT}/install"
-  PACKAGE_ENTRY="${PACKAGE_INSTALL_DIR}/node_modules/manimate/scripts/manimate-tool.mjs"
+  PACKAGE_ENTRY="${PACKAGE_INSTALL_DIR}/node_modules/manimate/scripts/cli.mjs"
 
   log "Downloading Manimate ${PACKAGE_VERSION}"
   download_file "$PACKAGE_URL" "$PACKAGE_ARCHIVE"
@@ -325,7 +325,7 @@ INSTALL_ROOT="$(printf '%s' "$INSTALL_ROOT")"
 NODE_BIN="$(printf '%s' "$WRAPPER_NODE_BIN")"
 BIN_DIR="$(printf '%s' "$BIN_DIR")"
 MANAGED_NPM_BIN="\$INSTALL_ROOT/tools/npm-global/bin"
-ENTRYPOINT="\$INSTALL_ROOT/install/node_modules/manimate/scripts/manimate-tool.mjs"
+ENTRYPOINT="\$INSTALL_ROOT/install/node_modules/manimate/scripts/cli.mjs"
 
 export PATH="\$BIN_DIR:\$MANAGED_NPM_BIN:\$PATH"
 

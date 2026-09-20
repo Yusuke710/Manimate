@@ -142,7 +142,7 @@ Repo entrypoints:
 ```bash
 npm run tool:open
 npm run tool:generate -- "Animate Laplace transform"
-node scripts/manimate-tool.mjs "Animate Laplace transform"
+node scripts/cli.mjs "Animate Laplace transform"
 ```
 
 Example generation output:
