@@ -22,9 +22,9 @@ describe("runtime instructions", () => {
     const {ensureLocalSessionLayout} = await fixture();
     const paths = ensureLocalSessionLayout("session", {model: "claude"});
     const instructions = fs.readFileSync(path.join(paths.projectDir, "AGENTS.md"), "utf8");
-    expect(instructions).toContain("manim-remote script.py");
-    expect(instructions).toContain("render_manim");
-    expect(instructions).not.toContain("{{RENDER_INSTRUCTIONS}}");
+    expect(instructions).toContain("manim-cloud script.py");
+    expect(instructions).not.toContain("get_render");
+    expect(instructions).toBe(fs.readFileSync("src/lib/local/prompts/cloud/AGENTS.md", "utf8"));
     fs.writeFileSync(path.join(paths.projectDir, "CLAUDE.md"), "old instructions");
     ensureLocalSessionLayout("session", {model: "codex"});
     expect(fs.readFileSync(path.join(paths.projectDir, "AGENTS.md"), "utf8")).toBe(instructions);
@@ -36,13 +36,15 @@ describe("runtime instructions", () => {
     fs.writeFileSync(path.join(root, "config.json"), JSON.stringify({render_mode: "local", unrelated: "keep"}));
     const paths = ensureLocalSessionLayout("session", {model: "claude"});
     let instructions = fs.readFileSync(path.join(paths.projectDir, "AGENTS.md"), "utf8");
+    expect(instructions).toBe(fs.readFileSync("src/lib/local/prompts/local/AGENTS.md", "utf8"));
     expect(instructions).toContain("manim script.py");
-    expect(instructions).not.toContain("manim-remote");
+    expect(instructions).not.toContain("manim-cloud");
     expect(instructions).toContain("ffprobe");
     vi.stubEnv("MANIMATE_RENDER_MODE", "cloud");
     ensureLocalSessionLayout("session", {model: "claude"});
     instructions = fs.readFileSync(path.join(paths.projectDir, "AGENTS.md"), "utf8");
-    expect(instructions).toContain("manim-remote");
+    expect(instructions).toContain("manim-cloud script.py");
+    expect(instructions).not.toContain("get_render");
     expect(JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf8")).unrelated).toBe("keep");
   });
 

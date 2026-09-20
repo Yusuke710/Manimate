@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import fs from "node:fs/promises";
+import { setupRendering } from "./render-setup.mjs";
+import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -76,6 +78,7 @@ Open Options:
   --timeout <seconds>      Wait time for local app startup (default: ${DEFAULT_OPEN_TIMEOUT_SECONDS})
   --restart                Restart an existing local Manimate server on this port
   --no-open                Start local app without opening the browser
+  --setup                  Choose Local or Cloud again
   --no-upgrade-check       Skip the release upgrade check (also: MANIMATE_SKIP_UPGRADE_CHECK=1)
 
 Stop Options:
@@ -266,6 +269,9 @@ function parseOpenArgs(argv) {
         break;
       case "--restart":
         options.restart = true;
+        break;
+      case "--setup":
+        options.setup = true;
         break;
       case "--no-open":
         options.noOpen = true;
@@ -1458,6 +1464,8 @@ async function startLocalApp(options) {
 
 async function openLocalApp(options) {
   await performUpgradeCheck({ skip: options.skipUpgradeCheck });
+  const configured = await setupRendering({ force: options.setup });
+  if (configured) options.restart = true;
   await resolveAutomaticOpenTarget(options);
 
   let stoppedPids = [];
@@ -1504,14 +1512,14 @@ async function openLocalApp(options) {
     server_pid: serverPid,
     browser_opened: browserOpened,
     message: stoppedPids.length > 0
-      ? `Restarted local Manimate on ${options.baseUrl}. Autosync auth and uploads use ${options.cloudBaseUrl}.`
+      ? `Restarted local Manimate on ${options.baseUrl}.`
       : options.portAdjusted
       ? options.portAdjustedReason === "cloud-port-conflict"
         ? `Cloud sync target already uses ${options.cloudBaseUrl}; local Manimate moved to ${options.baseUrl}.`
         : options.portAdjustedReason === "existing-instance"
-          ? `Reusing local Manimate at ${options.baseUrl}. Autosync auth and uploads use ${options.cloudBaseUrl}.`
-          : `Preferred local port was unavailable; local Manimate moved to ${options.baseUrl}. Autosync auth and uploads use ${options.cloudBaseUrl}.`
-      : `Local Manimate is running at ${options.baseUrl}. Autosync auth and uploads use ${options.cloudBaseUrl}.`,
+          ? `Reusing local Manimate at ${options.baseUrl}.`
+          : `Preferred local port was unavailable; local Manimate moved to ${options.baseUrl}.`
+      : `Local Manimate is running at ${options.baseUrl}.`,
   };
 }
 
@@ -1568,7 +1576,7 @@ const isDirectExecution = (() => {
   const entrypoint = process.argv[1];
   if (!entrypoint) return false;
   try {
-    return path.resolve(entrypoint) === fileURLToPath(import.meta.url);
+    return realpathSync(entrypoint) === realpathSync(fileURLToPath(import.meta.url));
   } catch {
     return false;
   }

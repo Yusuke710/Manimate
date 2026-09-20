@@ -1,6 +1,6 @@
 {
   "name": "manimate",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Local-first Manim animation app with a packaged CLI",
   "license": "MIT",
   "engines": {
@@ -10,7 +10,10 @@
     ".next/standalone/**/*",
     "README.md",
     "LICENSE",
-    "scripts/manimate-tool.mjs"
+    "scripts/manimate-tool.mjs",
+    "scripts/render-setup.mjs",
+    "scripts/setup-dependencies.sh",
+    "scripts/install.sh"
   ],
   "bin": {
     "manimate": "scripts/manimate-tool.mjs"
@@ -27,6 +30,7 @@
     "tool:generate": "node scripts/manimate-tool.mjs"
   },
   "dependencies": {
+    "@clack/prompts": "^1.8.1",
     "dotenv": "^17.2.3",
     "next": "16.1.5",
     "react": "19.2.3",

@@ -1,9 +1,9 @@
 import HomeClient from "@/app/HomeClient";
-import { getLocalCloudSyncStatus } from "@/lib/local/cloud-sync";
+import { renderConnection } from "@/lib/local/render-connection";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const initialCloudAuthStatus = await getLocalCloudSyncStatus();
+  const initialCloudAuthStatus = await renderConnection();
   return <HomeClient initialCloudAuthStatus={initialCloudAuthStatus} />;
 }

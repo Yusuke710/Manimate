@@ -25,7 +25,13 @@ Run `python tts-generate.py --plan plan.md --voice <Voice ID>`. Use the generate
 
 ## Render and deliver
 
-{{RENDER_INSTRUCTIONS}}
+Use normal Manim arguments locally from the project directory:
+
+```sh
+manim script.py Scene1_Introduction
+```
+
+Check `command -v manim` and `manim --version`; if unavailable, report the setup blocker. Use Manim Community 0.21.0. Read local project-relative assets directly. Manim writes clips under `media/`; use the output paths reported by Manim. Do not call the cloud renderer in local mode.
 
 Choose scene grouping and parallelism yourself (up to six concurrent jobs). Inspect error logs, fix code, and re-render only affected scenes; reuse previously downloaded clips. Stitch scenes in narrative order with local FFmpeg. Mux `voiceover.mp3` when narration is enabled; otherwise produce a silent `video.mp4`.
 

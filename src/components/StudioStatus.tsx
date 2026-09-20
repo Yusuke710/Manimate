@@ -1,61 +1,6 @@
 "use client";
 
-import type { CloudAuthStatus } from "@/lib/studio-cloud-auth";
-import { getCloudSyncDisplayHost } from "@/lib/studio-cloud-auth";
-
-function getBaseUrlLabel(baseUrl: string) {
-  return getCloudSyncDisplayHost(baseUrl);
-}
-
-function getInitials(source: string) {
-  const parts = source.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  return source.slice(0, 2).toUpperCase();
-}
-
-function getCloudTitle(status: CloudAuthStatus): string {
-  switch (status.status) {
-    case "connected":
-      return status.user_name?.trim() || "Connected account";
-    case "pending":
-      return "Connecting autosync";
-    case "disconnected":
-      return "Autosync is off";
-    case "error":
-      return "Autosync needs attention";
-    default:
-      return "Connected account";
-  }
-}
-
-function getCloudDescription(status: CloudAuthStatus, syncHost: string): string {
-  switch (status.status) {
-    case "connected":
-      return status.user_email?.trim() || `Connected to ${syncHost}`;
-    case "pending":
-      return "Finish sign-in in your browser. This Mac will continue automatically.";
-    case "disconnected":
-      return `Connect to ${syncHost} to sync finished renders automatically.`;
-    case "error":
-      return status.message?.trim() || `Reconnect to ${syncHost} to resume autosync.`;
-    default:
-      return `Connected to ${syncHost}`;
-  }
-}
-
-function getCloudActionLabel(status: CloudAuthStatus): string | null {
-  switch (status.status) {
-    case "pending":
-      return "Open Browser";
-    case "disconnected":
-      return "Connect";
-    case "error":
-      return "Retry";
-    case "connected":
-    default:
-      return null;
-  }
-}
+import type { RenderConnection } from "@/lib/render-connection";
 
 function LocalBadge({ size = 24 }: { size?: number }) {
   const dotSize = size <= 18 ? 7 : 8;
@@ -125,19 +70,14 @@ export function StudioAccountCard({
   status,
   onReconnect,
 }: {
-  status: CloudAuthStatus;
+  status: RenderConnection;
   onReconnect: () => void;
 }) {
-  const syncHost = getBaseUrlLabel(status.base_url);
-  const deviceName = ("device_name" in status ? status.device_name : null)?.trim() || "This Mac";
-  const initials = getInitials(
-    status.status === "connected"
-      ? status.user_name?.trim() || status.user_email?.trim() || syncHost
-      : syncHost
-  );
-  const cloudTitle = getCloudTitle(status);
-  const cloudDescription = getCloudDescription(status, syncHost);
-  const actionLabel = getCloudActionLabel(status);
+  const connected = status.mode === "cloud" && status.status === "ready";
+  const pending = status.status === "pending";
+  const initials = connected && status.user_email ? status.user_email.slice(0, 2).toUpperCase() : "∑";
+  const cloudTitle = connected ? "Manim-Cloud" : "Cloud rendering";
+  const cloudDescription = connected ? status.user_email || "Connected" : pending ? "Finish connecting in your browser." : "Render remotely with Manim-Cloud.";
   const descriptionColor = status.status === "error" ? "#b42318" : "var(--text-tertiary)";
 
   return (
@@ -147,7 +87,7 @@ export function StudioAccountCard({
         borderTop: "1px solid var(--border-main)",
         paddingTop: 8,
       }}
-      title={`${deviceName} via ${syncHost}`}
+      title="Manimate"
     >
       <div
         style={{
@@ -159,6 +99,7 @@ export function StudioAccountCard({
           borderRadius: 12,
         }}
       >
+        {status.mode === "local" && (
         <div
           style={{
             display: "flex",
@@ -190,11 +131,12 @@ export function StudioAccountCard({
                   textOverflow: "ellipsis",
                 }}
               >
-                Running on this Mac
+                Running on this machine
               </div>
             </div>
           </div>
         </div>
+        )}
 
         <div
           style={{
@@ -246,25 +188,14 @@ export function StudioAccountCard({
               {cloudDescription}
             </div>
           </div>
-          {actionLabel ? (
-            <button
-              onClick={onReconnect}
-              style={{
-                border: "1px solid var(--border-main)",
-                background: "var(--bg-white)",
-                color: "var(--text-primary)",
-                borderRadius: 999,
-                padding: "6px 10px",
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: "pointer",
-                flexShrink: 0,
-              }}
-            >
-              {actionLabel}
-            </button>
-          ) : null}
+
         </div>
+        {!connected && <button
+          type="button"
+          onClick={onReconnect}
+          disabled={pending}
+          style={{alignSelf: "flex-start", marginLeft: 38, padding: 0, border: 0, background: "none", color: "var(--accent)", fontSize: 12, cursor: pending ? "default" : "pointer", textDecoration: "underline", textUnderlineOffset: 3}}
+        >{pending ? "Connecting…" : "Connect to Manim-Cloud"}</button>}
       </div>
     </div>
   );

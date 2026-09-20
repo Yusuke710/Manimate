@@ -19,8 +19,8 @@ import { useIsMobile, usePreferredAspectRatio } from "@/lib/hooks";
 import { DEFAULT_MODEL, type AspectRatio } from "@/lib/models";
 import { DEFAULT_VOICE_ID } from "@/lib/voices";
 import { parseUrlLaunchIntent } from "@/lib/url-launch-intent";
-import type { CloudAuthStatus } from "@/lib/studio-cloud-auth";
-import { useStudioCloudAuth } from "@/lib/useStudioCloudAuth";
+import type { RenderConnection as CloudAuthStatus } from "@/lib/render-connection";
+import { useRenderConnection } from "@/lib/useRenderConnection";
 
 function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: CloudAuthStatus }) {
   const router = useRouter();
@@ -33,7 +33,8 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     cloudAuthStatus,
     cloudAuthLoading,
     reconnectCloudAuth,
-  } = useStudioCloudAuth(initialCloudAuthStatus);
+    selectMode,
+  } = useRenderConnection(initialCloudAuthStatus);
   const searchParamsString = searchParams.toString();
 
   const activeSessionId = searchParams.get("session");
@@ -72,12 +73,6 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     router.push("/?view=library");
   }, [router]);
 
-  const handleFeedbackClick = useCallback(() => {
-    const nextUrl = activeSessionId
-      ? `/?view=feedback&feedback_session=${encodeURIComponent(activeSessionId)}`
-      : "/?view=feedback";
-    router.push(nextUrl);
-  }, [activeSessionId, router]);
 
   const handleToggleSidebar = useCallback(() => {
     if (isMobile) {
@@ -190,10 +185,6 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     handleLibraryClick();
   }, [handleLibraryClick]);
 
-  const handleMobileFeedbackClick = useCallback(() => {
-    setMobileSidebarOpen(false);
-    handleFeedbackClick();
-  }, [handleFeedbackClick]);
 
   if (isSharedImportActive) {
     return (
@@ -205,12 +196,13 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     );
   }
 
-  if (cloudAuthStatus.status !== "connected") {
+  if (cloudAuthStatus.status !== "ready") {
     return (
       <CloudAuthGate
         isLoading={cloudAuthLoading}
         status={cloudAuthStatus}
         onRetry={reconnectCloudAuth}
+        onSelectMode={selectMode}
       />
     );
   }
@@ -248,7 +240,6 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
               isLibraryActive={isLibraryActive}
               isFeedbackActive={isFeedbackActive}
               onLibraryClick={handleMobileLibraryClick}
-              onFeedbackClick={handleMobileFeedbackClick}
               cloudAuthStatus={cloudAuthStatus}
               onStudioCloudReconnect={reconnectCloudAuth}
             />
@@ -269,7 +260,6 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
             isLibraryActive={isLibraryActive}
             isFeedbackActive={isFeedbackActive}
             onLibraryClick={handleLibraryClick}
-            onFeedbackClick={handleFeedbackClick}
             cloudAuthStatus={cloudAuthStatus}
             onStudioCloudReconnect={reconnectCloudAuth}
           />
@@ -322,6 +312,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
           />
         ) : isWelcome ? (
           <WelcomeView
+            renderMode={cloudAuthStatus.mode}
             onSend={handleWelcomeSend}
             aspectRatio={aspectRatio}
             onAspectRatioChange={setAspectRatio}
@@ -527,6 +518,7 @@ function SharedImportView({
 
 // Welcome page component
 function WelcomeView({
+  renderMode,
   onSend,
   aspectRatio,
   onAspectRatioChange,
@@ -535,6 +527,7 @@ function WelcomeView({
   initialModel,
   initialVoice,
 }: {
+  renderMode: CloudAuthStatus["mode"];
   onSend: (prompt: string, images?: File[], model?: string, voice?: string, ratioOverride?: AspectRatio) => void;
   aspectRatio: AspectRatio;
   onAspectRatioChange: (ratio: AspectRatio) => void;
@@ -579,7 +572,7 @@ function WelcomeView({
       <div style={{ flex: 1 }} />
 
       <div style={{ marginBottom: 20 }}>
-        <StudioPlanPill />
+        {renderMode === "local" && <StudioPlanPill />}
       </div>
 
       <div style={{
@@ -596,7 +589,7 @@ function WelcomeView({
       <div style={{ width: "100%", maxWidth: isMobile ? "100%" : 620 }}>
         <ChatInput
           onSend={handleSend}
-          placeholder="Describe a math concept to animate..."
+          placeholder="Visualize anything"
           draftKey="chat-draft:welcome"
           initialPrompt={initialPrompt}
           extraLeft={

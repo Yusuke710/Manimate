@@ -21,9 +21,11 @@ import {
   listLocalSessionSummaries,
   readLocalSessionArtifacts,
 } from "@/lib/local/session-store";
+import { backupCloudLibrary } from "@/lib/local/session-upload";
 import { ensureLocalSessionLayout } from "@/lib/local/config";
 
 export async function GET(request: NextRequest): Promise<Response> {
+  backupCloudLibrary();
   const params = request.nextUrl.searchParams;
   const full = params.get("full") === "1";
   const query = (params.get("q") || "").trim();

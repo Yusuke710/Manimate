@@ -2,7 +2,7 @@
 
 import { useEffect, useReducer, useCallback, useRef, type MouseEvent, type ReactNode } from "react";
 import { StudioAccountCard } from "@/components/StudioStatus";
-import type { CloudAuthStatus } from "@/lib/studio-cloud-auth";
+import type { RenderConnection as CloudAuthStatus } from "@/lib/render-connection";
 
 const SESSION_LIST_POLL_INTERVAL_MS = 10_000;
 
@@ -21,7 +21,6 @@ interface SessionsSidebarProps {
   isLibraryActive?: boolean;
   isFeedbackActive?: boolean;
   onLibraryClick?: () => void;
-  onFeedbackClick?: () => void;
   cloudAuthStatus: CloudAuthStatus;
   onStudioCloudReconnect: () => void;
 }
@@ -74,15 +73,6 @@ function LibraryIcon({ size = 16, strokeWidth = 1.75 }: { size?: number; strokeW
       <rect x="14" y="3" width="7" height="7" rx="1.5" />
       <rect x="3" y="14" width="7" height="7" rx="1.5" />
       <rect x="14" y="14" width="7" height="7" rx="1.5" />
-    </svg>
-  );
-}
-
-function FeedbackIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7 10h10M7 14h6" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 20l-2.2 1.2a.45.45 0 01-.66-.4V6.75A2.75 2.75 0 015.89 4h12.22A2.75 2.75 0 0120.86 6.75v8.5A2.75 2.75 0 0118.11 18H8.4L6 20z" />
     </svg>
   );
 }
@@ -162,7 +152,6 @@ export function SessionsSidebar({
   isLibraryActive = false,
   isFeedbackActive = false,
   onLibraryClick,
-  onFeedbackClick,
   cloudAuthStatus,
   onStudioCloudReconnect,
 }: SessionsSidebarProps) {
@@ -279,18 +268,6 @@ export function SessionsSidebar({
           />
         )}
 
-        {onFeedbackClick && (
-          <SidebarNavButton
-            active={isFeedbackActive}
-            activeColor="var(--accent)"
-            compact
-            icon={<FeedbackIcon size={17} />}
-            inactiveColor="var(--icon-secondary)"
-            label="Feedback"
-            onClick={onFeedbackClick}
-          />
-        )}
-
         <button
           onClick={onToggleCollapse}
           style={{
@@ -395,16 +372,6 @@ export function SessionsSidebar({
             label="Library"
             onClick={onLibraryClick}
           />
-          {onFeedbackClick && (
-            <SidebarNavButton
-              active={isFeedbackActive}
-              activeColor="var(--text-primary)"
-              icon={<FeedbackIcon />}
-              inactiveColor="var(--text-secondary)"
-              label="Feedback"
-              onClick={onFeedbackClick}
-            />
-          )}
         </>
       )}
 

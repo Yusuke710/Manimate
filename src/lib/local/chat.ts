@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { selectedRenderMode } from "./render-connection";
+import { uploadCloudSession } from "./session-upload";
 import { readConfiguredCliModels } from "@/lib/local/cli-models";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -22,7 +24,6 @@ import {
   updateLocalSession,
 } from "@/lib/local/session-store";
 import { copyAgentTranscript } from "@/lib/local/trajectory";
-import { queueLocalCloudSync } from "@/lib/local/cloud-sync";
 import {
   beginLocalRunStart,
   endLocalRunStart,
@@ -312,6 +313,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
     let sandboxId: string | null = null;
     let agentSessionId = "";
     let modelForRun = DEFAULT_MODEL;
+    const renderModeForRun = selectedRenderMode();
     let artifactSnapshotInterval: ReturnType<typeof setInterval> | null = null;
     let runHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -1053,6 +1055,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         video_url: videoUrl,
       });
 
+      void uploadCloudSession(sessionId, renderModeForRun);
       await sendEvent({
         type: "complete",
         state: "complete",
@@ -1063,7 +1066,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         run_id: runId,
         video_url: videoUrl || undefined,
       });
-      queueLocalCloudSync(sessionId);
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : "An unexpected local-mode error occurred";
       const message = normalizeLocalAgentCliSetupError(modelForRun, rawMessage) || rawMessage;

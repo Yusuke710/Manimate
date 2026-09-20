@@ -69,9 +69,7 @@ const SUBTITLE_LINTER_PATH = path.join(
 );
 
 function syncRuntimePrompt(projectDir: string, mode: RenderMode): void {
-  const common = fs.readFileSync(path.join(PROMPTS_PATH, "AGENTS.md"), "utf8");
-  const rendering = fs.readFileSync(path.join(PROMPTS_PATH, `render-${mode}.md`), "utf8");
-  const content = common.replace("{{RENDER_INSTRUCTIONS}}", rendering.trim());
+  const content = fs.readFileSync(path.join(PROMPTS_PATH, mode, "AGENTS.md"), "utf8");
   const destination = path.join(projectDir, "AGENTS.md");
   if (!fs.existsSync(destination) || fs.readFileSync(destination, "utf8") !== content) {
     fs.writeFileSync(destination, content);

@@ -4,7 +4,7 @@ Run manimate.ai with your own local agent runtime.
 
 - Claude Code or Codex runs locally; Manim rendering can run in the cloud or locally
 - sessions are stored locally in SQLite and the filesystem
-- finished work can autosync to `manimate.ai` to view and share easily
+- choose local rendering without sign-in, or connect with Google for cloud rendering
 
 ## Requirements
 
@@ -12,8 +12,8 @@ Run manimate.ai with your own local agent runtime.
 - Claude Code 2.1.277+ (`claude`) authenticated locally, with native `AGENTS.md` loading enabled
 - optional: Codex CLI (`codex`) authenticated locally for `-m codex`
 - FFmpeg (`ffmpeg` and `ffprobe`) for stitching and frame inspection
-- cloud rendering: `manim-remote` or a configured Manim Remote MCP connection
-- local rendering: Manim CE (`manim`), LaTeX, and `dvisvgm`
+- cloud rendering: the [Manim Cloud CLI](https://github.com/Yusuke710/manim-cloud#use-the-cli), available on your PATH; connect with Google during terminal setup
+- local rendering: Manim CE 0.21.0 (`manim`), LaTeX, and `dvisvgm`
 - optional: `ELEVENLABS_API_KEY` for voiceover, or paste it in the Studio voice menu
 
 ## Install
@@ -24,7 +24,9 @@ Recommended full install:
 curl -fsSL https://manimate.ai/install.sh | bash
 ```
 
-This installs Manimate plus local rendering dependencies when possible.
+The updated installer runs terminal setup: choose **Local** to install Manim, or **Cloud** to open Google sign-in. Both modes use local FFmpeg for stitching and frame inspection. Change your choice later with `manimate --setup`.
+
+The updated installer is currently in `scripts/install.sh`; the hosted installer still serves the previous release until publication.
 
 CLI-only npm install:
 
@@ -32,7 +34,7 @@ CLI-only npm install:
 npm install -g manimate
 ```
 
-Use npm if you already have the native rendering dependencies installed.
+Running `manimate` after npm installation starts the same terminal setup.
 
 Then run:
 
@@ -42,11 +44,11 @@ manimate
 
 ## Rendering instructions
 
-Claude and Codex use the same project `AGENTS.md`. Manimate combines shared visualization instructions with either `render-cloud.md` or `render-local.md`; both agents load the generated `AGENTS.md` natively. No `CLAUDE.md` is generated.
+Claude and Codex use the same project `AGENTS.md`. Manimate copies one complete file—`prompts/cloud/AGENTS.md` or `prompts/local/AGENTS.md`—into the project based on the selected render mode. Both agents load that single file natively. No `CLAUDE.md` is generated.
 
-Cloud rendering remains the default. Set `"render_mode": "local"` or `"render_mode": "cloud"` in `~/.manimate/config.json` (preserve existing settings). The choice is read before each agent run. `MANIMATE_RENDER_MODE` overrides it when starting the server. Restart an already-running server to change its environment override.
+On first launch, choose **Local** or **Cloud**. Local installs or upgrades Manim to 0.21.0 before opening. Cloud connects through the same Google sign-in page as the MCP connector at `cloud.manimate.ai`. Change modes from the sidebar. The saved choice is in `~/.manimate/config.json`; `MANIMATE_RENDER_MODE` can override it.
 
-Cloud mode uses `manim-remote` or a configured Manim Remote MCP connection; local mode uses `manim`. Both use local FFmpeg for stitching and frame inspection and deliver `video.mp4` to the local library. This setting selects instructions; it does not install dependencies or configure an MCP connection.
+Cloud mode uses the `manim-cloud` CLI; local mode uses `manim`. Both use local FFmpeg for stitching and frame inspection and deliver `video.mp4` to the local library. Completed cloud-mode sessions are automatically backed up privately to Manim Cloud R2 using the same Google connection. Automatic backup runs only while Cloud mode is selected; selecting Cloud also backs up existing library videos. Backups include session history, source, assets, and final outputs; generated media caches and hidden files are excluded. Each compressed backup is limited to 100 MB. The old Studio/autosync service is not used. Dependencies must already be installed.
 
 ## From Source
 
@@ -216,3 +218,5 @@ Default root: `~/.manimate/`
 - `sessions/<session_id>/artifacts/`
 
 Override with `MANIMATE_LOCAL_ROOT`.
+
+In Cloud mode, Manimate automatically backs up this machine’s library to Manim Cloud R2 while the app is open. It uploads existing videos and changed sessions, skips unchanged backups, and retries failures. Local mode disables automatic backup. Other installations’ sessions are not downloaded.

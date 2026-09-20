@@ -449,8 +449,6 @@ async function submitFeedback(request: NextRequest, sessionId: string): Promise<
     metadata: feedbackMetadata,
   });
 
-  queueLocalCloudSync(session.id);
-
   return NextResponse.json({
     ok: true,
     session_id: session.id,
