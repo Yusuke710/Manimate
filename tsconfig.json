@@ -40,8 +40,6 @@
   ],
   "exclude": [
     "node_modules",
-    "test-sandbox.ts",
-    "archive",
-    "supabase/functions"
+    "archive"
   ]
 }

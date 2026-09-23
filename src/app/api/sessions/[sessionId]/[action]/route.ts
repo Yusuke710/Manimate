@@ -7,6 +7,7 @@
  */
 
 import fsp from "node:fs/promises";
+import { shareSession, ShareError } from "@/lib/local/session-share";
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
 import {
@@ -55,6 +56,9 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   const { sessionId, action } = await context.params;
 
   switch (action) {
+    case "share":
+      try { return NextResponse.json(await shareSession(sessionId)); }
+      catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Sharing failed" }, { status: error instanceof ShareError ? error.status : 500 }); }
     case "feedback":
       return submitFeedback(request, sessionId);
     case "handoff":

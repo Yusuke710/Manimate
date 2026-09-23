@@ -199,14 +199,14 @@ export default function HandoffButton({
                 Start handoff
               </div>
               <div style={{ marginTop: 5, fontSize: 12, lineHeight: 1.5, color: "var(--text-secondary)" }}>
-                Creates a new session with the latest artifacts already attached. Choose model and sound before your first message there.
+                Creates a new session with the latest artifacts already attached.
               </div>
             </div>
 
             <div style={{ display: "grid", gap: 8, padding: 12, borderRadius: 12, background: "var(--bg-hover)" }}>
-              <IncludedRow label="Latest plan" available={hasPlan} />
+              <IncludedRow label="Current plan" available={hasPlan} />
               <IncludedRow label="Current code" available={hasCode} />
-              <IncludedRow label="Latest rendered video" available={hasVideo} />
+              <IncludedRow label="Current rendered video" available={hasVideo} />
             </div>
 
             {errorMessage && (

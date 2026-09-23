@@ -89,6 +89,12 @@ npm run dev
 
 Then open `http://localhost:32179`.
 
+## Sharing and handoff
+
+Click **Share** after a render to upload the latest video, plan, code, and conversation to manimate.ai and copy its share link. Connect your account when prompted; sharing requires a Creator plan or above. Later completed runs update the same link.
+
+**Handoff** starts a fresh local session with the current plan, code, video, and chapter timings. It does not copy the conversation.
+
 ## CLI
 
 Open the app:

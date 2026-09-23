@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import ShareButton from "@/components/ShareButton";
 import HandoffButton from "@/components/HandoffButton";
 import { CodeTab, PlanTab } from "@/components/ArtifactTabs";
 import { PreviewTab } from "@/components/PreviewTab";
@@ -114,6 +115,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId
             hasVideo={Boolean(effectiveVideoUrl)}
             onCreated={(nextSessionId) => router.push(`/?session=${nextSessionId}`)}
           />
+          {sessionId && <ShareButton key={sessionId} sessionId={sessionId} disabled={!effectiveVideoUrl || isRendering} />}
         </div>
 
         {/* Tab content - all tabs rendered but hidden for preloading */}

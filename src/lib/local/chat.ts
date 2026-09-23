@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { selectedRenderMode } from "./config";
+import { refreshSharedSession } from "./session-share";
 import { uploadCloudSession } from "./session-upload";
 import { readConfiguredCliModels } from "@/lib/local/cli-models";
 import fsp from "node:fs/promises";
@@ -1010,6 +1011,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         video_url: videoUrl,
       });
 
+      void refreshSharedSession(sessionId).catch(error => console.error("[share]", error));
       void uploadCloudSession(sessionId, renderModeForRun);
       await sendEvent({
         type: "complete",
