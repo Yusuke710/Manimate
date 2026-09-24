@@ -55,6 +55,7 @@ interface SidebarNavButtonProps {
   icon: ReactNode;
   inactiveColor: string;
   label: string;
+  href?: string;
   onClick: () => void;
 }
 
@@ -77,7 +78,7 @@ function LibraryIcon({ size = 16, strokeWidth = 1.75 }: { size?: number; strokeW
   );
 }
 
-function handleNavHover(event: MouseEvent<HTMLButtonElement>, active: boolean, hovered: boolean) {
+function handleNavHover(event: MouseEvent<HTMLElement>, active: boolean, hovered: boolean) {
   if (active) return;
   event.currentTarget.style.background = hovered ? "var(--bg-hover)" : "transparent";
 }
@@ -89,11 +90,18 @@ function SidebarNavButton({
   icon,
   inactiveColor,
   label,
+  href,
   onClick,
 }: SidebarNavButtonProps) {
+  const Tag = href ? "a" : "button";
   return (
-    <button
-      onClick={onClick}
+    <Tag
+      href={href}
+      onClick={(event: MouseEvent<HTMLElement>) => {
+        if (href && (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
+        event.preventDefault();
+        onClick();
+      }}
       title={label}
       aria-label={label}
       style={{
@@ -119,13 +127,14 @@ function SidebarNavButton({
         border: "none",
         fontFamily: "var(--font)",
         transition: "background 0.12s",
+        textDecoration: "none",
       }}
       onMouseEnter={(event) => handleNavHover(event, active, true)}
       onMouseLeave={(event) => handleNavHover(event, active, false)}
     >
       {icon}
       {!compact && label}
-    </button>
+    </Tag>
   );
 }
 
@@ -264,6 +273,7 @@ export function SessionsSidebar({
             icon={<LibraryIcon size={17} />}
             inactiveColor="var(--icon-secondary)"
             label="Library"
+            href="/?view=library"
             onClick={onLibraryClick}
           />
         )}
@@ -370,6 +380,7 @@ export function SessionsSidebar({
             icon={<LibraryIcon />}
             inactiveColor="var(--text-secondary)"
             label="Library"
+            href="/?view=library"
             onClick={onLibraryClick}
           />
         </>
