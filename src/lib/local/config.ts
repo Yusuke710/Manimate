@@ -99,12 +99,13 @@ export function ensureLocalSessionLayout(
   // Copy subtitle linter into project dir so the selected agent can run:
   // `python lint-subtitles.py script.py`
   const destSubtitleLinter = path.join(paths.projectDir, "lint-subtitles.py");
-  if (!fs.existsSync(destSubtitleLinter)) {
-    try {
-      fs.copyFileSync(SUBTITLE_LINTER_PATH, destSubtitleLinter);
-    } catch {
-      // Non-fatal: rendering can proceed without this pre-check.
+  try {
+    const content = fs.readFileSync(SUBTITLE_LINTER_PATH, "utf8");
+    if (!fs.existsSync(destSubtitleLinter) || fs.readFileSync(destSubtitleLinter, "utf8") !== content) {
+      fs.writeFileSync(destSubtitleLinter, content);
     }
+  } catch {
+    // Non-fatal: rendering can proceed without this pre-check.
   }
 
   return paths;
