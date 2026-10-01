@@ -41,6 +41,7 @@ describe("buildLocalClaudeEnv", () => {
 describe("local agent CLI args", () => {
   it("builds Claude resume args with the stored agent session id", () => {
     const args = buildClaudeArgs({
+      cwd: "/tmp/manimate session",
       prompt: "continue",
       resumeSessionId: "claude-session-1",
     });
@@ -49,6 +50,9 @@ describe("local agent CLI args", () => {
     expect(args).toContain("claude-session-1");
     expect(args).not.toContain("continue");
     expect(args).toContain("--input-format");
+    expect(args[args.indexOf("--append-system-prompt-file") + 1]).toBe(
+      "/tmp/manimate session/AGENTS.md"
+    );
   });
 
   it("builds Codex resume args with the stored agent session id", () => {

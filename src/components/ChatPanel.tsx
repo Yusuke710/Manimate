@@ -826,7 +826,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
     return true;
   }, [composerAspectRatio, composerModel, composerVoice, handleSend, state.isLoading]);
 
-  const hasArtifacts = !!(state.planContent || state.scriptContent || state.videoUrl);
+  const hasArtifacts = !!(state.scriptContent || state.videoUrl);
   const [mobileArtifactOpen, setMobileArtifactOpen] = useState(false);
 
   // Auto-open artifact overlay on mobile when video first arrives
@@ -839,7 +839,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   }, [isMobile, state.videoUrl]);
 
   // Determine artifact label for the compact card
-  const artifactLabel = state.videoUrl ? "Animation preview" : state.scriptContent ? "Script" : "Plan";
+  const artifactLabel = state.videoUrl ? "Animation preview" : "Script";
   const shouldShowFirstTurnConfig =
     initialSessionLoaded &&
     !state.isLoadingMessages &&

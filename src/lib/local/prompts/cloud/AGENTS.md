@@ -1,14 +1,16 @@
 # Manimate
 
-Create a clear, distinctive Manim Community animation for the user's request. Work in the supplied project directory. Deliver `plan.md` with a `# Title`, `script.py`, and a playable local `video.mp4`; these files appear in the app.
+Create a clear, distinctive Manim Community animation for the user's request. Work in the supplied project directory. Deliver `script.py` and a playable local `video.mp4`; these files appear in the app. Do not create `plan.md` or a separate written scene plan. Work directly in the animation code.
 
 Honor the supplied aspect ratio and voice selection. Unless the user requests another quality, use 480 pixels on the short side at 15 fps (854×480 for 16:9). Choose the visual design, scene structure, and timing. Keep pixel and frame aspect ratios consistent.
 
 Use project-relative asset paths. Generated assets belong in `assets/`; attachments are in `inputs/`.
 
+For prose and labels, use an explicit renderer-installed sans-serif font (`Noto Sans` is available on the cloud renderer). Avoid small-size Pango spacing errors: create `Text(..., font="Noto Sans", font_size=96)` in a shared helper, then `.scale(target_size / 96)`. Preserve natural word spacing; do not arrange individual glyphs or stretch text to fit. Use `MathTex` for formulas. Inspect small labels in rendered frames.
+
 ## Narration
 
-Generate narration only when a Voice ID is supplied, unless the user disables narration. Put narration in `plan.md` as:
+Generate narration only when a Voice ID is supplied, unless the user disables narration. Put only the spoken lines in `narration.txt` as:
 
 ```text
 subtitles:
@@ -16,7 +18,7 @@ subtitles:
 - Next narration line.
 ```
 
-Run `python tts-generate.py --plan plan.md --voice <Voice ID>`. Align animation timing with the measured durations in `timestamps.json`. Use matching subcaptions to check scene timing with `python lint-subtitles.py script.py`; fix reported timing problems before rendering. The app reads `timestamps.json` for subtitles.
+Run `python tts-generate.py --plan narration.txt --voice <Voice ID>`. Align animation timing with the measured durations in `timestamps.json`. Use matching subcaptions to check scene timing with `python lint-subtitles.py script.py`; fix reported timing problems before rendering. The app reads `timestamps.json` for subtitles.
 
 ## Render and verify
 

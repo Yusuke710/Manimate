@@ -4,12 +4,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import ShareButton from "@/components/ShareButton";
 import HandoffButton from "@/components/HandoffButton";
-import { CodeTab, PlanTab } from "@/components/ArtifactTabs";
+import { CodeTab } from "@/components/ArtifactTabs";
 import { PreviewTab } from "@/components/PreviewTab";
 import { buildPreviewLoadKey } from "@/lib/preview-load";
 
 
-type Tab = "plan" | "code" | "preview";
+type Tab = "code" | "preview";
 
 interface PreviewPanelProps {
   videoUrl: string | null;
@@ -27,7 +27,7 @@ interface PreviewPanelProps {
 
 export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId, planContent = null, scriptContent = null, sessionModel = null, isRendering = false, onRequestHqRender, onRequest4kRender, onPreviewReady }: PreviewPanelProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>("plan");
+  const [activeTab, setActiveTab] = useState<Tab>("code");
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
   const [previewReadyKey, setPreviewReadyKey] = useState<string | null>(null);
   // Track whether user has manually selected a tab (suppresses auto-switch)
@@ -56,7 +56,6 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId
   }, []);
 
   const tabs: { id: Tab; label: string; ready: boolean }[] = [
-    { id: "plan", label: "Plan", ready: !!planContent },
     { id: "code", label: "Code", ready: !!scriptContent },
     { id: "preview", label: "Preview", ready: isVideoPlayable },
   ];
@@ -120,9 +119,6 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId
 
         {/* Tab content - all tabs rendered but hidden for preloading */}
         <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
-          <div data-testid="panel-plan" style={{ position: "absolute", inset: 0, overflow: "auto", visibility: activeTab === "plan" ? "visible" : "hidden" }}>
-            <PlanTab content={planContent} />
-          </div>
           <div data-testid="panel-code" style={{ position: "absolute", inset: 0, overflow: "auto", visibility: activeTab === "code" ? "visible" : "hidden" }}>
             <CodeTab content={scriptContent} />
           </div>

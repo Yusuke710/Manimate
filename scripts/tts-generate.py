@@ -2,14 +2,14 @@
 """
 TTS generator for Manim voiceover pipeline.
 
-Reads SubtitleSpec from plan.md, generates per-subtitle MP3s via Kokoro or ElevenLabs,
+Reads SubtitleSpec from narration.txt, generates per-subtitle MP3s via Kokoro or ElevenLabs,
 measures exact durations with ffprobe, concatenates to voiceover.mp3,
 and writes timestamps.json.
 
 Usage:
-    python tts-generate.py --plan plan.md
-    python tts-generate.py --plan plan.md --provider kokoro --voice af_heart
-    python tts-generate.py --plan plan.md --provider elevenlabs --voice-id <id>
+    python tts-generate.py --plan narration.txt
+    python tts-generate.py --plan narration.txt --provider kokoro --voice af_heart
+    python tts-generate.py --plan narration.txt --provider elevenlabs --voice-id <id>
 """
 
 import argparse
@@ -74,7 +74,7 @@ def parse_subtitles(plan_path: str) -> list[str]:
              for line in match.group(1).splitlines()
              if re.match(r"^[ \t]*-", line)]
     if not items:
-        sys.exit("Error: Empty subtitles list in plan.md")
+        sys.exit("Error: Empty subtitles list in narration input")
     return items
 
 
@@ -494,17 +494,21 @@ def ffprobe_duration(mp3_path: str) -> float:
 
 
 def concat_mp3s(parts: list[str], out_path: str) -> None:
-    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
-        for p in parts:
-            f.write(f"file '{os.path.abspath(p)}'\n")
-        list_file = f.name
-    try:
-        subprocess.run(
-            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", out_path],
-            check=True, capture_output=True,
-        )
-    finally:
-        os.unlink(list_file)
+    # Stream-copying MP3 packets accumulates encoder padding at every join.
+    # Decode first, preserve each measured timing budget, and encode only once.
+    inputs = [arg for part in parts for arg in ("-i", part)]
+    filters = [
+        f"[{i}:a]apad,atrim=duration={ffprobe_duration(part):.9f},"
+        f"asetpts=PTS-STARTPTS[a{i}]"
+        for i, part in enumerate(parts)
+    ]
+    filters.append("".join(f"[a{i}]" for i in range(len(parts)))
+                   + f"concat=n={len(parts)}:v=0:a=1[audio]")
+    subprocess.run(
+        ["ffmpeg", "-y", *inputs, "-filter_complex", ";".join(filters),
+         "-map", "[audio]", "-codec:a", "libmp3lame", "-q:a", "2", out_path],
+        check=True, capture_output=True,
+    )
 
 
 def env_int(name: str, default: int) -> int:
@@ -607,8 +611,8 @@ def run_kokoro_benchmark(subtitles: list[str], voice_id: str, parallel_workers: 
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate TTS voiceover from plan.md SubtitleSpec")
-    parser.add_argument("--plan", default="plan.md")
+    parser = argparse.ArgumentParser(description="Generate TTS voiceover from narration.txt SubtitleSpec")
+    parser.add_argument("--plan", default="narration.txt")
     parser.add_argument("--provider", choices=["auto", "kokoro", "elevenlabs"], default=os.environ.get("TTS_PROVIDER", "auto"))
     parser.add_argument("--voice", default=None, help="TTS voice name/id (overrides provider env)")
     parser.add_argument("--voice-id", default=None, help="Legacy alias for --voice")

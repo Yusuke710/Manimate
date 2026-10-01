@@ -25,10 +25,13 @@ describe("runtime instructions", () => {
     const paths = ensureLocalSessionLayout("session", {model: "claude"});
     let instructions = fs.readFileSync(path.join(paths.projectDir, "AGENTS.md"), "utf8");
     expect(instructions).toBe(fs.readFileSync("src/lib/local/prompts/local/AGENTS.md", "utf8"));
+    const ttsPath = path.join(paths.projectDir, "tts-generate.py");
+    fs.writeFileSync(ttsPath, "# outdated helper");
     vi.stubEnv("MANIMATE_RENDER_MODE", "cloud");
     ensureLocalSessionLayout("session", {model: "claude"});
     instructions = fs.readFileSync(path.join(paths.projectDir, "AGENTS.md"), "utf8");
     expect(instructions).toBe(fs.readFileSync("src/lib/local/prompts/cloud/AGENTS.md", "utf8"));
+    expect(fs.readFileSync(ttsPath, "utf8")).toBe(fs.readFileSync("scripts/tts-generate.py", "utf8"));
     expect(JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf8")).unrelated).toBe("keep");
   });
 

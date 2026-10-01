@@ -86,14 +86,15 @@ export function ensureLocalSessionLayout(
   }
 
   // Copy TTS generator into project dir so the selected agent can run:
-  // `python tts-generate.py --plan plan.md`
+  // `python tts-generate.py --plan narration.txt`
   const destTtsGenerate = path.join(paths.projectDir, "tts-generate.py");
-  if (!fs.existsSync(destTtsGenerate)) {
-    try {
-      fs.copyFileSync(TTS_GENERATE_PATH, destTtsGenerate);
-    } catch {
-      // Non-fatal: TTS step will fail gracefully if script is missing.
+  try {
+    const content = fs.readFileSync(TTS_GENERATE_PATH, "utf8");
+    if (!fs.existsSync(destTtsGenerate) || fs.readFileSync(destTtsGenerate, "utf8") !== content) {
+      fs.writeFileSync(destTtsGenerate, content);
     }
+  } catch {
+    // Non-fatal: TTS step will fail gracefully if script is missing.
   }
 
   // Copy subtitle linter into project dir so the selected agent can run:

@@ -1,5 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { execFileSync, spawn } from "node:child_process";
+import path from "node:path";
 import { getResolvedElevenLabsApiKey } from "@/lib/local/voiceover";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { NONE_VOICE_ID } from "@/lib/voices";
@@ -252,6 +253,7 @@ export function buildLocalClaudeEnv(
 }
 
 export function buildClaudeArgs(input: {
+  cwd: string;
   prompt: string;
   resumeSessionId?: string | null;
 }): string[] {
@@ -262,6 +264,8 @@ export function buildClaudeArgs(input: {
     "--input-format",
     "stream-json",
     "--verbose",
+    "--append-system-prompt-file",
+    path.join(input.cwd, "AGENTS.md"),
     "--dangerously-skip-permissions",
     "--allowedTools",
     "Task,TaskOutput,Bash,Glob,Grep,Read,Edit,Write,WebFetch,WebSearch,TaskStop,mcp__*",
