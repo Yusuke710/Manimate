@@ -1,6 +1,7 @@
+import fsp from "node:fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  ensureLocalSessionLayout,
+  getLocalSessionPaths,
 } from "@/lib/local/config";
 import { getLocalSession, updateLocalSession } from "@/lib/local/session-store";
 import {
@@ -33,12 +34,18 @@ export async function GET(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const stored = parseStoredLocalChapters(session.chapters);
-  if (stored.length > 0) {
-    return responseWithNoCache(stored);
+  // An unedited handoff has only the final video and supplied chapter metadata,
+  // not its source clips. Keep that metadata only for the same video version.
+  if (session.agent_session_id === null && session.video_path && session.last_video_url) {
+    const stored = parseStoredLocalChapters(session.chapters);
+    const version = new URL(session.last_video_url, "http://localhost").searchParams.get("_v");
+    const stat = await fsp.stat(session.video_path).catch(() => null);
+    if (stored.length && version && stat && String(Math.round(stat.mtimeMs)) === version) {
+      return responseWithNoCache(stored);
+    }
   }
 
-  const { projectDir } = ensureLocalSessionLayout(sessionId);
+  const { projectDir } = getLocalSessionPaths(sessionId);
 
   try {
     const chapters = await readLocalProjectChapters(projectDir);

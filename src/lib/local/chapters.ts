@@ -1,6 +1,6 @@
 /**
  * Scene videos and chapters: locate the rendered per-scene .mp4s in a session
- * project (via concat.txt, falling back to a media scan) and derive chapter
+ * project from assembly lists, preserving their order, and derive chapter
  * markers from them.
  */
 
@@ -39,122 +39,51 @@ export function parseConcatFile(content: string): string[] {
   return paths;
 }
 
-interface LocalVideoCandidate {
-  absolutePath: string;
-  parentDir: string;
-  mtimeMs: number;
-}
-
-async function readTextFileIfExists(filePath: string): Promise<string | null> {
-  try {
-    return await fsp.readFile(filePath, "utf8");
-  } catch {
-    return null;
-  }
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fsp.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function normalizeRelativePath(projectDir: string, filePath: string): string {
-  const relative = path.relative(projectDir, filePath);
-  return relative.split(path.sep).join("/");
-}
-
 export function toAbsoluteLocalVideoPath(projectDir: string, videoPath: string): string {
-  return path.isAbsolute(videoPath)
-    ? videoPath
-    : path.resolve(projectDir, videoPath);
+  return path.resolve(projectDir, videoPath);
 }
 
-async function getVideoPathsFromConcat(projectDir: string): Promise<string[]> {
-  const concatPath = path.join(projectDir, "concat.txt");
-  const concat = await readTextFileIfExists(concatPath);
-  if (!concat?.trim()) return [];
-
-  const parsed = parseConcatFile(concat);
-  if (parsed.length === 0) return [];
-
-  const existing: string[] = [];
-  for (const parsedPath of parsed) {
-    const absolute = toAbsoluteLocalVideoPath(projectDir, parsedPath);
-    if (await fileExists(absolute)) {
-      existing.push(normalizeRelativePath(projectDir, absolute));
-    }
-  }
-
-  return existing;
-}
-
-async function collectVideosRecursively(rootDir: string): Promise<LocalVideoCandidate[]> {
-  const candidates: LocalVideoCandidate[] = [];
-
+// Inspect small text files by content, not by a prescribed name or extension.
+// Unsupported concat directives (trimming, explicit durations) cannot safely
+// be interpreted as a sequence of whole clips.
+async function findAssemblyLists(projectDir: string): Promise<string[][]> {
+  const sequences = new Map<string, string[]>();
   async function walk(dir: string): Promise<void> {
-    let entries: Array<import("node:fs").Dirent>;
-    try {
-      entries = await fsp.readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
+    for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith(".") || ["node_modules", "__pycache__", "partial_movie_files"].includes(entry.name)) continue;
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) { await walk(file); continue; }
+      if (!entry.isFile()) continue;
+      // Avoid loading generated media while allowing extensionless manifests.
+      if (/\.(mp4|mov|mp3|wav|png|jpg|jpeg|webp|pdf|pyc)$/i.test(entry.name)) continue;
+      try {
+        if ((await fsp.stat(file)).size > 256 * 1024) continue;
+        const text = await fsp.readFile(file, "utf8");
+        const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith("#"));
+        if (!lines.length || lines.some(line => line !== "ffconcat version 1.0" && parseConcatFile(line).length !== 1)) continue;
+        const paths = parseConcatFile(text).map(p => path.resolve(dir, p));
+        if (!paths.length) continue;
+        const root = await fsp.realpath(projectDir);
+        // Reject missing inputs, directories, and paths outside this project.
+        for (const input of paths) {
+          const real = await fsp.realpath(input);
+          const relative = path.relative(root, real);
+          if (relative.startsWith(".." + path.sep) || path.isAbsolute(relative) || !/\.(mp4|mov)$/i.test(real) || !(await fsp.stat(real)).isFile()) throw Error("Invalid clip");
+        }
+        const relative = paths.map(p => path.relative(projectDir, p));
+        sequences.set(JSON.stringify(relative), relative);
+      } catch {
+        // Files can disappear during generation. Never keep a partial sequence.
+      }
     }
-
-    await Promise.all(
-      entries.map(async (entry) => {
-        const absolutePath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          if (entry.name === "partial_movie_files") return;
-          await walk(absolutePath);
-          return;
-        }
-        if (!entry.isFile()) return;
-        if (!entry.name.toLowerCase().endsWith(".mp4")) return;
-        if (entry.name === "video.mp4") return;
-
-        try {
-          const stats = await fsp.stat(absolutePath);
-          candidates.push({
-            absolutePath,
-            parentDir: path.dirname(absolutePath),
-            mtimeMs: stats.mtimeMs,
-          });
-        } catch {
-          // Ignore transient files.
-        }
-      })
-    );
   }
-
-  await walk(rootDir);
-  return candidates;
-}
-
-async function getVideoPathsFromMediaScan(projectDir: string): Promise<string[]> {
-  const mediaVideosDir = path.join(projectDir, "media", "videos");
-  const candidates = await collectVideosRecursively(mediaVideosDir);
-  if (candidates.length === 0) return [];
-
-  const newest = candidates.reduce((best, current) =>
-    current.mtimeMs > best.mtimeMs ? current : best
-  );
-  const sameDir = candidates
-    .filter((item) => item.parentDir === newest.parentDir)
-    .map((item) => item.absolutePath)
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-
-  return sameDir.map((absolutePath) =>
-    normalizeRelativePath(projectDir, absolutePath)
-  );
+  await walk(projectDir);
+  return [...sequences.values()];
 }
 
 export async function getLocalSceneVideoPaths(projectDir: string): Promise<string[]> {
-  const concatPaths = await getVideoPathsFromConcat(projectDir);
-  if (concatPaths.length > 0) return concatPaths;
-  return getVideoPathsFromMediaScan(projectDir);
+  const sequences = await findAssemblyLists(projectDir);
+  return sequences.length === 1 ? sequences[0] : [];
 }
 
 export async function getMediaDurationSeconds(filePath: string): Promise<number> {
@@ -190,7 +119,7 @@ function roundToMillis(value: number): number {
 }
 
 export function toChapterName(videoPath: string): string {
-  const filename = path.basename(videoPath).replace(/\.mp4$/i, "");
+  const filename = path.basename(videoPath).replace(/\.(mp4|mov)$/i, "");
   const withoutPrefix = filename.replace(/^\d+[\s_-]*/, "");
   const withSpaces = withoutPrefix
     .replace(/[_-]+/g, " ")
@@ -203,38 +132,47 @@ export function toChapterName(videoPath: string): string {
   return filename || "Scene";
 }
 
-export async function readLocalProjectChapters(
-  projectDir: string
-): Promise<LocalChapter[]> {
-  const videoPaths = await getLocalSceneVideoPaths(projectDir);
-  if (videoPaths.length === 0) return [];
-
-  const durations = await Promise.all(
-    videoPaths.map(async (videoPath) => {
-      const absoluteVideoPath = toAbsoluteLocalVideoPath(projectDir, videoPath);
-      return getMediaDurationSeconds(absoluteVideoPath);
-    })
-  );
-
-  const chapters: LocalChapter[] = [];
+async function deriveChapters(projectDir: string, sequences: string[][]): Promise<LocalChapter[]> {
+  if (sequences.length !== 1) return [];
+  const paths = sequences[0];
+  const durations = await Promise.all(paths.map(file =>
+    getMediaDurationSeconds(toAbsoluteLocalVideoPath(projectDir, file))
+  ));
+  if (durations.some(duration => !Number.isFinite(duration) || duration <= 0)) return [];
   let offset = 0;
+  return paths.map((file, index) => {
+    const chapter = {name: toChapterName(file), start: roundToMillis(offset), duration: roundToMillis(durations[index])};
+    offset += durations[index];
+    return chapter;
+  });
+}
 
-  for (let i = 0; i < videoPaths.length; i += 1) {
-    const duration = durations[i] ?? 0;
-    if (!Number.isFinite(duration) || duration <= 0) {
-      continue;
-    }
-
-    chapters.push({
-      name: toChapterName(videoPaths[i]),
-      start: roundToMillis(offset),
-      duration: roundToMillis(duration),
-    });
-
-    offset += duration;
+// Cache expensive media inspection, not session metadata indefinitely. Re-read
+// lists and stat every input on each request so edits invalidate this result.
+const chapterCache = new Map<string, {key: string; result: Promise<LocalChapter[]>}>();
+export async function readLocalProjectChapters(projectDir: string): Promise<LocalChapter[]> {
+  const sequences = await findAssemblyLists(projectDir);
+  const files = [...new Set(["video.mp4", ...sequences.flat()])];
+  const stamps = await Promise.all(files.map(async file => {
+    try {
+      const stat = await fsp.stat(path.resolve(projectDir, file));
+      return [file, stat.size, stat.mtimeMs, stat.ctimeMs];
+    } catch { return [file, null]; }
+  }));
+  const key = JSON.stringify([sequences, stamps]);
+  const cached = chapterCache.get(projectDir);
+  if (cached?.key === key) return cached.result;
+  const result = deriveChapters(projectDir, sequences);
+  chapterCache.set(projectDir, {key, result});
+  if (chapterCache.size > 32) chapterCache.delete(chapterCache.keys().next().value!);
+  try {
+    const chapters = await result;
+    if (!chapters.length && chapterCache.get(projectDir)?.result === result) chapterCache.delete(projectDir);
+    return chapters;
+  } catch (error) {
+    if (chapterCache.get(projectDir)?.result === result) chapterCache.delete(projectDir);
+    throw error;
   }
-
-  return chapters;
 }
 
 function isValidChapter(value: unknown): value is LocalChapter {
