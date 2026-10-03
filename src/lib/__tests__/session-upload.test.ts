@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {afterEach, expect, it, vi} from "vitest";
-const run = vi.hoisted(() => vi.fn((_file: string, _args: unknown, _options: unknown, callback: (error: Error | null, result?: string) => void) => callback(null, '{}')));
+const run = vi.hoisted(() => vi.fn((_file: string, _args: unknown, _options: unknown, callback: (error: Error | null, result?: string) => void) => callback(null, {stdout: '{}'} as unknown as string)));
 vi.mock("node:child_process", async original => ({...await original<typeof import("node:child_process")>(), execFile: run}));
 const roots: string[] = [];
 async function setup(mode: "local" | "cloud") {

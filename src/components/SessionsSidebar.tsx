@@ -383,6 +383,7 @@ export function SessionsSidebar({
             href="/?view=library"
             onClick={onLibraryClick}
           />
+          <a href="/cloud" style={{display:'block',padding:'10px 12px',fontSize:13,color:'var(--text-secondary)'}}>Cloud videos ↗</a>
         </>
       )}
 

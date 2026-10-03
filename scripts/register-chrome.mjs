@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import {fileURLToPath} from 'node:url';
+const scriptRoot=path.dirname(fileURLToPath(import.meta.url));
+const {id:defaultId}=JSON.parse(await fs.readFile(path.join(scriptRoot,'chrome-extension.json'),'utf8'));
+const id=process.env.MANIMATE_CHROME_EXTENSION_ID || defaultId;
+if(!/^[a-p]{32}$/.test(id))throw Error('Invalid Chrome extension ID');
+const installRoot=process.env.MANIMATE_INSTALL_ROOT || path.join(os.homedir(),'.manimate');
+const host=path.join(installRoot,'chrome-host');
+const quote=s=>"'"+s.replaceAll("'","'\\''")+"'";
+await fs.mkdir(installRoot,{recursive:true});
+await fs.writeFile(host,`#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(scriptRoot,'chrome-host.mjs'))} "$@"\n`,{mode:0o755});
+await fs.chmod(host,0o755);
+const folder=process.platform==='darwin'?path.join(os.homedir(),'Library/Application Support/Google/Chrome/NativeMessagingHosts'):process.platform==='linux'?path.join(os.homedir(),'.config/google-chrome/NativeMessagingHosts'):null;
+if(!folder)throw Error('Chrome launcher currently supports macOS and Linux');
+await fs.mkdir(folder,{recursive:true});
+await fs.writeFile(path.join(folder,'ai.manimate.launcher.json'),JSON.stringify({name:'ai.manimate.launcher',description:'Start local Manimate',path:host,type:'stdio',allowed_origins:[`chrome-extension://${id}/`]},null,2));
+console.log('Chrome launcher registered.');

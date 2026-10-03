@@ -1,6 +1,6 @@
 {
   "name": "manimate",
-  "version": "0.1.14",
+  "version": "0.1.16",
   "description": "Local-first Manim animation app with a packaged CLI",
   "license": "MIT",
   "engines": {
@@ -13,7 +13,12 @@
     "scripts/cli.mjs",
     "scripts/render-setup.mjs",
     "scripts/setup-dependencies.sh",
-    "scripts/install.sh"
+    "scripts/install.sh",
+    "scripts/chrome-host.mjs",
+    "scripts/register-chrome.mjs",
+    "scripts/chrome-extension.json",
+    "scripts/manim-cloud/**/*",
+    "scripts/install-cloud-client.mjs"
   ],
   "bin": {
     "manimate": "scripts/cli.mjs"
@@ -31,7 +36,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.8.1",
-    "next": "16.1.5",
+    "next": "^16.3.8",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
@@ -44,7 +49,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.5",
+    "eslint-config-next": "^16.3.8",
     "jsdom": "^29.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",

@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import {installCloudClient} from './install-cloud-client.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { select, isCancel } from '@clack/prompts';
@@ -15,15 +16,19 @@ export async function setupRendering({ force = false, env = process.env, run = s
   let mode = env.MANIMATE_RENDER_MODE || config.render_mode;
   if (mode && !['local', 'cloud'].includes(mode)) throw new Error('Render mode must be local or cloud.');
   if (mode && !force) {
+
     if (mode === 'local') {
       const version = run('manim', ['--version'], { env, encoding: 'utf8', timeout: 30000 });
       if (version.status !== 0 || !version.stdout?.split(/\r?\n/).includes('Manim Community v0.21.0')) {
+        if (env.MANIMATE_NONINTERACTIVE === '1') throw new Error('Run manimate in your terminal to update local rendering dependencies.');
         output.write('Local rendering requires Manim 0.21.0. Updating…\n');
         const installed = run('bash', [fileURLToPath(new URL('./setup-dependencies.sh', import.meta.url)), 'local'], { env, stdio: 'inherit' });
         if (installed.error || installed.status !== 0) throw new Error('Manim 0.21.0 setup did not complete. Check the output above and run manimate again.');
+        await installCloudClient({root,env,run});
         return true;
       }
     }
+    await installCloudClient({root,env,run});
     return false;
   }
   if (!input.isTTY || !output.isTTY) throw new Error('Run manimate in a terminal to choose Local or Cloud and finish setup.');
@@ -45,7 +50,9 @@ export async function setupRendering({ force = false, env = process.env, run = s
     if (result.error || result.status !== 0) throw new Error(`${command} did not complete. ${result.error?.message || 'Check the output above and run manimate again.'}`);
     return result.stdout;
   };
-  // Check the cloud client before installing shared native dependencies.
+  execute('bash', [fileURLToPath(new URL('./setup-dependencies.sh', import.meta.url)), mode]);
+  // Bundle the cloud client so switching render modes needs no separate checkout.
+  await installCloudClient({root,env,run});
   if (mode === 'cloud') {
     const result = run('manim-cloud', ['auth-status'], { env, encoding: 'utf8', timeout: 35000 });
     if (result.error?.code === 'ENOENT') throw new Error('Install the Manim Cloud CLI first: https://github.com/Yusuke710/manim-cloud#use-the-cli');
@@ -58,7 +65,6 @@ export async function setupRendering({ force = false, env = process.env, run = s
       if (status.status !== 'connected') throw new Error('Google sign-in did not finish. Run manimate again.');
     }
   }
-  execute('bash', [fileURLToPath(new URL('./setup-dependencies.sh', import.meta.url)), mode]);
   // Preserve unrelated settings; only save the selection after successful setup.
   try { config = JSON.parse(await fs.readFile(configPath, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }

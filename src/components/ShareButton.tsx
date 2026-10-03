@@ -31,13 +31,14 @@ export default function ShareButton({ sessionId, disabled }: { sessionId: string
       const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/share`, { method: "POST" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Sharing failed");
+      if (result.status === "pending" && !result.connect_url) { setError("Opening Google sign-in. After connecting, click Share again."); return; }
       if (result.connect_url) setConnect({ url: result.connect_url, code: result.code });
       else { setConnect(null); setUrl(result.share_url); await copy(result.share_url); }
     } catch (error) { setError(error instanceof Error ? error.message : "Sharing failed"); }
     finally { setBusy(false); }
   }
   return <div ref={root} className="share-control">
-    <button className={`share-trigger ${open || copied ? "emphasized" : ""} ${error ? "has-error" : ""}`} title={error || "Create a shareable manimate.ai link and copy it"} disabled={disabled || busy} onClick={share}>
+    <button className={`share-trigger ${open || copied ? "emphasized" : ""} ${error ? "has-error" : ""}`} title={error || "Create a shareable Manim Cloud link and copy it"} disabled={disabled || busy} onClick={share}>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M20 16.5a3.5 3.5 0 0 1-3.5 3.5h-9A3.5 3.5 0 0 1 4 16.5" /></svg>
       <span style={{ letterSpacing: copied ? "0.01em" : undefined }}>{busy ? "Creating..." : copied ? "Copied" : "Share"}</span>
     </button>
@@ -46,7 +47,7 @@ export default function ShareButton({ sessionId, disabled }: { sessionId: string
         <div className="share-logo" aria-hidden="true">∑</div>
         <div style={{ minWidth: 0 }}><h3>Share With Manimate</h3><p>This creates a share link and copies it to your clipboard.</p></div>
       </div>
-      {connect && <div className="share-connect"><p>Connect to manimate.ai to share. Code: {connect.code}</p><a href={connect.url} target="_blank" rel="noreferrer">Connect account</a><button onClick={share} disabled={busy}>Continue</button></div>}
+      {connect && <div className="share-connect"><p>Connect to Manim Cloud with Google to share.</p><a href={connect.url} target="_blank" rel="noreferrer">Connect account</a><button onClick={share} disabled={busy}>Continue</button></div>}
       {url && <>
         <label><span>Share Link</span><input aria-label="Share link" readOnly value={url} onFocus={event => event.target.select()} /></label>
         <button className="share-copy" style={{ background: copied ? "var(--accent-hover)" : "var(--accent)" }} onClick={() => copy(url)}>

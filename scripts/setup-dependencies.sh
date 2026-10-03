@@ -105,6 +105,9 @@ install_system_dependencies() {
       if ! have_cmd ffmpeg; then
         packages+=(ffmpeg)
       fi
+      if [ "$RENDER_MODE" = cloud ] && ! cloud_python_is_usable; then
+        packages+=(python@3.12)
+      fi
       if [ "$RENDER_MODE" = local ] && ! manim_is_usable; then
         packages+=(python@3.12 pipx cairo pango pkg-config)
       fi
@@ -128,6 +131,9 @@ install_system_dependencies() {
       if ! have_cmd ffmpeg; then
         packages+=(ffmpeg)
       fi
+      if [ "$RENDER_MODE" = cloud ] && ! cloud_python_is_usable; then
+        packages+=(python3)
+      fi
       if [ "$RENDER_MODE" = local ] && ! manim_is_usable; then
         packages+=(python3 python3-pip python3-venv python3-dev pipx build-essential libcairo2-dev libpango1.0-dev pkg-config)
       fi
@@ -143,6 +149,14 @@ install_system_dependencies() {
       die "Unsupported platform: $(uname -s). Install claude, manim, ffmpeg, latex, and dvisvgm manually, then re-run with --skip-dependencies."
       ;;
   esac
+}
+
+cloud_python_is_usable() {
+  local candidate
+  for candidate in python3.14 python3.13 python3.12 python3.11 python3 /opt/homebrew/opt/python@3.12/bin/python3.12 /usr/local/opt/python@3.12/bin/python3.12; do
+    if "$candidate" -c 'import sys; sys.exit(sys.version_info < (3,11))' >/dev/null 2>&1; then return 0; fi
+  done
+  return 1
 }
 
 manim_is_usable() {

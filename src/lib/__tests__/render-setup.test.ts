@@ -30,7 +30,7 @@ async function fixture(answer: string) {
 }
 it('local setup installs dependencies without OAuth and preserves settings', async () => {
   const f = await fixture('\r'); await configure(f.options);
-  expect(f.calls).toHaveLength(1); expect(f.calls[0][0]).toBe('bash'); expect(f.calls[0].at(-1)).toBe('local');
+  expect(f.calls[0][0]).toBe('bash'); expect(f.calls[0].at(-1)).toBe('local');
   expect(JSON.parse(await fs.readFile(path.join(f.root, 'config.json'), 'utf8'))).toEqual({ keep: 42, render_mode: 'local' });
 });
 it('cloud setup waits for login and verifies it before saving', async () => {
@@ -43,7 +43,7 @@ it('cloud setup waits for login and verifies it before saving', async () => {
   await configure(f.options);
   expect(JSON.parse(await fs.readFile(path.join(f.root, 'config.json'), 'utf8'))).toEqual({keep: 42, render_mode: 'cloud'});
   expect(f.calls).toContainEqual(['manim-cloud', 'login']);
-  expect(f.calls.at(-1)?.at(-1)).toBe('cloud');
+  expect(f.calls.some(call => call[0] === 'bash' && call.at(-1) === 'cloud')).toBe(true);
 });
 it('failed setup leaves the mode unset', async () => {
   const f = await fixture('\u001b[B\r');

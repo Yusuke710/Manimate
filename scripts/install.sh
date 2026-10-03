@@ -419,6 +419,11 @@ main() {
   resolve_node_runtime
   install_package
   write_wrapper
+  if [ "$DRY_RUN" -eq 0 ]; then
+    MANIMATE_INSTALL_ROOT="$INSTALL_ROOT" "$NODE_BIN" "${PACKAGE_INSTALL_DIR}/node_modules/manimate/scripts/register-chrome.mjs"
+  else
+    log "Would register the Chrome launcher"
+  fi
   ensure_path
   print_summary
   if [ "$DRY_RUN" -eq 0 ] && [ "$SKIP_DEPENDENCY_INSTALL" -eq 0 ]; then

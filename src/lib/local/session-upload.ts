@@ -22,7 +22,9 @@ export function uploadCloudSession(sessionId: string, runMode: "local" | "cloud"
     const sourceUpdatedAt = session.updated_at;
     record({status: "uploading"});
     try {
-      await execute("manim-cloud", ["upload-session", root], {timeout: 240000, maxBuffer: 16384});
+      const {stdout} = await execute("manim-cloud", ["upload-session", root], {timeout: 240000, maxBuffer: 16384});
+      const result = JSON.parse(stdout);
+      if (result.share_url) fs.writeFileSync(path.join(root, "share.json"), JSON.stringify({url: result.share_url}));
       record({status: "uploaded", source_updated_at: sourceUpdatedAt, uploaded_at: new Date().toISOString()});
     } catch {
       record({status: "failed", error: "Library backup failed. Local files are safe; automatic backup will retry."});
