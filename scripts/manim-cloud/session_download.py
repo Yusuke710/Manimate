@@ -66,10 +66,19 @@ def restore_session(session_id, destination):
                 for message in session.get('messages',[]):
                     if message.get('run'): message['run'].update(pid=None,agent_session_id=None)
                 (root/'session.json').write_text(json.dumps(session))
+        # Legacy exports were paged by UUID; restore the conversation chronologically.
+        session['messages'] = sorted(session.get('messages', []), key=lambda m: str(m.get('created_at') or ''))
+        (root/'session.json').write_text(json.dumps(session))
         video_path = (session.get('video') or {}).get('path')
         if video_path and not (root / video_path).resolve().is_relative_to(root):
             raise ValueError('Unsafe video path in backup')
         if not video_path or not (root / video_path).is_file():
+            chapters=(session.get('video') or {}).get('chapters')
+            if chapters is None and (root/'legacy-snapshot.json').is_file():
+                chapters=json.loads((root/'legacy-snapshot.json').read_text()).get('session',{}).get('chapters')
+                if isinstance(chapters,str):
+                    try: chapters=json.loads(chapters)
+                    except ValueError: chapters=None
             session['video'] = None
             library=render.request(base+'/videos?project='+session_id,token)
             videos=[v for v in library.get('videos',[]) if v['status']=='succeeded']
@@ -80,7 +89,7 @@ def restore_session(session_id, destination):
                     if not url.startswith(base+'/'): raise ValueError('Unexpected video origin')
                     video=root/'project'/'video.mp4'; video.parent.mkdir(exist_ok=True)
                     with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'manim-cloud/1.0'}),timeout=180) as response, video.open('wb') as out: shutil.copyfileobj(response,out)
-                    session['video']={'path':'project/video.mp4','version':None,'chapters':None}
+                    session['video']={'path':'project/video.mp4','version':None,'chapters':chapters if isinstance(chapters,list) else None}
                     (root/'session.json').write_text(json.dumps(session))
         root.rename(target)
     print(json.dumps({'session_id':session_id,'status':'restored'}))
