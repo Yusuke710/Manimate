@@ -53,7 +53,7 @@ def main(argv=None):
     parser.add_argument('--job', help='Resume polling an existing job ID')
     parser.add_argument('command', nargs=argparse.REMAINDER, help='-- manim -ql scene.py Scene1')
     args = parser.parse_args(argv); settings = config()
-    base = settings.get('RENDER_URL', 'https://cloud.manimate.ai').rstrip('/')
+    base = settings.get('RENDER_URL', 'https://manimate.ai').rstrip('/')
     token = cloud_auth.token(base) if cloud_auth.load(base) else settings.get('RENDER_TOKEN', '')
     if not base or not token: parser.error('Run manim-cloud login, or configure RENDER_URL and RENDER_TOKEN')
     if args.job:

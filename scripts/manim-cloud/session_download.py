@@ -18,7 +18,7 @@ def restore_session(session_id, destination):
     if target.exists():
         raise ValueError('This session already exists locally. Open it instead.')
     settings = render.config()
-    base = settings.get('RENDER_URL', 'https://cloud.manimate.ai').rstrip('/')
+    base = settings.get('RENDER_URL', 'https://manimate.ai').rstrip('/')
     token = cloud_auth.token(base) if cloud_auth.load(base) else settings.get('RENDER_TOKEN')
     if not token:
         raise RuntimeError('Run manim-cloud login first.')

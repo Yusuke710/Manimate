@@ -37,7 +37,7 @@ def upload_session(root):
     session = json.loads((root / 'session.json').read_text())
     title = urllib.parse.quote(str(session.get('title') or 'Untitled animation')[:200])
     settings = render.config()
-    base = settings.get('RENDER_URL', 'https://cloud.manimate.ai').rstrip('/')
+    base = settings.get('RENDER_URL', 'https://manimate.ai').rstrip('/')
     bearer = cloud_auth.token(base) if cloud_auth.load(base) else settings.get('RENDER_TOKEN')
     if not bearer:
         raise RuntimeError('Run manim-cloud login before uploading sessions.')

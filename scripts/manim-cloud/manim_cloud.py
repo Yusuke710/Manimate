@@ -66,7 +66,7 @@ def main(argv=None):
         return 0
     if argv == ['library']:
         settings = render.config()
-        base = settings.get('RENDER_URL', 'https://cloud.manimate.ai').rstrip('/')
+        base = settings.get('RENDER_URL', 'https://manimate.ai').rstrip('/')
         bearer = cloud_auth.token(base) if cloud_auth.load(base) else settings.get('RENDER_TOKEN')
         if not bearer:
             raise RuntimeError('Run manim-cloud login first.')
@@ -80,7 +80,7 @@ def main(argv=None):
         return 0
     if argv in (['login'], ['auth-status']):
         settings = render.config()
-        base = settings.get('RENDER_URL', 'https://cloud.manimate.ai').rstrip('/')
+        base = settings.get('RENDER_URL', 'https://manimate.ai').rstrip('/')
         if argv == ['login']:
             cloud_auth.login(base)
         else:
