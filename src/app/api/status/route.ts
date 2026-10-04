@@ -23,7 +23,7 @@ function discoveryHeaders(request: Request): Headers {
   return headers;
 }
 export function GET(request: Request): Response {
-  return NextResponse.json({status: "ready", studio: "manimate-local", version: packageMetadata.version, build_id: buildId}, {
+  return NextResponse.json({status: "ready", studio: "manimate-local", capabilities: {shared_handoff: true}, version: packageMetadata.version, build_id: buildId}, {
     headers: discoveryHeaders(request),
   });
 }

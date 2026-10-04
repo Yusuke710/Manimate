@@ -39,6 +39,18 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
 
   const activeSessionId = searchParams.get("session");
   const activeView = searchParams.get("view");
+  const sharedToken = searchParams.get("share");
+  const [shareError,setShareError] = useState<string | null>(null);
+  const [shareRetry,setShareRetry] = useState(0);
+  useEffect(() => {
+    if(!sharedToken || cloudAuthStatus.status !== "ready") return;
+    let cancelled=false;
+    setShareError(null);
+    fetch("/api/share-handoff",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({share:sharedToken})})
+      .then(async response => {const data=await response.json();if(!response.ok)throw Error(data.error);if(!cancelled)router.replace("/?session="+encodeURIComponent(data.session_id));})
+      .catch(error => {if(!cancelled)setShareError(error instanceof Error?error.message:"Could not open this shared project.");});
+    return () => {cancelled=true;};
+  },[sharedToken,cloudAuthStatus.status,router,shareRetry]);
   const feedbackSessionId = searchParams.get("feedback_session");
   const isLibraryActive = !activeSessionId && activeView === "library";
   const isFeedbackActive = !activeSessionId && activeView === "feedback";
@@ -194,6 +206,8 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
       />
     );
   }
+
+  if(sharedToken) return <main style={{minHeight:"100dvh",display:"grid",placeItems:"center",background:"var(--bg-main)",padding:24}}><section style={{textAlign:"center",maxWidth:420}}><div style={{font:"28px Georgia",marginBottom:20}}><span style={{color:"var(--accent)"}}>∑</span> Manimate</div><p role="status">{shareError || "Opening your session…"}</p>{shareError&&<><button onClick={()=>setShareRetry(value=>value+1)} style={{margin:12,padding:"10px 16px",background:"var(--accent)",color:"white",borderRadius:8}}>Try again</button><a href="/?view=library">Library</a></>}</section></main>;
 
   return (
     <div style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
