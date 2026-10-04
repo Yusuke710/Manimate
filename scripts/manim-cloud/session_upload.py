@@ -32,9 +32,14 @@ def archive_session(root, output):
     return session_id
 
 
-def upload_session(root):
+def upload_session(root, visibility=None):
     root = Path(root).resolve()
     session = json.loads((root / 'session.json').read_text())
+    if visibility is None:
+        settings_file = root / 'share-settings.json'
+        visibility = json.loads(settings_file.read_text()).get('visibility', 'public') if settings_file.exists() else 'public'
+    if visibility not in ('public', 'unlisted'):
+        raise ValueError('Invalid share visibility')
     title = urllib.parse.quote(str(session.get('title') or 'Untitled animation')[:200])
     settings = render.config()
     base = settings.get('RENDER_URL', 'https://manimate.ai').rstrip('/')
@@ -49,7 +54,7 @@ def upload_session(root):
         with open(temporary.name, 'rb') as body:
             request = urllib.request.Request(base + '/sessions/' + session_id, body, method='PUT', headers={
                 'Authorization': 'Bearer ' + bearer, 'Content-Type': 'application/gzip',
-                'Content-Length': str(size), 'X-Project-Title': title, 'User-Agent': 'manim-cloud/1.0'})
+                'Content-Length': str(size), 'X-Project-Title': title, 'X-Share-Visibility': visibility, 'User-Agent': 'manim-cloud/1.0'})
             with urllib.request.urlopen(request, timeout=180) as response:
                 result = json.load(response)
     video_name = (session.get('video') or {}).get('path') or session.get('video_path')
@@ -68,7 +73,18 @@ def upload_session(root):
             with video.open('rb') as body:
                 request = urllib.request.Request(base + '/sessions/' + session_id + '/video', body, method='PUT', headers={
                     'Authorization': 'Bearer ' + bearer, 'Content-Type': 'video/mp4', 'Content-Length': str(size),
-                    'X-Project-Title': title, 'X-Content-SHA256': checksum, 'User-Agent': 'manim-cloud/1.0'})
+                    'X-Project-Title': title, 'X-Share-Visibility': visibility, 'X-Content-SHA256': checksum, 'User-Agent': 'manim-cloud/1.0'})
                 with urllib.request.urlopen(request, timeout=180) as response:
                     result.update(json.load(response))
     print(json.dumps(result))
+
+
+def share_visibility(session_id, visibility):
+    if not re.fullmatch(r'[a-zA-Z0-9_-]{1,128}', session_id) or visibility not in ('public', 'unlisted'):
+        raise ValueError('Invalid share settings')
+    settings = render.config()
+    base = settings.get('RENDER_URL', 'https://manimate.ai').rstrip('/')
+    bearer = cloud_auth.token(base) if cloud_auth.load(base) else settings.get('RENDER_TOKEN')
+    if not bearer:
+        raise RuntimeError('Run manim-cloud login first.')
+    print(json.dumps(render.request(base+'/sessions/'+session_id+'/share',bearer,json.dumps({'visibility':visibility}).encode())))

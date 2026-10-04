@@ -7,7 +7,7 @@
  */
 
 import fsp from "node:fs/promises";
-import { shareSession, ShareError } from "@/lib/local/session-share";
+import { shareSession, getShareSettings, ShareError } from "@/lib/local/session-share";
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_MODEL, isRegisteredModelId } from "@/lib/models";
 import {
@@ -46,6 +46,10 @@ interface RouteContext {
 
 export async function GET(request: NextRequest, context: RouteContext): Promise<Response> {
   const { sessionId, action } = await context.params;
+  if (action === "share") {
+    try{return NextResponse.json(await getShareSettings(sessionId));}
+    catch{return NextResponse.json({error:"Session not found"},{status:404});}
+  }
   if (action !== "messages") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -57,7 +61,7 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
 
   switch (action) {
     case "share":
-      try { return NextResponse.json(await shareSession(sessionId)); }
+      try { return NextResponse.json(await shareSession(sessionId,(await request.json().catch(()=>({}))).visibility)); }
       catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Sharing failed" }, { status: error instanceof ShareError ? error.status : 500 }); }
     case "feedback":
       return submitFeedback(request, sessionId);

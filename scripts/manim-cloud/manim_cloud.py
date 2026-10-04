@@ -72,11 +72,17 @@ def main(argv=None):
             raise RuntimeError('Run manim-cloud login first.')
         print(json.dumps(render.request(base + '/videos', bearer)))
         return 0
+    if argv[:1] == ['share-visibility']:
+        if len(argv) != 3:
+            raise ValueError('Usage: manim-cloud share-visibility SESSION_ID public|unlisted')
+        from session_upload import share_visibility
+        share_visibility(argv[1], argv[2])
+        return 0
     if argv[:1] == ['upload-session']:
-        if len(argv) != 2:
-            raise ValueError('Usage: manim-cloud upload-session SESSION_DIRECTORY')
+        if len(argv) not in (2, 4) or (len(argv) == 4 and argv[2] != '--visibility'):
+            raise ValueError('Usage: manim-cloud upload-session SESSION_DIRECTORY [--visibility public|unlisted]')
         from session_upload import upload_session
-        upload_session(argv[1])
+        upload_session(argv[1], argv[3] if len(argv) == 4 else None)
         return 0
     if argv in (['login'], ['auth-status']):
         settings = render.config()

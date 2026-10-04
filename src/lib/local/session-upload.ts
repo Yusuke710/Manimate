@@ -5,6 +5,8 @@ import { promisify } from "node:util";
 import { getLocalSessionPaths, selectedRenderMode } from "./config";
 import { getLocalSession, listLocalSessions } from "./session-store";
 
+import {shareFingerprint,rememberSharedSession} from "./session-share";
+
 const execute = promisify(execFile);
 const pending = new Map<string, Promise<void>>();
 let queue = Promise.resolve();
@@ -20,11 +22,12 @@ export function uploadCloudSession(sessionId: string, runMode: "local" | "cloud"
     const root = getLocalSessionPaths(sessionId).sessionRoot;
     const record = (data: object) => fs.writeFileSync(path.join(root, "cloud-backup.json"), JSON.stringify(data));
     const sourceUpdatedAt = session.updated_at;
+    const fingerprint = await shareFingerprint(sessionId);
     record({status: "uploading"});
     try {
       const {stdout} = await execute("manim-cloud", ["upload-session", root], {timeout: 240000, maxBuffer: 16384});
       const result = JSON.parse(stdout);
-      if (result.share_url) fs.writeFileSync(path.join(root, "share.json"), JSON.stringify({url: result.share_url}));
+      if (result.share_url) await rememberSharedSession(sessionId, result.share_url, fingerprint);
       record({status: "uploaded", source_updated_at: sourceUpdatedAt, uploaded_at: new Date().toISOString()});
     } catch {
       record({status: "failed", error: "Library backup failed. Local files are safe; automatic backup will retry."});

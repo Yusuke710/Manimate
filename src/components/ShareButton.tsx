@@ -19,45 +19,64 @@ export default function ShareButton({ sessionId, disabled }: { sessionId: string
   }, [open]);
   const [busy, setBusy] = useState(false);
   const [url, setUrl] = useState("");
+  const [savedVisibility,setSavedVisibility] = useState<"public"|"unlisted">("public");
+  const [visibility,setVisibility] = useState<"public"|"unlisted">("public");
   const [connect, setConnect] = useState<{ url: string; code: string } | null>(null);
   const [error, setError] = useState("");
   async function copy(link: string) {
     try { await navigator.clipboard.writeText(link); setError(""); setCopied(true); }
     catch { setError("Copy failed. Copy the link manually."); }
   }
+  async function openShare() {
+    setOpen(true);setBusy(true);setError("");setCopied(false);setUrl("");
+    try {
+      const response=await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/share`);
+      const data=await response.json();if(!response.ok)throw Error(data.error);
+      setVisibility(data.visibility);setSavedVisibility(data.visibility);setUrl(data.share_url||"");
+    }catch(error){setError(error instanceof Error?error.message:"Could not load share settings");}
+    finally{setBusy(false);}
+  }
   async function share() {
     setOpen(true); setBusy(true); setCopied(false); setError(""); setUrl("");
     try {
-      const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/share`, { method: "POST" });
+      const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/share`, { method: "POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({visibility}) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Sharing failed");
       if (result.status === "pending" && !result.connect_url) { setError("Opening Google sign-in. After connecting, click Share again."); return; }
       if (result.connect_url) setConnect({ url: result.connect_url, code: result.code });
-      else { setConnect(null); setUrl(result.share_url); await copy(result.share_url); }
+      else { setConnect(null); setSavedVisibility(visibility); setUrl(result.share_url); await copy(result.share_url); }
     } catch (error) { setError(error instanceof Error ? error.message : "Sharing failed"); }
     finally { setBusy(false); }
   }
   return <div ref={root} className="share-control">
-    <button className={`share-trigger ${open || copied ? "emphasized" : ""} ${error ? "has-error" : ""}`} title={error || "Create a shareable Manim Cloud link and copy it"} disabled={disabled || busy} onClick={share}>
+    <button className={`share-trigger ${open || copied ? "emphasized" : ""} ${error ? "has-error" : ""}`} title={error || "Create a shareable Manim Cloud link and copy it"} disabled={disabled || busy} onClick={openShare}>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M20 16.5a3.5 3.5 0 0 1-3.5 3.5h-9A3.5 3.5 0 0 1 4 16.5" /></svg>
       <span style={{ letterSpacing: copied ? "0.01em" : undefined }}>{busy ? "Creating..." : copied ? "Copied" : "Share"}</span>
     </button>
     {open && <div role="dialog" aria-label="Share animation" className="share-popover">
       <div className="share-header">
         <div className="share-logo" aria-hidden="true">∑</div>
-        <div style={{ minWidth: 0 }}><h3>Share With Manimate</h3><p>This creates a share link and copies it to your clipboard.</p></div>
+        <div style={{ minWidth: 0 }}><h3>Share With Manimate</h3><p>Choose who can find your video.</p></div>
       </div>
+      <fieldset disabled={busy} className="share-visibility">
+        <legend>Visibility</legend>
+        <label className="visibility-option"><input type="radio" name={`visibility-${sessionId}`} value="public" checked={visibility==="public"} onChange={()=>{setVisibility("public");setCopied(false);}}/><span><strong>Public</strong><small>Anyone can watch. Search engines may index it.</small></span></label>
+        <label className="visibility-option"><input type="radio" name={`visibility-${sessionId}`} value="unlisted" checked={visibility==="unlisted"} onChange={()=>{setVisibility("unlisted");setCopied(false);}}/><span><strong>Anyone with the link</strong><small>Unlisted. Anyone with the link can watch and copy.</small></span></label>
+      </fieldset>
       {connect && <div className="share-connect"><p>Connect to Manim Cloud with Google to share.</p><a href={connect.url} target="_blank" rel="noreferrer">Connect account</a><button onClick={share} disabled={busy}>Continue</button></div>}
-      {url && <>
-        <label><span>Share Link</span><input aria-label="Share link" readOnly value={url} onFocus={event => event.target.select()} /></label>
-        <button className="share-copy" style={{ background: copied ? "var(--accent-hover)" : "var(--accent)" }} onClick={() => copy(url)}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-          <span>{copied ? "Link Copied" : "Copy Link"}</span>
-        </button>
-      </>}
+      {url && <label><span>Share Link</span><input aria-label="Share link" readOnly value={url} onFocus={event => event.target.select()} /></label>}
+      <button className="share-copy" disabled={busy} style={{background:"var(--accent)"}} onClick={share}>{busy?"Saving…":copied?"Link Copied":url?(visibility===savedVisibility?"Copy Link":"Save & Copy Link"):"Create Link"}</button>
       {error && <div className="share-error" role="alert">{error}</div>}
     </div>}
     <style jsx>{`
+      .share-visibility {border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}
+      .share-visibility legend {font-size:12px;color:var(--text-secondary);margin-bottom:8px;}
+      .share-visibility .visibility-option {display:flex;flex-direction:row;align-items:flex-start;gap:10px;cursor:pointer;}
+      .visibility-option input {width:16px;height:16px;padding:0;margin:3px 0 0;accent-color:var(--accent);flex-shrink:0;}
+      .visibility-option span {text-transform:none;letter-spacing:normal;}
+      .visibility-option strong {display:block;font-size:13px;font-weight:500;color:var(--text-primary);}
+      .visibility-option small {display:block;font-size:11px;line-height:1.5;color:var(--text-secondary);margin-top:2px;}
+      .share-copy:disabled {opacity:.6;cursor:wait;}
       .share-control { position: relative; display: flex; align-items: center; }
       .share-trigger { display: inline-flex; align-items: center; gap: 7px; min-height: 29px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border-main); background: var(--bg-white); color: var(--text-primary); font: 500 13px var(--font); cursor: pointer; transition: all .16s ease; }
       .share-trigger.emphasized { border-color: rgba(43,181,160,.26); background: linear-gradient(180deg, rgba(43,181,160,.12) 0%, rgba(43,181,160,.07) 100%); box-shadow: 0 6px 18px rgba(43,181,160,.10); }
