@@ -10,8 +10,23 @@ function readBuildId(): string | null {
 }
 const buildId = readBuildId();
 
-export function GET(): Response {
-  return NextResponse.json({status: "ready", version: packageMetadata.version, build_id: buildId}, {
-    headers: {"Cache-Control": "no-store", "x-manimate-studio": "local"},
+// Only the public website may discover a local instance. No session data is exposed.
+function discoveryHeaders(request: Request): Headers {
+  const headers = new Headers({"Cache-Control": "no-store", "x-manimate-studio": "local", "Vary": "Origin"});
+  const origin = request.headers.get("Origin");
+  if (origin === "https://manimate.ai" || origin === "https://www.manimate.ai") {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Access-Control-Expose-Headers", "x-manimate-studio");
+    headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+    headers.set("Access-Control-Allow-Private-Network", "true");
+  }
+  return headers;
+}
+export function GET(request: Request): Response {
+  return NextResponse.json({status: "ready", studio: "manimate-local", version: packageMetadata.version, build_id: buildId}, {
+    headers: discoveryHeaders(request),
   });
+}
+export function OPTIONS(request: Request): Response {
+  return new Response(null, {status: 204, headers: discoveryHeaders(request)});
 }
