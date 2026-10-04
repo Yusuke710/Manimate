@@ -37,7 +37,7 @@ def upload_session(root, visibility=None):
     session = json.loads((root / 'session.json').read_text())
     if visibility is None:
         settings_file = root / 'share-settings.json'
-        visibility = json.loads(settings_file.read_text()).get('visibility', 'public') if settings_file.exists() else 'public'
+        visibility = json.loads(settings_file.read_text()).get('visibility', 'unlisted') if settings_file.exists() else 'unlisted'
     if visibility not in ('public', 'unlisted'):
         raise ValueError('Invalid share visibility')
     title = urllib.parse.quote(str(session.get('title') or 'Untitled animation')[:200])

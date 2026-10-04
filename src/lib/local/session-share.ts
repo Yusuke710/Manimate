@@ -72,14 +72,14 @@ export async function shareSession(id:string,requested?:unknown) {
   const visibility=requested===undefined?settings.visibility:requested;
   if(visibility!=='public'&&visibility!=='unlisted')throw new ShareError('Invalid visibility',400);
   const cached=await cachedShare(id);
-  if(cached&&visibility===settings.visibility)return {share_url:cached};
+  if(cached&&settings.confirmed&&visibility===settings.visibility)return {share_url:cached};
   const connection=await renderConnection();
   if(connection.status!=='ready') {
     const started=await connectRenderer();
     return {connect_url:started.connect_url || connection.connect_url,code:'',status:'pending'};
   }
   const url=cached||await enqueue(id,visibility);
-  if(visibility!==settings.visibility){
+  if(!settings.confirmed||visibility!==settings.visibility){
     await execute('manim-cloud',['share-visibility',id,visibility],{timeout:35000,maxBuffer:16384});
     await fs.writeFile(path.join(getLocalSessionPaths(id).sessionRoot,'share-settings.json'),JSON.stringify({visibility}));
   }
@@ -92,8 +92,8 @@ export async function refreshSharedSession(id:string):Promise<void> {
   if(record.url)await enqueue(id);
 }
 
-export async function getShareSettings(id:string):Promise<{visibility:'public'|'unlisted';share_url:string|null}>{
+export async function getShareSettings(id:string):Promise<{visibility:'public'|'unlisted';share_url:string|null;confirmed:boolean}>{
   if(!getLocalSession(id))throw new ShareError('Session not found',404);
   const settings=JSON.parse(await fs.readFile(path.join(getLocalSessionPaths(id).sessionRoot,'share-settings.json'),'utf8').catch(()=>'{}'));
-  return {visibility:settings.visibility==='unlisted'?'unlisted':'public',share_url:await cachedShare(id)};
+  return {visibility:settings.visibility==='unlisted'?'unlisted':'public',share_url:await cachedShare(id),confirmed:settings.visibility==='public'||settings.visibility==='unlisted'};
 }

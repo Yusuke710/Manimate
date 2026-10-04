@@ -24,28 +24,44 @@ it('saves canonical links when the upload client returns a legacy domain',async(
 
 it('reuses a persistent link without auth checks or uploads on repeat clicks',async()=>{
  const f=await fixture();const first=await f.shareSession(f.id);mocks.connection.mockRejectedValue(new Error('offline'));
- expect(await f.shareSession(f.id)).toEqual(first);expect(mocks.run).toHaveBeenCalledTimes(1);expect(mocks.connection).toHaveBeenCalledTimes(1);
- vi.resetModules();const reloaded=await import('@/lib/local/session-share');expect(await reloaded.shareSession(f.id)).toEqual(first);expect(mocks.run).toHaveBeenCalledTimes(1);
+ expect(await f.shareSession(f.id)).toEqual(first);expect(mocks.run).toHaveBeenCalledTimes(2);expect(mocks.connection).toHaveBeenCalledTimes(1);
+ vi.resetModules();const reloaded=await import('@/lib/local/session-share');expect(await reloaded.shareSession(f.id)).toEqual(first);expect(mocks.run).toHaveBeenCalledTimes(2);
 });
 it('uploads again when video or handoff code changes',async()=>{
- const f=await fixture();await f.shareSession(f.id);fs.writeFileSync(f.video,'new rendered video');await f.shareSession(f.id);expect(mocks.run).toHaveBeenCalledTimes(2);
- fs.writeFileSync(path.join(path.dirname(f.video),'script.py'),'new code');await f.shareSession(f.id);expect(mocks.run).toHaveBeenCalledTimes(3);
+ const f=await fixture();await f.shareSession(f.id);fs.writeFileSync(f.video,'new rendered video');await f.shareSession(f.id);expect(mocks.run).toHaveBeenCalledTimes(3);
+ fs.writeFileSync(path.join(path.dirname(f.video),'script.py'),'new code');await f.shareSession(f.id);expect(mocks.run).toHaveBeenCalledTimes(4);
 });
 it('uses links recorded by background backups on the first share click',async()=>{
  const f=await fixture();await f.rememberSharedSession(f.id,'https://manimate.ai/share/backed-up',await f.shareFingerprint(f.id));
- expect(await f.shareSession(f.id)).toEqual({share_url:'https://manimate.ai/share/backed-up'});expect(mocks.run).not.toHaveBeenCalled();expect(mocks.connection).not.toHaveBeenCalled();
+ expect(await f.shareSession(f.id)).toEqual({share_url:'https://manimate.ai/share/backed-up'});expect(mocks.run.mock.calls.map(call=>call[1])).toEqual([['share-visibility',f.id,'public']]);expect(mocks.connection).toHaveBeenCalledTimes(1);
 });
 it('does not cache a background upload if its source changed meanwhile',async()=>{
- const f=await fixture();const before=await f.shareFingerprint(f.id);fs.writeFileSync(f.video,'changed during backup');await f.rememberSharedSession(f.id,'https://manimate.ai/share/stale',before);await f.shareSession(f.id);expect(mocks.run).toHaveBeenCalledTimes(1);
+ const f=await fixture();const before=await f.shareFingerprint(f.id);fs.writeFileSync(f.video,'changed during backup');await f.rememberSharedSession(f.id,'https://manimate.ai/share/stale',before);await f.shareSession(f.id);expect(mocks.run).toHaveBeenCalledTimes(2);
 });
 it('changes visibility without uploading again or changing the share URL',async()=>{
  const f=await fixture();const first=await f.shareSession(f.id);expect((await f.getShareSettings(f.id)).visibility).toBe('public');
  expect(await f.shareSession(f.id,'unlisted')).toEqual(first);
- expect(mocks.run.mock.calls.map(call=>call[1][0])).toEqual(['upload-session','share-visibility']);
+ expect(mocks.run.mock.calls.map(call=>call[1][0])).toEqual(['upload-session','share-visibility','share-visibility']);
  expect((await f.getShareSettings(f.id)).visibility).toBe('unlisted');
- expect(await f.shareSession(f.id,'unlisted')).toEqual(first);expect(mocks.run).toHaveBeenCalledTimes(2);
+ expect(await f.shareSession(f.id,'unlisted')).toEqual(first);expect(mocks.run).toHaveBeenCalledTimes(3);
 });
 it('passes link-only visibility on initial upload and rejects invalid choices',async()=>{
  const f=await fixture();await f.shareSession(f.id,'unlisted');expect(mocks.run.mock.calls[0][1].slice(-2)).toEqual(['--visibility','unlisted']);
  await expect(f.shareSession(f.id,'private')).rejects.toMatchObject({status:400});
+});
+
+it('opening share settings does not publish a background upload',async()=>{
+ const f=await fixture();await f.rememberSharedSession(f.id,'https://manimate.ai/share/backup',await f.shareFingerprint(f.id));
+ expect(await f.getShareSettings(f.id)).toMatchObject({visibility:'public',confirmed:false});expect(mocks.run).not.toHaveBeenCalled();
+ await f.shareSession(f.id,'unlisted');
+ expect(mocks.run.mock.calls.map(call=>call[1])).toEqual([['share-visibility',f.id,'unlisted']]);
+ expect(await f.getShareSettings(f.id)).toMatchObject({visibility:'unlisted',confirmed:true});
+ await f.shareSession(f.id,'unlisted');expect(mocks.run).toHaveBeenCalledTimes(1);
+});
+it('does not cache confirmation when publishing fails',async()=>{
+ const f=await fixture();await f.rememberSharedSession(f.id,'https://manimate.ai/share/backup',await f.shareFingerprint(f.id));
+ mocks.run.mockImplementationOnce((_f,_a,_o,cb)=>cb(new Error('offline')));
+ await expect(f.shareSession(f.id,'public')).rejects.toThrow('offline');
+ expect((await f.getShareSettings(f.id)).confirmed).toBe(false);
+ await f.shareSession(f.id,'public');expect(mocks.run).toHaveBeenCalledTimes(2);
 });
