@@ -476,7 +476,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
     // only a reconciliation fallback. Poll fast while a run is active or a
     // stream is pending, back off when idle, skip hidden tabs entirely, and
     // reconcile immediately when a tab becomes visible again. Keeps many
-    // idle tabs from hammering the server (see docs/2026-07-06-session-json-storage.md).
+    // idle tabs from hammering the server.
     const ACTIVE_POLL_MS = 2000;
     const IDLE_POLL_MS = 30_000;
     let disposed = false;

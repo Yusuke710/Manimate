@@ -3,6 +3,8 @@
 Create Manim videos with Claude Code or Codex in a local browser app.
 Describe your animation, watch the result, and refine it in chat. Render locally or with Manim Cloud.
 
+![Manimate showing a generated animation in the video preview](assets/manimate-preview.png)
+
 ## Install
 
 On macOS or Linux:
@@ -27,6 +29,14 @@ manimate
 2. The agent writes `script.py`, renders the scenes, and produces `video.mp4`.
 3. Watch the preview and send timestamped feedback to refine it.
 4. Click **Download** to save the current MP4.
+
+### Refine with Capture
+
+![Capture adds the video frame and timestamp to chat, illustrated with an arrow](assets/manimate-capture.png)
+
+Pause the video at a moment you want to change. Click **Capture** to add the frame and timestamp to the chat input, along with the scene name when available.
+
+Add your feedback. For example, “Make these labels larger” or “Explain this step more slowly” and send it. The agent uses the captured frame and your notes to update the animation. Watch the revised video and repeat as needed.
 
 **Share** uploads a completed video session and creates a Manim Cloud link. **Handoff** starts a fresh conversation with the current code, video, and chapter timings.
 
