@@ -61,6 +61,10 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
 
   switch (action) {
     case "share":
+      try {
+        const origin=new URL(request.headers.get("origin")||"");
+        if(origin.protocol!=="http:"||!["127.0.0.1","localhost","[::1]"].includes(origin.hostname)||origin.host!==request.headers.get("host"))return NextResponse.json({error:"Invalid origin"},{status:403});
+      }catch{return NextResponse.json({error:"Invalid origin"},{status:403});}
       try { return NextResponse.json(await shareSession(sessionId,(await request.json().catch(()=>({}))).visibility)); }
       catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Sharing failed" }, { status: error instanceof ShareError ? error.status : 500 }); }
     case "feedback":
