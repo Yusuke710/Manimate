@@ -15,7 +15,6 @@ import {
 import { DEFAULT_MODEL } from "@/lib/models";
 
 export type HandoffIncluded = {
-  plan: boolean;
   code: boolean;
   video: boolean;
   chapters: boolean;
@@ -91,11 +90,7 @@ export async function createHandoffFromLocalSession(
     model: handoffSession.model,
   });
 
-  const [planContent, scriptContent, , videoPath] = await Promise.all([
-    copyTextArtifact({
-      sourcePath: path.join(sourcePaths.projectDir, "plan.md"),
-      targetPath: path.join(targetPaths.projectDir, "plan.md"),
-    }),
+  const [scriptContent, , videoPath] = await Promise.all([
     copyTextArtifact({
       sourcePath: path.join(sourcePaths.projectDir, "script.py"),
       targetPath: path.join(targetPaths.projectDir, "script.py"),
@@ -125,7 +120,6 @@ export async function createHandoffFromLocalSession(
   return {
     session: nextSession,
     included: {
-      plan: Boolean(planContent),
       code: Boolean(scriptContent),
       video: Boolean(videoPath),
       chapters: Boolean(chapters),

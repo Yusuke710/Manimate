@@ -21,6 +21,7 @@ const MIME_BY_EXT: Record<string, { mime: string; binary: boolean }> = {
   ".gif": { mime: "image/gif", binary: true },
   ".pdf": { mime: "application/pdf", binary: true },
   ".mp4": { mime: "video/mp4", binary: true },
+  ".mov": { mime: "video/quicktime", binary: true },
 };
 
 function parseRangeHeader(rangeHeader: string | null, fileSize: number): { start: number; end: number } | null {
@@ -167,6 +168,8 @@ export async function HEAD(request: NextRequest): Promise<Response> {
         "Content-Type": mime,
         "Content-Length": String(stats.size),
         "Accept-Ranges": binary ? "bytes" : "none",
+        "ETag": `"${stats.size}-${stats.mtimeMs}-${stats.ctimeMs}"`,
+        "Cache-Control": "no-store",
       },
     });
   } catch {

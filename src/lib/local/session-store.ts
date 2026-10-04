@@ -119,7 +119,6 @@ export interface LocalRun {
 }
 
 export interface SessionArtifacts {
-  plan_content: string | null;
   script_content: string | null;
   subtitles_content: string | null;
 }
@@ -389,7 +388,7 @@ export function getLocalSession(sessionId: string): LocalSession | null {
 }
 
 /**
- * Read plan/script/subtitles from the project dir (they are never stored in
+ * Read script/subtitles from the project dir (they are never stored in
  * session.json). Async on purpose: callers like the library search endpoint
  * read artifacts for hundreds of sessions per request, and synchronous reads
  * at that volume block the event loop — stalling SSE streams of active runs.
@@ -398,12 +397,11 @@ export async function readLocalSessionArtifacts(sessionId: string): Promise<Sess
   const { projectDir } = getLocalSessionPaths(sessionId);
   const readIfExists = (name: string): Promise<string | null> =>
     fsp.readFile(path.join(projectDir, name), "utf8").catch(() => null);
-  const [plan_content, script_content, subtitles_content] = await Promise.all([
-    readIfExists("plan.md"),
+  const [script_content, subtitles_content] = await Promise.all([
     readIfExists("script.py"),
     readIfExists("subtitles.srt"),
   ]);
-  return { plan_content, script_content, subtitles_content };
+  return { script_content, subtitles_content };
 }
 
 export function findLocalSessionWithChaptersByTitle(title: string): LocalSession | null {

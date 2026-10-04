@@ -4,7 +4,7 @@
  * GET  /api/sessions            - Lightweight summaries (sidebar)
  * GET  /api/sessions?full=1     - Full session metadata (library)
  * GET  /api/sessions?full=1&q=… - Server-side library search over
- *                                 title + plan.md + script.py. Artifact
+ *                                 title + script.py. Artifact
  *                                 content never leaves the server.
  * POST /api/sessions            - Create session
  */
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     return NextResponse.json(sessions);
   }
 
-  // Search runs here rather than in the browser so plan/script content
+  // Search runs here rather than in the browser so script content
   // (tens of MB across the library) is never serialized into a response.
   // Sessions are processed sequentially on purpose: the await between
   // iterations yields the event loop, so fuzzy-matching hundreds of scripts
@@ -61,7 +61,6 @@ export async function GET(request: NextRequest): Promise<Response> {
     const artifacts = await readLocalSessionArtifacts(session.id);
     const record = {
       title: session.title,
-      plan_content: artifacts.plan_content,
       script_content: artifacts.script_content,
     };
     if (matchesLibrarySearch(record, query)) {

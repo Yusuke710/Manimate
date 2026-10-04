@@ -25,3 +25,7 @@ Run `python tts-generate.py --plan narration.txt --voice <Voice ID>`. Align anim
 Render with Manim Community 0.21.0 using `manim script.py <SceneNames>`. Use the output paths reported by Manim and choose parallelism that fits this machine.
 
 Assemble the clips in narrative order into `video.mp4` with local FFmpeg. Include `voiceover.mp3` when narration is enabled; otherwise keep it silent. Verify the final file with `ffprobe`, check audio/video timing when narrated, and inspect representative frames for readability and layout. Report any blocker preventing delivery.
+
+## High-resolution requests
+
+When the user asks for 4K in chat, re-render every scene at 3840×2160 (16:9), 2160×3840 (9:16), or 2160×2160 (1:1), at 30 fps unless requested otherwise. Preserve composition, narration, and timing; render at the target resolution rather than upscaling an existing video. Assemble and verify the new MP4 with `ffprobe`, then replace `video.mp4` so Preview and Download use the new render.

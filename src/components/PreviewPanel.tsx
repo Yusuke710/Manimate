@@ -15,17 +15,14 @@ interface PreviewPanelProps {
   videoUrl: string | null;
   videoUpdateNonce?: number;
   sessionId?: string | null;
-  planContent?: string | null;
   scriptContent?: string | null;
   sessionModel?: string | null;
   isRendering?: boolean;
-  onRequestHqRender?: () => boolean;
-  onRequest4kRender?: () => boolean;
   onPreviewReady?: (previewNonce: number) => void;
 }
 
 
-export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId, planContent = null, scriptContent = null, sessionModel = null, isRendering = false, onRequestHqRender, onRequest4kRender, onPreviewReady }: PreviewPanelProps) {
+export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId, scriptContent = null, sessionModel = null, isRendering = false, onPreviewReady }: PreviewPanelProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("code");
   const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
@@ -109,7 +106,6 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId
 
           <HandoffButton
             sessionId={sessionId}
-            hasPlan={Boolean(planContent)}
             hasCode={Boolean(scriptContent)}
             hasVideo={Boolean(effectiveVideoUrl)}
             onCreated={(nextSessionId) => router.push(`/?session=${nextSessionId}`)}
@@ -123,7 +119,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId
             <CodeTab content={scriptContent} />
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
-            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sessionId={sessionId} sessionModel={sessionModel} isVisible={activeTab === "preview"} isRendering={isRendering} onRequestHqRender={onRequestHqRender} onRequest4kRender={onRequest4kRender} onCanPlay={() => {
+            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sessionId={sessionId} sessionModel={sessionModel} isVisible={activeTab === "preview"} onCanPlay={() => {
               if (activePreviewKey && previewReadyKey !== activePreviewKey) {
                 setPreviewReadyKey(activePreviewKey);
                 onPreviewReady?.(videoUpdateNonce);

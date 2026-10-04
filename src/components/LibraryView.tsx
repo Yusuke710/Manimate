@@ -613,7 +613,7 @@ export function LibraryView({
     [allSessions]
   );
 
-  // Search runs server-side (title + plan + script) so artifact content is
+  // Search runs server-side (title + script) so artifact content is
   // never shipped to the browser; see /api/sessions?full=1&q=…
   const [searchResults, setSearchResults] = useState<LibrarySession[] | null>(null);
   const trimmedDeferredQuery = deferredSearchQuery.trim();
@@ -740,7 +740,7 @@ export function LibraryView({
               <input
                 type="search"
                 aria-label="Search library videos"
-                placeholder="Search videos, plans, code"
+                placeholder="Search videos and code"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 style={{

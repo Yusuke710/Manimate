@@ -33,7 +33,6 @@ interface ChatState {
   activityEvents: ActivityEvent[];
   videoUrl: string | null;
   videoUpdateNonce: number;
-  planContent: string | null;
   scriptContent: string | null;
   model: string;
 }
@@ -53,7 +52,6 @@ type ChatAction =
   | { type: "LOAD_MESSAGES"; messages: Message[] }
   | { type: "LOAD_ACTIVITY_EVENTS"; events: ActivityEvent[] }
   | { type: "SET_LOADING_MESSAGES"; isLoadingMessages: boolean }
-  | { type: "SET_PLAN_CONTENT"; content: string | null }
   | { type: "SET_SCRIPT_CONTENT"; content: string | null }
   | { type: "SET_MODEL"; model: string };
 
@@ -143,9 +141,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_LOADING_MESSAGES":
       return { ...state, isLoadingMessages: action.isLoadingMessages };
 
-    case "SET_PLAN_CONTENT":
-      return { ...state, planContent: action.content };
-
     case "SET_SCRIPT_CONTENT":
       return { ...state, scriptContent: action.content };
 
@@ -167,7 +162,6 @@ export const initialState: ChatState = {
   activityEvents: [],
   videoUrl: null,
   videoUpdateNonce: 0,
-  planContent: null,
   scriptContent: null,
   model: DEFAULT_MODEL,
 };
@@ -182,7 +176,6 @@ interface SessionMessagePayload {
 interface SessionSnapshot {
   agent_session_id: string | null;
   last_video_url: string | null;
-  plan_content: string | null;
   script_content: string | null;
   voice_id: string | null;
   model: string | null;
@@ -241,7 +234,6 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   const currentAssistantMessageIdRef = useRef<string | null>(null);
   const agentSessionIdRef = useRef<string | null>(null);
 
-  const planContentRef = useRef<string | null>(null);
   const scriptContentRef = useRef<string | null>(null);
   const videoUrlBaseRef = useRef<string | null>(null);
   const videoUrlRef = useRef<string | null>(null);
@@ -253,7 +245,6 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
 
   // Sync refs with state
   useEffect(() => { agentSessionIdRef.current = state.agentSessionId; }, [state.agentSessionId]);
-  useEffect(() => { planContentRef.current = state.planContent; }, [state.planContent]);
   useEffect(() => { scriptContentRef.current = state.scriptContent; }, [state.scriptContent]);
   useEffect(() => { videoUrlRef.current = state.videoUrl; }, [state.videoUrl]);
   useEffect(() => { videoUpdateNonceRef.current = state.videoUpdateNonce; }, [state.videoUpdateNonce]);
@@ -328,9 +319,6 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
       }
       if (shouldSyncComposerSettings) composerSyncedFromSessionRef.current = true;
 
-      if (shouldApplyArtifactSnapshot(data.session.plan_content, planContentRef.current)) {
-        dispatch({ type: "SET_PLAN_CONTENT", content: data.session.plan_content });
-      }
       if (shouldApplyArtifactSnapshot(data.session.script_content, scriptContentRef.current)) {
         dispatch({
           type: "SET_SCRIPT_CONTENT",
@@ -682,12 +670,6 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
               addActivity({ type: "tool_result", message: toolOutput, toolResult: event.tool_result, isError: event.is_error }, turnId);
             } else if (event.type === "artifact_update") {
               if (
-                event.plan_content !== undefined &&
-                shouldApplyArtifactSnapshot(event.plan_content, planContentRef.current)
-              ) {
-                dispatch({ type: "SET_PLAN_CONTENT", content: event.plan_content });
-              }
-              if (
                 event.script_content !== undefined &&
                 shouldApplyArtifactSnapshot(event.script_content, scriptContentRef.current)
               ) {
@@ -806,26 +788,6 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
     dispatch({ type: "SET_STATUS", statusMessage: null });
   }, [addActivity, sessionId, state.isLoading, state.isCancelling]);
 
-  const handleRequestHqRender = useCallback(() => {
-    if (state.isLoading) return false;
-    void handleSend("render in 1080@30fps", undefined, {
-      model: composerModel,
-      voiceId: composerVoice,
-      aspectRatio: composerAspectRatio,
-    });
-    return true;
-  }, [composerAspectRatio, composerModel, composerVoice, handleSend, state.isLoading]);
-
-  const handleRequest4kRender = useCallback(() => {
-    if (state.isLoading) return false;
-    void handleSend("render in 4k@30fps", undefined, {
-      model: composerModel,
-      voiceId: composerVoice,
-      aspectRatio: composerAspectRatio,
-    });
-    return true;
-  }, [composerAspectRatio, composerModel, composerVoice, handleSend, state.isLoading]);
-
   const hasArtifacts = !!(state.scriptContent || state.videoUrl);
   const [mobileArtifactOpen, setMobileArtifactOpen] = useState(false);
 
@@ -883,12 +845,9 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
       videoUrl={state.videoUrl}
       videoUpdateNonce={state.videoUpdateNonce}
       sessionId={sessionId}
-      planContent={state.planContent}
       scriptContent={state.scriptContent}
       sessionModel={state.model}
       isRendering={state.isLoading}
-      onRequestHqRender={handleRequestHqRender}
-      onRequest4kRender={handleRequest4kRender}
       onPreviewReady={handlePreviewReady}
     />
   );

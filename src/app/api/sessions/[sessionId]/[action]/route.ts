@@ -195,7 +195,6 @@ async function getMessages(request: NextRequest, sessionId: string): Promise<Res
     session: {
       agent_session_id: session.agent_session_id,
       last_video_url: videoUrl,
-      plan_content: artifacts.plan_content,
       script_content: artifacts.script_content,
       subtitles_content: artifacts.subtitles_content,
       voice_id: session.voice_id,

@@ -1,6 +1,5 @@
 export type LibrarySearchRecord = {
   title?: string | null;
-  plan_content?: string | null;
   script_content?: string | null;
 };
 
@@ -76,7 +75,6 @@ function tokenMatchesCorpus(token: string, corpusText: string, corpusTokens: str
 export function buildLibrarySearchIndex(record: LibrarySearchRecord): LibrarySearchIndex {
   const corpusText = normalizeSearchText([
     record.title,
-    record.plan_content,
     record.script_content,
   ].filter(Boolean).join(" "));
 

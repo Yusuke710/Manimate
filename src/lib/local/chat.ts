@@ -62,7 +62,6 @@ type LocalSSEEvent = {
   agent_session_id?: string;
   run_id?: string;
   video_url?: string;
-  plan_content?: string | null;
   script_content?: string | null;
   progress?: number;
   tool_name?: string;
@@ -95,13 +94,6 @@ async function readTextFileIfExists(filePath: string): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/** Extracts the first H1 title from plan.md content. Returns null if none found. */
-function extractPlanTitle(planContent: string): string | null {
-  const match = planContent.match(/^#\s+(.+)/m);
-  if (!match) return null;
-  return match[1].replace(/\s+#+\s*$/, "").trim();
 }
 
 /** The preview consumes the agent's final video.mp4 artifact. */
@@ -503,36 +495,21 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       });
 
       const preRunVideo = await detectVideoFile(projectDir);
-      let streamedPlanContent: string | null = await readTextFileIfExists(
-        path.join(projectDir, "plan.md")
-      );
       let streamedScriptContent: string | null = await readTextFileIfExists(
         path.join(projectDir, "script.py")
       );
 
       const syncArtifactSnapshot = async () => {
         if (!sessionId) return;
-        const [nextPlanContent, nextScriptContent] = await Promise.all([
-          readTextFileIfExists(path.join(projectDir, "plan.md")),
-          readTextFileIfExists(path.join(projectDir, "script.py")),
-        ]);
-        if (
-          nextPlanContent === streamedPlanContent &&
-          nextScriptContent === streamedScriptContent
-        ) {
+        const nextScriptContent = await readTextFileIfExists(path.join(projectDir, "script.py"));
+        if (nextScriptContent === streamedScriptContent) {
           return;
         }
-        streamedPlanContent = nextPlanContent;
         streamedScriptContent = nextScriptContent;
-        const midRunPlanTitle = nextPlanContent ? extractPlanTitle(nextPlanContent) : null;
-        if (midRunPlanTitle) {
-          updateLocalSession(sessionId, { title: midRunPlanTitle });
-        }
         await sendEvent({
           type: "artifact_update",
           message: "Artifacts updated",
           agent_session_id: agentSessionId || undefined,
-          plan_content: nextPlanContent,
           script_content: nextScriptContent,
         });
       };
@@ -859,7 +836,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         exitResult.signal === "SIGKILL" ||
         exitResult.code === -1;
 
-      const planContent = await readTextFileIfExists(path.join(projectDir, "plan.md"));
       const scriptContent = await readTextFileIfExists(path.join(projectDir, "script.py"));
       const subtitlesContent = await readLocalProjectSubtitles(projectDir);
       // subtitles.srt in the project dir is the canonical on-disk cache of the
@@ -911,12 +887,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           agent_session_id: agentSessionId || session.agent_session_id,
           error_message: "Stopped by user",
         });
-        const canceledPlanTitle = planContent ? extractPlanTitle(planContent) : null;
         updateLocalSession(sessionId, {
           status: "active",
           agent_session_id: agentSessionId || session.agent_session_id,
           model: modelForRun,
-          ...(canceledPlanTitle ? { title: canceledPlanTitle } : {}),
           ...(videoChanged && postRunVideo
             ? {
                 video_path: postRunVideo.path,
@@ -928,7 +902,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           type: "artifact_update",
           message: "Artifacts updated",
           agent_session_id: agentSessionId || undefined,
-          plan_content: planContent,
           script_content: scriptContent,
         });
         await sendEvent({
@@ -956,18 +929,15 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           agent_session_id: agentSessionId || session.agent_session_id,
           error_message: message,
         });
-        const failedPlanTitle = planContent ? extractPlanTitle(planContent) : null;
         updateLocalSession(sessionId, {
           status: "active",
           agent_session_id: agentSessionId || session.agent_session_id,
           model: modelForRun,
-          ...(failedPlanTitle ? { title: failedPlanTitle } : {}),
         });
         await sendEvent({
           type: "artifact_update",
           message: "Artifacts updated",
           agent_session_id: agentSessionId || undefined,
-          plan_content: planContent,
           script_content: scriptContent,
         });
         await sendEvent({
@@ -987,12 +957,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         metadata: videoUrl ? { video_url: videoUrl } : null,
       });
 
-      const planTitle = planContent ? extractPlanTitle(planContent) : null;
       updateLocalSession(sessionId, {
         status: "active",
         agent_session_id: agentSessionId || session.agent_session_id,
         model: modelForRun,
-        ...(planTitle ? { title: planTitle } : {}),
         chapters: videoChanged ? serializedChapters : session.chapters,
         video_path: videoChanged && postRunVideo ? postRunVideo.path : session.video_path,
       });
@@ -1000,7 +968,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         type: "artifact_update",
         message: "Artifacts updated",
         agent_session_id: agentSessionId || undefined,
-        plan_content: planContent,
         script_content: scriptContent,
       });
 

@@ -6,7 +6,6 @@ type HandoffState = "idle" | "loading" | "error";
 
 interface HandoffButtonProps {
   sessionId: string | null | undefined;
-  hasPlan: boolean;
   hasCode: boolean;
   hasVideo: boolean;
   onCreated: (sessionId: string) => void;
@@ -75,7 +74,6 @@ function IncludedRow({
 
 export default function HandoffButton({
   sessionId,
-  hasPlan,
   hasCode,
   hasVideo,
   onCreated,
@@ -128,7 +126,7 @@ export default function HandoffButton({
           }
         }}
         disabled={disabled}
-        title={sessionId ? "Start a new session with the latest plan, code, and video" : "Open a session to create a handoff"}
+        title={sessionId ? "Start a new session with the latest code and video" : "Open a session to create a handoff"}
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -204,7 +202,6 @@ export default function HandoffButton({
             </div>
 
             <div style={{ display: "grid", gap: 8, padding: 12, borderRadius: 12, background: "var(--bg-hover)" }}>
-              <IncludedRow label="Current plan" available={hasPlan} />
               <IncludedRow label="Current code" available={hasCode} />
               <IncludedRow label="Current rendered video" available={hasVideo} />
             </div>

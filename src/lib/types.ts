@@ -13,7 +13,6 @@ export interface SSEEvent {
   turn_id?: string;
   agent_session_id?: string;
   video_url?: string;
-  plan_content?: string | null;
   script_content?: string | null;
   progress?: number;
   // Additional fields for detailed events
