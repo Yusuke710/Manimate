@@ -8,6 +8,15 @@ import {connectRenderer, renderConnection} from './render-connection';
 const execute=promisify(execFile);
 const pending=new Map<string,Promise<string>>();
 export class ShareError extends Error {constructor(message:string,public status=502){super(message);}}
+export function normalizeShareUrl(value:unknown):string {
+  try {
+    if(typeof value!=='string')throw Error();
+    const url=new URL(value);
+    if(!['https://manimate.ai','https://cloud.manimate.ai','https://www.manimate.ai'].includes(url.origin)
+      ||url.username||url.password||url.search||url.hash||!/^\/share\/[a-zA-Z0-9_-]+$/.test(url.pathname))throw Error();
+    return 'https://manimate.ai'+url.pathname;
+  }catch{throw new ShareError('Invalid cloud share response');}
+}
 async function upload(id:string) {
   const root=getLocalSessionPaths(id).sessionRoot;
   const session=getLocalSession(id);
@@ -18,10 +27,9 @@ async function upload(id:string) {
   const after=session?.video_path ? await fs.stat(session.video_path) : null;
   if(videoStat?.mtimeMs!==after?.mtimeMs||videoStat?.size!==after?.size)throw new ShareError('The video changed during upload. Share again.',409);
   const result=JSON.parse(stdout);
-  const url=new URL(result.share_url);
-  if(url.origin!=='https://cloud.manimate.ai' || !/^\/share\/[a-zA-Z0-9_-]+$/.test(url.pathname)) throw new ShareError('Invalid cloud share response');
-  await fs.writeFile(path.join(root,'share.json'),JSON.stringify({url:url.href}));
-  return url.href;
+  const url=normalizeShareUrl(result.share_url);
+  await fs.writeFile(path.join(root,'share.json'),JSON.stringify({url}));
+  return url;
 }
 function enqueue(id:string){
   const previous=pending.get(id);if(previous)return previous;
