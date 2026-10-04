@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { extractScriptTitle } from "./script-title";
 import { selectedRenderMode } from "./config";
 import { refreshSharedSession } from "./session-share";
 import { uploadCloudSession } from "./session-upload";
@@ -506,6 +507,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
           return;
         }
         streamedScriptContent = nextScriptContent;
+        const title = extractScriptTitle(nextScriptContent);
+        if (title && getLocalSession(sessionId)?.title !== title) {
+          updateLocalSession(sessionId, { title });
+        }
         await sendEvent({
           type: "artifact_update",
           message: "Artifacts updated",
@@ -837,6 +842,10 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         exitResult.code === -1;
 
       const scriptContent = await readTextFileIfExists(path.join(projectDir, "script.py"));
+      const title = extractScriptTitle(scriptContent);
+      if (title && getLocalSession(sessionId)?.title !== title) {
+        updateLocalSession(sessionId, { title });
+      }
       const subtitlesContent = await readLocalProjectSubtitles(projectDir);
       // subtitles.srt in the project dir is the canonical on-disk cache of the
       // derived subtitles (replaces the old subtitles_content DB column).
