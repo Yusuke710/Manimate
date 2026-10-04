@@ -207,7 +207,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     );
   }
 
-  if(sharedToken) return <main style={{minHeight:"100dvh",display:"grid",placeItems:"center",background:"var(--bg-main)",padding:24}}><section style={{textAlign:"center",maxWidth:420}}><div style={{font:"28px Georgia",marginBottom:20}}><span style={{color:"var(--accent)"}}>∑</span> Manimate</div><p role="status">{shareError || "Opening your session…"}</p>{shareError&&<><button onClick={()=>setShareRetry(value=>value+1)} style={{margin:12,padding:"10px 16px",background:"var(--accent)",color:"white",borderRadius:8}}>Try again</button><a href="/?view=library">Library</a></>}</section></main>;
+  if(sharedToken) return <main style={{minHeight:"100dvh",display:"grid",placeItems:"center",background:"var(--bg-main)",padding:24}}><section style={{textAlign:"center",maxWidth:420}}><div style={{font:"28px Georgia",marginBottom:20}}><span style={{color:"var(--accent)"}}>∑</span> Manimate</div><p role="status">{shareError || "Creating your handoff…"}</p>{shareError&&<><button onClick={()=>setShareRetry(value=>value+1)} style={{margin:12,padding:"10px 16px",background:"var(--accent)",color:"white",borderRadius:8}}>Try again</button><a href="/?view=library">Library</a></>}</section></main>;
 
   return (
     <div style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
