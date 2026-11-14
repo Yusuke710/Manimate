@@ -1,6 +1,6 @@
 # Manimate
 
-Create a clear, distinctive Manim Community animation for the user's request. Work in the supplied project directory. Deliver `script.py` and a playable local `video.mp4`; these files appear in the app. Do not create `plan.md` or a separate written scene plan. Work directly in the animation code.
+Create a clear, distinctive Manim Community animation for the user's request. Work in the supplied project directory. Deliver `script.py` and a playable local `video.mp4`; these files appear in the app.
 
 Start `script.py` with `# Title: <short descriptive title>` for the video’s library entry. Use 3–8 words describing the actual content, rather than repeating the user’s request. Keep the title unchanged during revisions unless the topic changes. Example: `# Title: How AI Scaling Laws Work`.
 
@@ -8,7 +8,7 @@ Honor the supplied aspect ratio and voice selection. Unless the user requests an
 
 Use project-relative asset paths. Generated assets belong in `assets/`; attachments are in `inputs/`.
 
-For prose and labels, use an explicit renderer-installed sans-serif font (`Noto Sans` is available on the cloud renderer). Avoid small-size Pango spacing errors: create `Text(..., font="Noto Sans", font_size=96)` in a shared helper, then `.scale(target_size / 96)`. Preserve natural word spacing; do not arrange individual glyphs or stretch text to fit. Use `MathTex` for formulas. Inspect small labels in rendered frames.
+`Noto Sans` is available on the cloud renderer. Small-font Pango text can have spacing errors. Keep labels readable and preserve natural word spacing.
 
 ## Narration
 
@@ -20,16 +20,20 @@ subtitles:
 - Next narration line.
 ```
 
-Run `python tts-generate.py --plan narration.txt --voice <Voice ID> --transport "${TTS_TRANSPORT:-cloud}"`. Start speech generation as soon as the narration is settled; while it runs, write the visual scene code. Wait for successful speech completion before finalizing timings or rendering. Align animation timing with the measured durations in `timestamps.json`. Use matching subcaptions to check scene timing with `python lint-subtitles.py script.py`; fix reported timing problems before rendering. The app reads `timestamps.json` for subtitles.
+Run `python tts-generate.py --plan narration.txt --voice <Voice ID> --transport "${TTS_TRANSPORT:-cloud}"`. The helper produces `voiceover.mp3` and `timestamps.json`. Final animation timing must match the measured narration durations. Use matching subcaptions to check scene timing with `python lint-subtitles.py script.py`; fix reported timing problems before rendering. The app reads `timestamps.json` for subtitles. Its schema is:
+
+```json
+{"total_duration_s":2.5,"subtitles":[{"index":0,"text":"First narration line.","start_s":0,"end_s":2.5,"duration_s":2.5}]}
+```
 
 ## Render and verify
 
 Render with `manim-cloud script.py <SceneNames>`. Independent jobs may run concurrently; the service queues them. Python files, `manim.cfg`, and `assets/` upload automatically. Include other runtime inputs with `--remote-include PATH`, such as `inputs/` or `timestamps.json` when the scene reads them.
 
-The CLI submits and polls, then returns JSON. Check `status`; failures include logs. Download successful `files[].url` values with `curl -fL` into their relative `files[].path`, creating parent directories. Use distinct result filenames for parallel jobs. The app needs local videos, not just their URLs.
+The CLI submits and polls, then returns JSON on stdout; progress goes to stderr. Keep these streams separate when parsing results. Check `status`; failures include logs. Download successful `files[].url` values with `curl -fL` into their relative `files[].path`, creating parent directories. Use distinct result filenames for parallel jobs. The app needs local videos, not just their URLs.
 
-Assemble the clips in narrative order into `video.mp4` with local FFmpeg. Include `voiceover.mp3` when narration is enabled; otherwise keep it silent. Verify the final file with `ffprobe`, check audio/video timing when narrated, and inspect representative frames for readability and layout. Report any blocker preventing delivery.
+Assemble the clips in narrative order into `video.mp4` with local FFmpeg. Include `voiceover.mp3` when narration is enabled; otherwise keep it silent. The final video must be playable, readable, and synchronized with narration. Report any blocker preventing delivery.
 
 ## High-resolution requests
 
-When the user asks for 4K in chat, re-render every scene at 3840×2160 (16:9), 2160×3840 (9:16), or 2160×2160 (1:1), at 30 fps unless requested otherwise. Preserve composition, narration, and timing; render at the target resolution rather than upscaling an existing video. Assemble and verify the new MP4 with `ffprobe`, then replace `video.mp4` so Preview and Download use the new render.
+When the user asks for 4K in chat, re-render every scene at 3840×2160 (16:9), 2160×3840 (9:16), or 2160×2160 (1:1), at 30 fps unless requested otherwise. Preserve composition, narration, and timing; render at the target resolution rather than upscaling an existing video. Replace `video.mp4` with the finished render so Preview and Download use it.
