@@ -1,0 +1,131 @@
+{
+  "total_duration_s": 166.125,
+  "subtitles": [
+    {
+      "index": 0,
+      "text": "Imagine a ball moving along a straight road. Its position changes as time passes, and we can draw that motion on a graph.",
+      "start_s": 0,
+      "end_s": 8.3,
+      "duration_s": 8.3
+    },
+    {
+      "index": 1,
+      "text": "The horizontal axis represents time. The vertical axis represents the distance the ball has travelled from its starting point.",
+      "start_s": 8.3,
+      "end_s": 16.475,
+      "duration_s": 8.175
+    },
+    {
+      "index": 2,
+      "text": "Choose two points on the curve and connect them with a straight line. The slope of that line gives the average speed over the interval.",
+      "start_s": 16.475,
+      "end_s": 24.525000000000002,
+      "duration_s": 8.05
+    },
+    {
+      "index": 3,
+      "text": "Now slide the second point closer to the first. The interval becomes smaller, and the straight line approaches the tangent to the curve.",
+      "start_s": 24.525000000000002,
+      "end_s": 32.775000000000006,
+      "duration_s": 8.25
+    },
+    {
+      "index": 4,
+      "text": "The slope of this tangent is the instantaneous speed. This is the derivative of position with respect to time.",
+      "start_s": 32.775000000000006,
+      "end_s": 40.35000000000001,
+      "duration_s": 7.575
+    },
+    {
+      "index": 5,
+      "text": "A steeper tangent means faster motion. A horizontal tangent means the ball is momentarily at rest. A negative slope means it is moving back.",
+      "start_s": 40.35000000000001,
+      "end_s": 50.150000000000006,
+      "duration_s": 9.8
+    },
+    {
+      "index": 6,
+      "text": "Bayes' theorem updates a belief when new evidence arrives. We start with a prior probability, then account for how likely the evidence is under each hypothesis.",
+      "start_s": 50.150000000000006,
+      "end_s": 60.275000000000006,
+      "duration_s": 10.125
+    },
+    {
+      "index": 7,
+      "text": "Suppose one percent of a population has a condition. A test detects ninety nine percent of true cases, but also returns a positive result for five percent of people without it.",
+      "start_s": 60.275000000000006,
+      "end_s": 72.0,
+      "duration_s": 11.725
+    },
+    {
+      "index": 8,
+      "text": "Among ten thousand people, approximately one hundred have the condition. Ninety nine of them test positive. Of the remaining nine thousand nine hundred, four hundred ninety five also test positive.",
+      "start_s": 72.0,
+      "end_s": 84.6,
+      "duration_s": 12.6
+    },
+    {
+      "index": 9,
+      "text": "That gives five hundred ninety four positive results in total. Only ninety nine are true cases, so the probability after a positive test is about one in six.",
+      "start_s": 84.6,
+      "end_s": 95.27499999999999,
+      "duration_s": 10.675
+    },
+    {
+      "index": 10,
+      "text": "The diagram makes the denominator visible. The positive group contains both true positives and false positives, and the large healthy population contributes many false positives.",
+      "start_s": 95.27499999999999,
+      "end_s": 106.925,
+      "duration_s": 11.65
+    },
+    {
+      "index": 11,
+      "text": "This example shows why the base rate matters. A test can be highly sensitive while a positive result still leaves substantial uncertainty.",
+      "start_s": 106.925,
+      "end_s": 115.975,
+      "duration_s": 9.05
+    },
+    {
+      "index": 12,
+      "text": "Imagine a ball moving along a straight road. Its position changes as time passes, and we can draw that motion on a graph.",
+      "start_s": 115.975,
+      "end_s": 124.27499999999999,
+      "duration_s": 8.3
+    },
+    {
+      "index": 13,
+      "text": "The horizontal axis represents time. The vertical axis represents the distance the ball has travelled from its starting point.",
+      "start_s": 124.27499999999999,
+      "end_s": 132.45,
+      "duration_s": 8.175
+    },
+    {
+      "index": 14,
+      "text": "Choose two points on the curve and connect them with a straight line. The slope of that line gives the average speed over the interval.",
+      "start_s": 132.45,
+      "end_s": 140.5,
+      "duration_s": 8.05
+    },
+    {
+      "index": 15,
+      "text": "Now slide the second point closer to the first. The interval becomes smaller, and the straight line approaches the tangent to the curve.",
+      "start_s": 140.5,
+      "end_s": 148.75,
+      "duration_s": 8.25
+    },
+    {
+      "index": 16,
+      "text": "The slope of this tangent is the instantaneous speed. This is the derivative of position with respect to time.",
+      "start_s": 148.75,
+      "end_s": 156.325,
+      "duration_s": 7.575
+    },
+    {
+      "index": 17,
+      "text": "A steeper tangent means faster motion. A horizontal tangent means the ball is momentarily at rest. A negative slope means it is moving back.",
+      "start_s": 156.325,
+      "end_s": 166.125,
+      "duration_s": 9.8
+    }
+  ]
+}

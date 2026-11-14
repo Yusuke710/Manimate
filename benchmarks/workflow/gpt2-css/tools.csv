@@ -1,0 +1,32 @@
+start_seconds,end_seconds,elapsed_seconds,category,tool,description,error,background
+5.1,5.174,0.074,Research,ToolSearch,ToolSearch,False,False
+5.261,8.265,3.004,Inspection,Bash,List project files and helpers,False,False
+12.532,51.607,39.075,Research,WebFetch,https://shubhampatil.dev/blog/gpt2-css,False,False
+72.543,72.599,0.056,Narration writing,Bash,Write narration and generate TTS,False,True
+75.613,75.673,0.06,Inspection,Bash,Inspect lint subtitle conventions,False,False
+137.787,137.83,0.043,Inspection,Bash,Read lint timeline stub,False,False
+141.092,141.673,0.581,Assembly / verification,Bash,Inspect TTS output format,False,False
+144.287,144.4,0.113,Setup / other tools,Bash,Print subtitle timings,False,False
+272.517,272.769,0.252,Code writing,Write,/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/script.py,False,False
+276.661,276.997,0.336,Assembly / verification,Bash,Lint subtitle timing,False,False
+280.667,365.068,84.401,Render invocation,Bash,Render all scenes on cloud in parallel,False,False
+367.618,367.709,0.091,Inspection,Bash,Inspect render output,False,False
+372.686,373.11,0.424,Assembly / verification,Bash,Download clips and check durations,True,False
+377.518,383.877,6.359,Assembly / verification,Bash,Download clips and check durations,False,False
+389.463,395.915,6.452,Assembly / verification,Bash,Assemble video and extract frames,False,False
+402.761,403.712,0.951,Assembly / verification,Bash,Compare frame counts to planned,True,False
+413.495,424.292,10.797,Assembly / verification,Bash,Pad clips to narration boundaries and reassemble,False,False
+429.546,430.883,1.337,Assembly / verification,Bash,Build contact sheets of frames,False,False
+434.536,434.551,0.015,Inspection,Read,/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m1.png,False,False
+434.575,434.583,0.008,Inspection,Read,/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m2.png,False,False
+435.028,435.033,0.005,Inspection,Read,/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m3.png,False,False
+447.549,447.556,0.007,Inspection,Read,/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m4.png,False,False
+448.101,448.107,0.006,Inspection,Read,/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m5.png,False,False
+448.561,448.567,0.006,Inspection,Read,/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m6.png,False,False
+470.576,470.977,0.401,Code revision,Bash,Apply layout fixes and lint,False,False
+478.744,526.933,48.189,Render invocation,Bash,Re-render changed scenes,False,False
+535.414,547.915,12.501,Assembly / verification,Bash,Reassemble and sample frames,False,False
+553.783,553.797,0.014,Inspection,Read,/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/n1.png,False,False
+554.236,554.243,0.007,Inspection,Read,/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/n2.png,False,False
+565.344,592.005,26.661,Code revision,Bash,"Fix final text size, re-render, reassemble",False,False
+597.721,597.8,0.079,Inspection,Read,/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/frames/end.png,False,False

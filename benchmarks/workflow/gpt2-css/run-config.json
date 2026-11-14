@@ -1,0 +1,17 @@
+{
+  "session": "profile-gpt2-css-e7e5b728",
+  "prompt": "https://shubhampatil.dev/blog/gpt2-css",
+  "model": "claude",
+  "voice": "af_heart",
+  "aspect": "16:9",
+  "version": "0.1.28",
+  "original_session": "4add3ad6-a0a4-41dd-ab4e-92a9809da681",
+  "real_commands": {
+    "python": "/Users/ymiy/.pyenv/versions/3.10.13/bin/python",
+    "python3": "/Users/ymiy/.pyenv/versions/3.10.13/bin/python3",
+    "manim-cloud": "/Users/ymiy/.local/bin/manim-cloud",
+    "ffmpeg": "/opt/homebrew/bin/ffmpeg",
+    "ffprobe": "/opt/homebrew/bin/ffprobe",
+    "curl": "/usr/bin/curl"
+  }
+}

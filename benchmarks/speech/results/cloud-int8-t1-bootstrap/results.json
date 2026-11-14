@@ -1,0 +1,119 @@
+{
+  "environment": {
+    "platform": "macOS-26.1-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "backend": "cloudflare-onnx",
+  "threads": 1,
+  "quantized": true,
+  "user_auth": false,
+  "instance_type": "standard-3",
+  "slot": 1,
+  "rows": [
+    {
+      "case": "short",
+      "repeat": -1,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": true,
+        "model_load_seconds": 2.925946945000021,
+        "synthesis_seconds": 21.225830884000004,
+        "cpu_seconds": 21.106746383,
+        "server_seconds": 25.193863770000007,
+        "audio_seconds": 6.8053333333333335,
+        "real_time_factor": 3.1189994441614424,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.int8.onnx"
+      },
+      "container_seconds": 30.301,
+      "end_to_end_seconds": 30.424422916024923,
+      "audio_validation": {
+        "decoded_seconds": 6.8053333333333335,
+        "rms": 0.07503808289766312,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 0,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 18.816352526999992,
+        "cpu_seconds": 18.792886399,
+        "server_seconds": 18.98702504099998,
+        "audio_seconds": 6.8053333333333335,
+        "real_time_factor": 2.7649420837088545,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.int8.onnx"
+      },
+      "container_seconds": 19.009,
+      "end_to_end_seconds": 19.213836000068113,
+      "audio_validation": {
+        "decoded_seconds": 6.8053333333333335,
+        "rms": 0.07503808289766312,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 1,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 18.295670062,
+        "cpu_seconds": 18.252442617999996,
+        "server_seconds": 18.476229100000012,
+        "audio_seconds": 6.8053333333333335,
+        "real_time_factor": 2.6884311415556423,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.int8.onnx"
+      },
+      "container_seconds": 18.5,
+      "end_to_end_seconds": 18.90976412501186,
+      "audio_validation": {
+        "decoded_seconds": 6.8053333333333335,
+        "rms": 0.07503808289766312,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 2,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 19.68584033100001,
+        "cpu_seconds": 19.610357331000003,
+        "server_seconds": 19.820397334000006,
+        "audio_seconds": 6.8053333333333335,
+        "real_time_factor": 2.892707728889108,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.int8.onnx"
+      },
+      "container_seconds": 19.843,
+      "end_to_end_seconds": 20.042492375010625,
+      "audio_validation": {
+        "decoded_seconds": 6.8053333333333335,
+        "rms": 0.07503808289766312,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    }
+  ],
+  "aborted_reason": "Stopped after warm short trials: INT8 was substantially slower than FP32. Any already-running medium request was allowed to finish."
+}

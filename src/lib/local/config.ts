@@ -97,6 +97,16 @@ export function ensureLocalSessionLayout(
     // Non-fatal: TTS step will fail gracefully if script is missing.
   }
 
+  // Provider-neutral cloud client and the same OAuth helper used by manim-cloud.
+  for (const [source, destination] of [
+    ["speech_client.py", "speech_client.py"],
+    ["manim-cloud/cloud_auth.py", "manimate_cloud_auth.py"],
+  ]) {
+    const content = fs.readFileSync(path.join(PACKAGE_ROOT, "scripts", source), "utf8");
+    const target = path.join(paths.projectDir, destination);
+    if (!fs.existsSync(target) || fs.readFileSync(target, "utf8") !== content) fs.writeFileSync(target, content);
+  }
+
   // Copy subtitle linter into project dir so the selected agent can run:
   // `python lint-subtitles.py script.py`
   const destSubtitleLinter = path.join(paths.projectDir, "lint-subtitles.py");

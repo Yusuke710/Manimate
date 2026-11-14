@@ -29,7 +29,7 @@ from pathlib import Path
 
 DEFAULT_KOKORO_VOICE_ID = "af_heart"  # matches src/lib/voices.ts DEFAULT_VOICE_ID
 DEFAULT_ELEVENLABS_VOICE_ID = "Lci8YeL6PAFHJjNKvwXq"
-ELEVENLABS_MODEL_ID = "eleven_turbo_v2_5"
+ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")
 KOKORO_MODEL_ID = "hexgrad/Kokoro-82M"
 ELEVENLABS_MAX_WORKERS = 5
 KOKORO_DEFAULT_WORKERS = 1
@@ -614,6 +614,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate TTS voiceover from narration.txt SubtitleSpec")
     parser.add_argument("--plan", default="narration.txt")
     parser.add_argument("--provider", choices=["auto", "kokoro", "elevenlabs"], default=os.environ.get("TTS_PROVIDER", "auto"))
+    parser.add_argument("--transport", choices=["local", "cloud"], default=os.environ.get("TTS_TRANSPORT", "local"), help="Kokoro execution location; cloud needs no local model")
     parser.add_argument("--voice", default=None, help="TTS voice name/id (overrides provider env)")
     parser.add_argument("--voice-id", default=None, help="Legacy alias for --voice")
     parser.add_argument("--workers", type=int, default=None, help="Generation workers. Kokoro defaults to 1; ElevenLabs defaults to 5.")
@@ -642,13 +643,20 @@ def main() -> None:
     provider, voice_id = normalize_provider_and_voice(args.provider, voice_arg)
 
     if args.prewarm_kokoro:
-        if provider != "kokoro":
-            print(f"Skipping Kokoro prewarm for provider: {provider}")
+        if provider != "kokoro" or args.transport == "cloud":
+            print(f"Skipping local Kokoro prewarm for provider: {provider}, transport: {args.transport}")
             return
         if prewarm_kokoro_worker(voice_id):
             print(f"Kokoro worker warmed. Voice: {voice_id}")
             return
         sys.exit("Error: failed to warm Kokoro worker")
+
+    if provider == "kokoro" and args.transport == "cloud":
+        if args.benchmark_kokoro_parallel:
+            sys.exit("Use benchmarks/speech/bench.py for cloud evaluation")
+        from speech_client import generate_narration
+        generate_narration(parse_subtitles(args.plan), voice_id, args.out_audio, args.out_timestamps, args.bust)
+        return
 
     api_key = os.environ.get("ELEVENLABS_API_KEY", "") if provider == "elevenlabs" else ""
     if provider == "elevenlabs" and not api_key:

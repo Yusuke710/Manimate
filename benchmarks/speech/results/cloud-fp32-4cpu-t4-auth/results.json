@@ -1,0 +1,446 @@
+{
+  "environment": {
+    "platform": "macOS-26.1-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "backend": "cloudflare-onnx",
+  "threads": 4,
+  "quantized": false,
+  "user_auth": true,
+  "instance_type": "standard-4",
+  "slot": 0,
+  "rows": [
+    {
+      "case": "short",
+      "repeat": -1,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": true,
+        "model_load_seconds": 3.5869692830000304,
+        "synthesis_seconds": 2.369548348999956,
+        "cpu_seconds": 6.584130686,
+        "server_seconds": 6.736592558999973,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.3503866840989682,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 7.681,
+      "end_to_end_seconds": 8.45555695798248,
+      "audio_validation": {
+        "decoded_seconds": 6.762666666666667,
+        "rms": 0.07723764330148697,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": -2,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": true,
+        "model_load_seconds": 2.2157182160000275,
+        "synthesis_seconds": 2.1556194680000544,
+        "cpu_seconds": 6.098146486000001,
+        "server_seconds": 5.024441956000032,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.31875287874606484,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 6.075,
+      "end_to_end_seconds": 6.271604957990348,
+      "audio_validation": {
+        "decoded_seconds": 6.762666666666667,
+        "rms": 0.07723764330148697,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": -3,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": true,
+        "model_load_seconds": 3.7970964170000343,
+        "synthesis_seconds": 2.4766803709999294,
+        "cpu_seconds": 6.894794576000001,
+        "server_seconds": 6.989175536999937,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.36622836716284446,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 8.02,
+      "end_to_end_seconds": 8.253317499998957,
+      "audio_validation": {
+        "decoded_seconds": 6.762666666666667,
+        "rms": 0.07723764330148697,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 0,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 2.3347746499999857,
+        "cpu_seconds": 6.6465929070000005,
+        "server_seconds": 2.4479693870000574,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.34524467419163823,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 2.467,
+      "end_to_end_seconds": 2.6943122080992907,
+      "audio_validation": {
+        "decoded_seconds": 6.762666666666667,
+        "rms": 0.07723764330148697,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 1,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 2.1788614679999228,
+        "cpu_seconds": 6.292851911,
+        "server_seconds": 2.2966105780000134,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.32218968868295383,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 2.316,
+      "end_to_end_seconds": 2.545611125184223,
+      "audio_validation": {
+        "decoded_seconds": 6.762666666666667,
+        "rms": 0.07723764330148697,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 2,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 2.2201774229999955,
+        "cpu_seconds": 6.435642533999999,
+        "server_seconds": 2.3171580349999203,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.3282991063190056,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 2.336,
+      "end_to_end_seconds": 2.8360809159930795,
+      "audio_validation": {
+        "decoded_seconds": 6.762666666666667,
+        "rms": 0.07723764330148697,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "medium",
+      "repeat": 0,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 14.915077042999997,
+        "cpu_seconds": 43.597100934,
+        "server_seconds": 15.173006283000063,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 0.31895266258696386,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 15.218,
+      "end_to_end_seconds": 15.534564833156765,
+      "audio_validation": {
+        "decoded_seconds": 46.76266666666667,
+        "rms": 0.07625670731067657,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "medium",
+      "repeat": 1,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 14.93971619399997,
+        "cpu_seconds": 43.343989944,
+        "server_seconds": 15.157782800000064,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 0.3194795604898488,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 15.183,
+      "end_to_end_seconds": 15.542964082909748,
+      "audio_validation": {
+        "decoded_seconds": 46.76266666666667,
+        "rms": 0.07625670731067657,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "medium",
+      "repeat": 2,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 14.853773771000078,
+        "cpu_seconds": 43.47235197399999,
+        "server_seconds": 15.08092668400002,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 0.3176417178447211,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 15.108,
+      "end_to_end_seconds": 15.678290915908292,
+      "audio_validation": {
+        "decoded_seconds": 46.76266666666667,
+        "rms": 0.07625670731067657,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "technical",
+      "repeat": 0,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 19.60858090299996,
+        "cpu_seconds": 58.17709057299999,
+        "server_seconds": 19.899119500999973,
+        "audio_seconds": 63.38133333333333,
+        "real_time_factor": 0.3093746986967766,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 19.927,
+      "end_to_end_seconds": 20.279736625030637,
+      "audio_validation": {
+        "decoded_seconds": 63.38133333333333,
+        "rms": 0.076026551425457,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "technical",
+      "repeat": 1,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 19.311455300000034,
+        "cpu_seconds": 56.95847597300002,
+        "server_seconds": 19.592598329999987,
+        "audio_seconds": 63.38133333333333,
+        "real_time_factor": 0.3046867947450359,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 19.618,
+      "end_to_end_seconds": 19.959590499987826,
+      "audio_validation": {
+        "decoded_seconds": 63.38133333333333,
+        "rms": 0.076026551425457,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "technical",
+      "repeat": 2,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 19.578842387999998,
+        "cpu_seconds": 57.784409477,
+        "server_seconds": 19.858796436000034,
+        "audio_seconds": 63.38133333333333,
+        "real_time_factor": 0.3089054988009088,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 19.884,
+      "end_to_end_seconds": 20.914714459097013,
+      "audio_validation": {
+        "decoded_seconds": 63.38133333333333,
+        "rms": 0.076026551425457,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "long",
+      "repeat": 0,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 49.005460599,
+        "cpu_seconds": 143.90477159100004,
+        "server_seconds": 49.61751509100009,
+        "audio_seconds": 156.90666666666667,
+        "real_time_factor": 0.3123223610575289,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 49.878,
+      "end_to_end_seconds": 50.394652584102005,
+      "audio_validation": {
+        "decoded_seconds": 156.90666666666667,
+        "rms": 0.07617101073265076,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "long",
+      "repeat": 1,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 49.50697659799994,
+        "cpu_seconds": 145.70859390300006,
+        "server_seconds": 50.11433476499997,
+        "audio_seconds": 156.90666666666667,
+        "real_time_factor": 0.3155186305956828,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 50.149,
+      "end_to_end_seconds": 51.05799195799045,
+      "audio_validation": {
+        "decoded_seconds": 156.90666666666667,
+        "rms": 0.07617101073265076,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "long",
+      "repeat": 2,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 48.04282206899995,
+        "cpu_seconds": 141.47595357399996,
+        "server_seconds": 48.60239733700007,
+        "audio_seconds": 156.90666666666667,
+        "real_time_factor": 0.3061872582575626,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 48.629,
+      "end_to_end_seconds": 50.768960959045216,
+      "audio_validation": {
+        "decoded_seconds": 156.90666666666667,
+        "rms": 0.07617101073265076,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    }
+  ],
+  "summary": {
+    "short": {
+      "n": 3,
+      "median_seconds": 2.6943122080992907,
+      "max_seconds": 2.8360809159930795,
+      "median_rtf": 0.3282991063190056
+    },
+    "medium": {
+      "n": 3,
+      "median_seconds": 15.542964082909748,
+      "max_seconds": 15.678290915908292,
+      "median_rtf": 0.31895266258696386
+    },
+    "technical": {
+      "n": 3,
+      "median_seconds": 20.279736625030637,
+      "max_seconds": 20.914714459097013,
+      "median_rtf": 0.3089054988009088
+    },
+    "long": {
+      "n": 3,
+      "median_seconds": 50.768960959045216,
+      "max_seconds": 51.05799195799045,
+      "median_rtf": 0.3123223610575289
+    }
+  },
+  "deployment": {
+    "worker_version": "8b354af6-8f38-48ca-a5d1-e0478f029c0f",
+    "image": {
+      "image": "registry.cloudflare.com/37c57ad88b8e56f4f2665e3967ffb8e8/manimate-speech-speechcontainer:kokoro-v1-20261114",
+      "digest": "sha256:2f904abd1052efad00ee8e73e282401692fbd46876d8d242f90c282818966042",
+      "model_sha256": {
+        "kokoro-v1.0.onnx": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+        "kokoro-v1.0.int8.onnx": "6e742170d309016e5891a994e1ce1559c702a2ccd0075e67ef7157974f6406cb",
+        "voices-v1.0.bin": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+      },
+      "build_seconds": 91.03967611999997,
+      "build_job_id": "b1b12bcb5e3d47f7bfef823054058c7c"
+    },
+    "date": "2026-11-14",
+    "client_location": "Sydney"
+  }
+}

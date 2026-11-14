@@ -1,0 +1,19 @@
+{
+  "short": ["A derivative measures how quickly a function changes. On a graph, it is the slope of the tangent line at a point."],
+  "medium": [
+    "Imagine a ball moving along a straight road. Its position changes as time passes, and we can draw that motion on a graph.",
+    "The horizontal axis represents time. The vertical axis represents the distance the ball has travelled from its starting point.",
+    "Choose two points on the curve and connect them with a straight line. The slope of that line gives the average speed over the interval.",
+    "Now slide the second point closer to the first. The interval becomes smaller, and the straight line approaches the tangent to the curve.",
+    "The slope of this tangent is the instantaneous speed. This is the derivative of position with respect to time.",
+    "A steeper tangent means faster motion. A horizontal tangent means the ball is momentarily at rest. A negative slope means it is moving back."
+  ],
+  "technical": [
+    "Bayes' theorem updates a belief when new evidence arrives. We start with a prior probability, then account for how likely the evidence is under each hypothesis.",
+    "Suppose one percent of a population has a condition. A test detects ninety nine percent of true cases, but also returns a positive result for five percent of people without it.",
+    "Among ten thousand people, approximately one hundred have the condition. Ninety nine of them test positive. Of the remaining nine thousand nine hundred, four hundred ninety five also test positive.",
+    "That gives five hundred ninety four positive results in total. Only ninety nine are true cases, so the probability after a positive test is about one in six.",
+    "The diagram makes the denominator visible. The positive group contains both true positives and false positives, and the large healthy population contributes many false positives.",
+    "This example shows why the base rate matters. A test can be highly sensitive while a positive result still leaves substantial uncertainty."
+  ]
+}

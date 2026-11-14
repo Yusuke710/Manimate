@@ -1,0 +1,47 @@
+{
+  "total_duration_s": 50.150000000000006,
+  "subtitles": [
+    {
+      "index": 0,
+      "text": "Imagine a ball moving along a straight road. Its position changes as time passes, and we can draw that motion on a graph.",
+      "start_s": 0,
+      "end_s": 8.3,
+      "duration_s": 8.3
+    },
+    {
+      "index": 1,
+      "text": "The horizontal axis represents time. The vertical axis represents the distance the ball has travelled from its starting point.",
+      "start_s": 8.3,
+      "end_s": 16.475,
+      "duration_s": 8.175
+    },
+    {
+      "index": 2,
+      "text": "Choose two points on the curve and connect them with a straight line. The slope of that line gives the average speed over the interval.",
+      "start_s": 16.475,
+      "end_s": 24.525000000000002,
+      "duration_s": 8.05
+    },
+    {
+      "index": 3,
+      "text": "Now slide the second point closer to the first. The interval becomes smaller, and the straight line approaches the tangent to the curve.",
+      "start_s": 24.525000000000002,
+      "end_s": 32.775000000000006,
+      "duration_s": 8.25
+    },
+    {
+      "index": 4,
+      "text": "The slope of this tangent is the instantaneous speed. This is the derivative of position with respect to time.",
+      "start_s": 32.775000000000006,
+      "end_s": 40.35000000000001,
+      "duration_s": 7.575
+    },
+    {
+      "index": 5,
+      "text": "A steeper tangent means faster motion. A horizontal tangent means the ball is momentarily at rest. A negative slope means it is moving back.",
+      "start_s": 40.35000000000001,
+      "end_s": 50.150000000000006,
+      "duration_s": 9.8
+    }
+  ]
+}

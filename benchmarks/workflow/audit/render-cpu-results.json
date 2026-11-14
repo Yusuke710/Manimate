@@ -1,0 +1,61 @@
+{
+  "host_visible_cpus": 2,
+  "rows": [
+    {
+      "repeat": 0,
+      "scene": "CssMath",
+      "cpu_mode": "one-logical-CPU-affinity",
+      "elapsed_seconds": 9.702818911000008,
+      "exit_code": 0
+    },
+    {
+      "repeat": 0,
+      "scene": "CssMath",
+      "cpu_mode": "normal-2-vCPU-container",
+      "elapsed_seconds": 6.827135683000051,
+      "exit_code": 0
+    },
+    {
+      "repeat": 0,
+      "scene": "Attention",
+      "cpu_mode": "one-logical-CPU-affinity",
+      "elapsed_seconds": 16.98156953099999,
+      "exit_code": 0
+    },
+    {
+      "repeat": 0,
+      "scene": "Attention",
+      "cpu_mode": "normal-2-vCPU-container",
+      "elapsed_seconds": 17.1731542,
+      "exit_code": 0
+    },
+    {
+      "repeat": 1,
+      "scene": "CssMath",
+      "cpu_mode": "normal-2-vCPU-container",
+      "elapsed_seconds": 6.8141529230000515,
+      "exit_code": 0
+    },
+    {
+      "repeat": 1,
+      "scene": "CssMath",
+      "cpu_mode": "one-logical-CPU-affinity",
+      "elapsed_seconds": 6.972386701999994,
+      "exit_code": 0
+    },
+    {
+      "repeat": 1,
+      "scene": "Attention",
+      "cpu_mode": "normal-2-vCPU-container",
+      "elapsed_seconds": 16.77409353799999,
+      "exit_code": 0
+    },
+    {
+      "repeat": 1,
+      "scene": "Attention",
+      "cpu_mode": "one-logical-CPU-affinity",
+      "elapsed_seconds": 17.429529532999936,
+      "exit_code": 0
+    }
+  ]
+}

@@ -1,0 +1,150 @@
+{
+  "environment": {
+    "platform": "macOS-26.1-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "backend": "cloudflare-onnx",
+  "threads": 4,
+  "quantized": false,
+  "user_auth": true,
+  "instance_type": "standard-4",
+  "slot": 0,
+  "rows": [
+    {
+      "case": "short",
+      "repeat": -1,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.14387324987910688
+    },
+    {
+      "case": "short",
+      "repeat": -2,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.14015208301134408
+    },
+    {
+      "case": "short",
+      "repeat": -3,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.1141647498589009
+    },
+    {
+      "case": "short",
+      "repeat": 0,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.09800095786340535
+    },
+    {
+      "case": "short",
+      "repeat": 1,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.12623104196973145
+    },
+    {
+      "case": "short",
+      "repeat": 2,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.13240050012245774
+    },
+    {
+      "case": "medium",
+      "repeat": 0,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.12120220810174942
+    },
+    {
+      "case": "medium",
+      "repeat": 1,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.16885262494906783
+    },
+    {
+      "case": "medium",
+      "repeat": 2,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.11521545890718699
+    },
+    {
+      "case": "technical",
+      "repeat": 0,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.11606470798142254
+    },
+    {
+      "case": "technical",
+      "repeat": 1,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.11519091599620879
+    },
+    {
+      "case": "technical",
+      "repeat": 2,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.15140495914965868
+    },
+    {
+      "case": "long",
+      "repeat": 0,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.14555720915086567
+    },
+    {
+      "case": "long",
+      "repeat": 1,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.12126195896416903
+    },
+    {
+      "case": "long",
+      "repeat": 2,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "error": "HTTP Error 503: Service Unavailable",
+      "end_to_end_seconds": 0.12053133314475417
+    }
+  ],
+  "summary": {}
+}

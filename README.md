@@ -54,6 +54,32 @@ Sessions live in `~/.manimate/sessions/<session-id>/`, with generated files insi
 
 Cloud mode automatically backs up completed sessions while the app is open. Local mode keeps them on your machine.
 
+## Speech providers
+
+Cloud rendering uses hosted Kokoro speech by default, with the same Manim Cloud
+sign-in and no separate API key. Speech synthesis and audio assembly run in the
+cloud. Local rendering keeps local Kokoro; set `TTS_TRANSPORT=local` to explicitly
+keep synthesis local. Cloud failures are reported instead of silently running
+the model on your machine.
+
+The narration helper keeps the same outputs for each provider:
+
+```bash
+python tts-generate.py --plan narration.txt --voice af_heart --transport cloud
+python tts-generate.py --plan narration.txt --provider elevenlabs --voice <voice-id>
+```
+
+ElevenLabs requires `ELEVENLABS_API_KEY`; its model is configurable through
+`ELEVENLABS_MODEL_ID` (default `eleven_flash_v2_5`). Set `TTS_BASE_URL` and
+`TTS_API_KEY` to use your own deployment of the narration API. Native provider
+APIs have different payloads, so their adapters translate requests while keeping
+`voiceover.mp3` and `timestamps.json` consistent for the animation pipeline.
+
+Cloud narration is cached locally as a complete audio/timing pair. `--bust 0`
+clears that narration's cloud cache. The free hosted service has request and
+character allowances. See [speech benchmarks](benchmarks/speech/README.md) for
+reproducible cold/warm evaluations and saved measurements.
+
 ## Develop
 
 ```bash

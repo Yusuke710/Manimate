@@ -1,0 +1,290 @@
+{
+  "api": "https://manimate-speech.youfu1202mo.workers.dev",
+  "input_sha256": "fb82d346c938817e464d9752329c343fef97b483a0aa08c71c0e20674b3ad6e7",
+  "segments": 22,
+  "characters": 2381,
+  "lifecycle": "Every request shuts down its workers; no warm pool",
+  "rows": [
+    {
+      "name": "concurrent-0",
+      "normal_auth": true,
+      "end_to_end_seconds": 25.387212082976475,
+      "workers": 4,
+      "queue_seconds": 0.034,
+      "pipeline_seconds": 23.325,
+      "audio_seconds": 163.69066666666666,
+      "validation": "passed",
+      "metrics": {
+        "parallel_workers": 4,
+        "cold_model": true,
+        "model_load_seconds": 3.8806018579999986,
+        "synthesis_seconds": 13.817976994999995,
+        "cpu_seconds": 145.33476811600002,
+        "audio_seconds": 163.69066666666666,
+        "real_time_factor": 0.08441517941360939,
+        "assembly_seconds": 1.0436697519999996,
+        "server_seconds": 20.044436897,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx",
+        "parts": [
+          {
+            "cold_model": true,
+            "model_load_seconds": 2.7617568319999997,
+            "synthesis_seconds": 13.379015930999998,
+            "cpu_seconds": 38.180556877,
+            "server_seconds": 16.873531106,
+            "audio_seconds": 39.552,
+            "real_time_factor": 0.3382639545661407,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 1.8648975490000055,
+            "synthesis_seconds": 9.542399394,
+            "cpu_seconds": 27.789474617,
+            "server_seconds": 11.863005481999991,
+            "audio_seconds": 36.970666666666666,
+            "real_time_factor": 0.2581073119409983,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 3.8806018579999986,
+            "synthesis_seconds": 13.298790545000003,
+            "cpu_seconds": 38.970037239,
+            "server_seconds": 19.000767145,
+            "audio_seconds": 43.925333333333334,
+            "real_time_factor": 0.30275901252883686,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 2.105336243,
+            "synthesis_seconds": 13.817976994999995,
+            "cpu_seconds": 40.394699383,
+            "server_seconds": 16.620095136,
+            "audio_seconds": 43.242666666666665,
+            "real_time_factor": 0.3195449786090897,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          }
+        ]
+      }
+    },
+    {
+      "name": "concurrent-1",
+      "normal_auth": true,
+      "end_to_end_seconds": 35.39133529202081,
+      "workers": 4,
+      "queue_seconds": 0.035,
+      "pipeline_seconds": 33.156,
+      "audio_seconds": 163.69066666666666,
+      "validation": "passed",
+      "metrics": {
+        "parallel_workers": 4,
+        "cold_model": true,
+        "model_load_seconds": 4.360573737000003,
+        "synthesis_seconds": 20.03952837,
+        "cpu_seconds": 175.50925736300002,
+        "audio_seconds": 163.69066666666666,
+        "real_time_factor": 0.1224231581315978,
+        "assembly_seconds": 0.9590498339999982,
+        "server_seconds": 26.528825493999996,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx",
+        "parts": [
+          {
+            "cold_model": true,
+            "model_load_seconds": 2.050033330000005,
+            "synthesis_seconds": 12.883820520999997,
+            "cpu_seconds": 37.107254641,
+            "server_seconds": 15.422066010000009,
+            "audio_seconds": 39.552,
+            "real_time_factor": 0.3257438440786812,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 4.245418960000002,
+            "synthesis_seconds": 20.03952837,
+            "cpu_seconds": 59.74335404999999,
+            "server_seconds": 25.569775659999998,
+            "audio_seconds": 36.970666666666666,
+            "real_time_factor": 0.5420385991596942,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 4.360573737000003,
+            "synthesis_seconds": 13.461657504000001,
+            "cpu_seconds": 39.003448407,
+            "server_seconds": 18.440538628,
+            "audio_seconds": 43.925333333333334,
+            "real_time_factor": 0.30646682637202527,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 2.253412040999997,
+            "synthesis_seconds": 13.801144693000005,
+            "cpu_seconds": 39.655200265000005,
+            "server_seconds": 16.87908544700001,
+            "audio_seconds": 43.242666666666665,
+            "real_time_factor": 0.3191557264353109,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          }
+        ]
+      }
+    },
+    {
+      "name": "concurrent-2",
+      "normal_auth": true,
+      "end_to_end_seconds": 32.84419224993326,
+      "workers": 4,
+      "queue_seconds": 0.032,
+      "pipeline_seconds": 30.312,
+      "audio_seconds": 163.69066666666666,
+      "validation": "passed",
+      "metrics": {
+        "parallel_workers": 4,
+        "cold_model": true,
+        "model_load_seconds": 4.973540751000002,
+        "synthesis_seconds": 22.100718559,
+        "cpu_seconds": 153.569126575,
+        "audio_seconds": 163.69066666666666,
+        "real_time_factor": 0.1350151417246351,
+        "assembly_seconds": 0.7974253009999899,
+        "server_seconds": 28.714998322999996,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx",
+        "parts": [
+          {
+            "cold_model": true,
+            "model_load_seconds": 1.6315864790000063,
+            "synthesis_seconds": 7.240774579999993,
+            "cpu_seconds": 20.133336262,
+            "server_seconds": 9.338628560999993,
+            "audio_seconds": 39.552,
+            "real_time_factor": 0.18306974565129433,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 1.9011456330000058,
+            "synthesis_seconds": 11.499626481,
+            "cpu_seconds": 33.339862033,
+            "server_seconds": 13.998263856000001,
+            "audio_seconds": 36.970666666666666,
+            "real_time_factor": 0.3110473117696913,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 4.973540751000002,
+            "synthesis_seconds": 22.100718559,
+            "cpu_seconds": 60.757913176,
+            "server_seconds": 27.917573022000006,
+            "audio_seconds": 43.925333333333334,
+            "real_time_factor": 0.5031428763735429,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 2.343199799999997,
+            "synthesis_seconds": 13.378437352999999,
+            "cpu_seconds": 39.338015104,
+            "server_seconds": 16.477164099999996,
+            "audio_seconds": 43.242666666666665,
+            "real_time_factor": 0.3093804888613098,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          }
+        ]
+      }
+    },
+    {
+      "name": "concurrent-3",
+      "normal_auth": true,
+      "end_to_end_seconds": 26.788354250136763,
+      "workers": 4,
+      "queue_seconds": 0.032,
+      "pipeline_seconds": 25.046,
+      "audio_seconds": 163.69066666666666,
+      "validation": "passed",
+      "metrics": {
+        "parallel_workers": 4,
+        "cold_model": true,
+        "model_load_seconds": 4.476867199999997,
+        "synthesis_seconds": 14.904442917000004,
+        "cpu_seconds": 119.124629985,
+        "audio_seconds": 163.69066666666666,
+        "real_time_factor": 0.09105249077731985,
+        "assembly_seconds": 1.132496082000003,
+        "server_seconds": 21.680987346000002,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx",
+        "parts": [
+          {
+            "cold_model": true,
+            "model_load_seconds": 4.476867199999997,
+            "synthesis_seconds": 14.904442917000004,
+            "cpu_seconds": 42.452556415,
+            "server_seconds": 20.548491264,
+            "audio_seconds": 39.552,
+            "real_time_factor": 0.37683158669599526,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 1.888368431,
+            "synthesis_seconds": 7.004020868000001,
+            "cpu_seconds": 19.393199244999998,
+            "server_seconds": 9.410656532999997,
+            "audio_seconds": 36.970666666666666,
+            "real_time_factor": 0.18944805434939416,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 1.6402718620000059,
+            "synthesis_seconds": 7.55929089,
+            "cpu_seconds": 21.131474948,
+            "server_seconds": 9.5764079,
+            "audio_seconds": 43.925333333333334,
+            "real_time_factor": 0.17209410416160756,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 2.736424973000002,
+            "synthesis_seconds": 12.397412105999997,
+            "cpu_seconds": 36.147399377,
+            "server_seconds": 16.159138313,
+            "audio_seconds": 43.242666666666665,
+            "real_time_factor": 0.2866939775376171,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          }
+        ]
+      }
+    }
+  ],
+  "final_pool_state": {
+    "capacity": 128,
+    "active": 0,
+    "pending": 0
+  }
+}

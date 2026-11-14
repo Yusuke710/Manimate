@@ -1,0 +1,23 @@
+{
+  "release": "0.1.28",
+  "release_sha256": "3b5f37d0f1ad2ba89128501254a618faca43521a93abc3b45325b980dd0af1f2",
+  "worker_version": "7baf25ea-43f9-41e1-8810-d75ff38ae2d5",
+  "dev_and_packaged_helpers_identical": true,
+  "dev_and_packaged_python_no_site_packages_cloud_success": true,
+  "live_archive_sha256_verified": true,
+  "final_live_metrics": {
+    "cold_model": true,
+    "model_load_seconds": 3.7554384150000146,
+    "synthesis_seconds": 0.9271236359999762,
+    "cpu_seconds": 2.4065151670000002,
+    "server_seconds": 5.2801881789999925,
+    "audio_seconds": 2.005333333333333,
+    "real_time_factor": 0.46232894082445625,
+    "threads": 4,
+    "model_file": "kokoro-v1.0.onnx"
+  },
+  "vitest_passed": 56,
+  "vitest_skipped": 1,
+  "python_tests_passed": 7,
+  "worker_tests_passed": 6
+}

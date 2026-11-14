@@ -20,7 +20,7 @@ subtitles:
 - Next narration line.
 ```
 
-Run `python tts-generate.py --plan narration.txt --voice <Voice ID>`. Align animation timing with the measured durations in `timestamps.json`. Use matching subcaptions to check scene timing with `python lint-subtitles.py script.py`; fix reported timing problems before rendering. The app reads `timestamps.json` for subtitles.
+Run `python tts-generate.py --plan narration.txt --voice <Voice ID> --transport "${TTS_TRANSPORT:-cloud}"`. Start speech generation as soon as the narration is settled; while it runs, write the visual scene code. Wait for successful speech completion before finalizing timings or rendering. Align animation timing with the measured durations in `timestamps.json`. Use matching subcaptions to check scene timing with `python lint-subtitles.py script.py`; fix reported timing problems before rendering. The app reads `timestamps.json` for subtitles.
 
 ## Render and verify
 

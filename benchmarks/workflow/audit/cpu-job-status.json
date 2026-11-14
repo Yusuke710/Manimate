@@ -1,0 +1,14 @@
+{
+  "id": "3cd17445382b4a9e3ccd0387c26aef67",
+  "status": "succeeded",
+  "created_at": "2026-11-14T07:22:25.993Z",
+  "finished_at": "2026-11-14T07:24:07.186Z",
+  "exit_code": 0,
+  "command_seconds": 98.872,
+  "started_at": "2026-11-14T07:22:27.814Z",
+  "startup_requested_at": "2026-11-14T07:22:27.075Z",
+  "startup_retries": 0,
+  "capacity_retries": 0,
+  "interruptions": [],
+  "queue_seconds": 1.821
+}

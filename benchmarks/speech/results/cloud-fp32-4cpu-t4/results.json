@@ -1,0 +1,150 @@
+{
+  "environment": {
+    "platform": "macOS-26.1-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "backend": "cloudflare-onnx",
+  "threads": 4,
+  "quantized": false,
+  "user_auth": true,
+  "instance_type": "standard-4",
+  "slot": 0,
+  "rows": [
+    {
+      "case": "short",
+      "repeat": -1,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.15242825006134808
+    },
+    {
+      "case": "short",
+      "repeat": -2,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.11973308306187391
+    },
+    {
+      "case": "short",
+      "repeat": -3,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.1801110419910401
+    },
+    {
+      "case": "short",
+      "repeat": 0,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.15886729187332094
+    },
+    {
+      "case": "short",
+      "repeat": 1,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.15034366701729596
+    },
+    {
+      "case": "short",
+      "repeat": 2,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.11304804193787277
+    },
+    {
+      "case": "medium",
+      "repeat": 0,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.13103229203261435
+    },
+    {
+      "case": "medium",
+      "repeat": 1,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.13816983299329877
+    },
+    {
+      "case": "medium",
+      "repeat": 2,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.11056741699576378
+    },
+    {
+      "case": "technical",
+      "repeat": 0,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.11576495785266161
+    },
+    {
+      "case": "technical",
+      "repeat": 1,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.11801554099656641
+    },
+    {
+      "case": "technical",
+      "repeat": 2,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.14195770816877484
+    },
+    {
+      "case": "long",
+      "repeat": 0,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.10927575011737645
+    },
+    {
+      "case": "long",
+      "repeat": 1,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.1354716659989208
+    },
+    {
+      "case": "long",
+      "repeat": 2,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "error": "HTTP 503: {\"error\":\"Authentication service unavailable\"}",
+      "end_to_end_seconds": 0.13000304088927805
+    }
+  ],
+  "summary": {}
+}

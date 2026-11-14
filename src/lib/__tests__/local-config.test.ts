@@ -32,6 +32,8 @@ describe("runtime instructions", () => {
     instructions = fs.readFileSync(path.join(paths.projectDir, "AGENTS.md"), "utf8");
     expect(instructions).toBe(fs.readFileSync("src/lib/local/prompts/cloud/AGENTS.md", "utf8"));
     expect(fs.readFileSync(ttsPath, "utf8")).toBe(fs.readFileSync("scripts/tts-generate.py", "utf8"));
+    expect(fs.readFileSync(path.join(paths.projectDir, "speech_client.py"), "utf8")).toBe(fs.readFileSync("scripts/speech_client.py", "utf8"));
+    expect(fs.readFileSync(path.join(paths.projectDir, "manimate_cloud_auth.py"), "utf8")).toBe(fs.readFileSync("scripts/manim-cloud/cloud_auth.py", "utf8"));
     expect(JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf8")).unrelated).toBe("keep");
   });
 

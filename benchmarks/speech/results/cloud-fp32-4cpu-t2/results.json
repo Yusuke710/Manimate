@@ -1,0 +1,127 @@
+{
+  "environment": {
+    "platform": "macOS-26.1-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "backend": "cloudflare-onnx",
+  "threads": 2,
+  "quantized": false,
+  "user_auth": false,
+  "instance_type": "standard-4",
+  "slot": 1,
+  "rows": [
+    {
+      "case": "short",
+      "repeat": -1,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": true,
+        "model_load_seconds": 8.349865700999999,
+        "synthesis_seconds": 8.98963078700001,
+        "cpu_seconds": 15.202341471999999,
+        "server_seconds": 19.559712676999993,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 1.3293026597496072,
+        "threads": 2,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 31.445,
+      "end_to_end_seconds": 31.66728908312507,
+      "audio_validation": {
+        "decoded_seconds": 6.762666666666667,
+        "rms": 0.07726267725229263,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 0,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 8.571452237000017,
+        "cpu_seconds": 13.357659604000002,
+        "server_seconds": 8.799820626000042,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 1.2674663205343084,
+        "threads": 2,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 9.107,
+      "end_to_end_seconds": 9.326181874843314,
+      "audio_validation": {
+        "decoded_seconds": 6.762666666666667,
+        "rms": 0.07726267725229263,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 1,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 9.079913890000057,
+        "cpu_seconds": 13.668424272000003,
+        "server_seconds": 9.293813082000042,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 1.3426528819992196,
+        "threads": 2,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 9.603,
+      "end_to_end_seconds": 9.760911375051364,
+      "audio_validation": {
+        "decoded_seconds": 6.762666666666667,
+        "rms": 0.07726267725229263,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 2,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 7.146934338000051,
+        "cpu_seconds": 12.187961697000006,
+        "server_seconds": 7.350594864999948,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 1.0568219151222473,
+        "threads": 2,
+        "model_file": "kokoro-v1.0.onnx"
+      },
+      "container_seconds": 7.659,
+      "end_to_end_seconds": 7.839391042012721,
+      "audio_validation": {
+        "decoded_seconds": 6.762666666666667,
+        "rms": 0.07726267725229263,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    }
+  ],
+  "aborted_reason": "Short warm trials exceeded maximum RTF; longer workloads skipped",
+  "summary": {
+    "short": {
+      "n": 3,
+      "median_seconds": 9.326181874843314,
+      "max_seconds": 9.760911375051364,
+      "median_rtf": 1.2674663205343084
+    }
+  }
+}

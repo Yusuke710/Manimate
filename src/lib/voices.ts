@@ -16,7 +16,7 @@ interface VoiceEntry {
 export const VOICE_REGISTRY: Record<string, VoiceEntry> = {
   af_heart: {
     label: "Heart",
-    description: "Kokoro local voice, free",
+    description: "Kokoro voice, free",
     provider: "kokoro",
     name: "af_heart",
   },

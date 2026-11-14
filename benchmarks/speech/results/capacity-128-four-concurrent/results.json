@@ -1,0 +1,161 @@
+{
+  "api": "https://manimate-speech.youfu1202mo.workers.dev",
+  "input_sha256": "fb82d346c938817e464d9752329c343fef97b483a0aa08c71c0e20674b3ad6e7",
+  "segments": 22,
+  "characters": 2381,
+  "lifecycle": "Every request shuts down its workers; no warm pool",
+  "rows": [
+    {
+      "name": "concurrent-0",
+      "normal_auth": true,
+      "end_to_end_seconds": 77.96410479210317,
+      "workers": 4,
+      "queue_seconds": 32.838,
+      "pipeline_seconds": 42.196,
+      "audio_seconds": 163.69066666666666,
+      "validation": "passed",
+      "metrics": {
+        "parallel_workers": 4,
+        "cold_model": true,
+        "model_load_seconds": 4.737239669000001,
+        "synthesis_seconds": 22.440727799999998,
+        "cpu_seconds": 172.84625407800002,
+        "audio_seconds": 163.69066666666666,
+        "real_time_factor": 0.13709228667079368,
+        "assembly_seconds": 0.9788387540000016,
+        "server_seconds": 29.046398158000002,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx",
+        "parts": [
+          {
+            "cold_model": true,
+            "model_load_seconds": 3.5855486459999995,
+            "synthesis_seconds": 12.946641925,
+            "cpu_seconds": 36.892084352,
+            "server_seconds": 17.50563233,
+            "audio_seconds": 39.552,
+            "real_time_factor": 0.3273321684112055,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 3.089135211,
+            "synthesis_seconds": 12.228422606000002,
+            "cpu_seconds": 35.151868635999996,
+            "server_seconds": 16.189653791999998,
+            "audio_seconds": 36.970666666666666,
+            "real_time_factor": 0.33076013251947495,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 4.737239669000001,
+            "synthesis_seconds": 22.440727799999998,
+            "cpu_seconds": 63.10364036800001,
+            "server_seconds": 28.067559404,
+            "audio_seconds": 43.925333333333334,
+            "real_time_factor": 0.5108834947183097,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 2.699964149,
+            "synthesis_seconds": 12.913719476,
+            "cpu_seconds": 37.698660722,
+            "server_seconds": 16.236411562,
+            "audio_seconds": 43.242666666666665,
+            "real_time_factor": 0.29863374466576226,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          }
+        ]
+      }
+    },
+    {
+      "name": "concurrent-1",
+      "normal_auth": true,
+      "end_to_end_seconds": 33.22040091617964,
+      "workers": 4,
+      "queue_seconds": 0.091,
+      "pipeline_seconds": 30.77,
+      "audio_seconds": 163.69066666666666,
+      "validation": "passed",
+      "metrics": {
+        "parallel_workers": 4,
+        "cold_model": true,
+        "model_load_seconds": 4.670336816999907,
+        "synthesis_seconds": 21.524496703999944,
+        "cpu_seconds": 176.175900595,
+        "audio_seconds": 163.69066666666666,
+        "real_time_factor": 0.13149495412485304,
+        "assembly_seconds": 1.4099803620000557,
+        "server_seconds": 29.142777496000008,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx",
+        "parts": [
+          {
+            "cold_model": true,
+            "model_load_seconds": 4.670336816999907,
+            "synthesis_seconds": 21.524496703999944,
+            "cpu_seconds": 63.22707232300001,
+            "server_seconds": 27.732797133999952,
+            "audio_seconds": 39.552,
+            "real_time_factor": 0.544207542071196,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 3.9180400820000614,
+            "synthesis_seconds": 11.810630184000047,
+            "cpu_seconds": 33.468846216,
+            "server_seconds": 16.7238371200001,
+            "audio_seconds": 36.970666666666666,
+            "real_time_factor": 0.31945948636757193,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 3.2408943959999306,
+            "synthesis_seconds": 14.057434463999925,
+            "cpu_seconds": 40.887448628,
+            "server_seconds": 18.483391150999978,
+            "audio_seconds": 43.925333333333334,
+            "real_time_factor": 0.3200302285089832,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          },
+          {
+            "cold_model": true,
+            "model_load_seconds": 3.5916562219999832,
+            "synthesis_seconds": 13.265030686000046,
+            "cpu_seconds": 38.592533427999996,
+            "server_seconds": 18.03445495099993,
+            "audio_seconds": 43.242666666666665,
+            "real_time_factor": 0.306757924719414,
+            "threads": 4,
+            "model_file": "kokoro-v1.0.onnx"
+          }
+        ]
+      }
+    },
+    {
+      "name": "concurrent-2",
+      "error": "HTTP 429: {\"error\":\"Speech worker busy; retry shortly\"}",
+      "end_to_end_seconds": 46.02919620811008
+    },
+    {
+      "name": "concurrent-3",
+      "error": "HTTP 429: {\"error\":\"Speech worker busy; retry shortly\"}",
+      "end_to_end_seconds": 46.02419975004159
+    }
+  ],
+  "final_pool_state": {
+    "active": 0,
+    "pending": 0
+  }
+}

@@ -3,6 +3,7 @@ import { execFileSync, spawn } from "node:child_process";
 import path from "node:path";
 import { getResolvedElevenLabsApiKey } from "@/lib/local/voiceover";
 import { DEFAULT_MODEL } from "@/lib/models";
+import { selectedRenderMode } from "@/lib/local/config";
 import { NONE_VOICE_ID } from "@/lib/voices";
 import { attachClaudeInput } from "@/lib/local/claude-input";
 
@@ -58,6 +59,7 @@ function isKokoroVoiceId(voiceId: string): boolean {
 
 export function prewarmLocalKokoroVoice(input: { cwd: string; voiceId: string }): void {
   if (!isKokoroVoiceId(input.voiceId)) return;
+  if ((process.env.TTS_TRANSPORT || selectedRenderMode() || "cloud") === "cloud") return;
 
   const python = process.env.MANIMATE_TTS_PYTHON?.trim() || "python";
   const env = buildLocalClaudeEnv();
@@ -307,6 +309,7 @@ export function buildCodexArgs(input: {
 
 function buildLocalAgentEnv(model: string): NodeJS.ProcessEnv {
   const env = model === DEFAULT_MODEL ? buildLocalClaudeEnv() : { ...process.env };
+  env.TTS_TRANSPORT ||= selectedRenderMode() === "local" ? "local" : "cloud";
   const elevenLabsApiKey = getResolvedElevenLabsApiKey().apiKey;
   if (elevenLabsApiKey) {
     env.ELEVENLABS_API_KEY = elevenLabsApiKey;

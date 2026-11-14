@@ -1,0 +1,182 @@
+{"timestamp": 1794639689.693287, "line": "[manimate] system_init session=profile-gpt2-css-e7e5b728 model=opus[1m]"}
+{"timestamp": 1794639689.704003, "line": "[manimate] progress planning Running Manimate..."}
+{"timestamp": 1794639691.454616, "line": "[manimate] system_init session=profile-gpt2-css-e7e5b728 model=claude-opus-5-5[1m]"}
+{"timestamp": 1794639694.852818, "line": "[manimate] tool_use ToolSearch {\"query\":\"select:WebFetch\",\"max_results\":1}"}
+{"timestamp": 1794639694.8810618, "line": "[manimate] tool_result ok {\"matches\":[\"WebFetch\"],\"query\":\"select:WebFetch\",\"total_deferred_tools\":176}"}
+{"timestamp": 1794639695.009959, "line": "[manimate] progress rendering Rendering video..."}
+{"timestamp": 1794639695.010169, "line": "[manimate] tool_use Bash ls -la; cat manim.cfg 2>/dev/null; head -50 tts-generate.py; head -40 lint-subtitles.py"}
+{"timestamp": 1794639697.9780228, "line": "[manimate] tool_result ok total 128"}
+{"timestamp": 1794639697.978559, "line": "drwxr-xr-x@ 7 ymiy  staff    224 Nov 14 18:01 ."}
+{"timestamp": 1794639697.978604, "line": "drwxr-xr-x@ 5 ymiy  staff    160 Nov 14 18:01 .."}
+{"timestamp": 1794639697.978631, "line": "-rw-r--r--@ 1 ymiy  staff   3556 Nov 14 18:01 AGEN..."}
+{"timestamp": 1794639702.235618, "line": "[manimate] progress planning Planning..."}
+{"timestamp": 1794639702.236048, "line": "[manimate] tool_use WebFetch {\"url\":\"https://shubhampatil.dev/blog/gpt2-css\",\"prompt\":\"Give a detailed, faithful summary of this article: its thesis, every technical step, architecture d..."}
+{"timestamp": 1794639741.314922, "line": "[manimate] tool_result ok # Summary: Implementing GPT-2 Entirely In CSS"}
+{"timestamp": 1794639741.31604, "line": ""}
+{"timestamp": 1794639741.316082, "line": "## Thesis"}
+{"timestamp": 1794639741.316101, "line": "The author demonstrates that a complete GPT-2 small model (124M parameters) can run inference entire..."}
+{"timestamp": 1794639762.268689, "line": "[manimate] progress rendering Rendering video..."}
+{"timestamp": 1794639762.2691681, "line": "[manimate] tool_use Bash cat > narration.txt <<'EOF'"}
+{"timestamp": 1794639762.2691982, "line": "subtitles:"}
+{"timestamp": 1794639762.269218, "line": "- What if you could run GPT-2 using nothing but CSS?"}
+{"timestamp": 1794639762.269235, "line": "- No JavaScript, no WebAssembly. Just stylesheets and fonts, runn..."}
+{"timestamp": 1794639762.302825, "line": "[manimate] tool_result ok Command running in background with ID: b6al6jdqu. Output is being written to: /private/tmp/claude-501/-Users-ymiy--manimate-sessions-profile-gpt2-css-e7e5b72..."}
+{"timestamp": 1794639765.317951, "line": "[manimate] progress coding Writing code..."}
+{"timestamp": 1794639765.318214, "line": "[manimate] tool_use Bash grep -n \"subcaption\\|timestamps\\|def \\|SUB\" lint-subtitles.py | head -60; grep -n \"timestamps.json\" -A15 tts-generate.py | grep -n \"json\\|start\\|end\\|dur\" | ..."}
+{"timestamp": 1794639765.375241, "line": "[manimate] tool_result ok 50:    def __getattr__(cls, name):"}
+{"timestamp": 1794639765.375318, "line": "61:    def __init__(self, *args, **kwargs):"}
+{"timestamp": 1794639765.375339, "line": "73:    def __getattr__(self, name):"}
+{"timestamp": 1794639765.3753548, "line": "84:    def __call__(self, *args, **kwargs)..."}
+{"timestamp": 1794639827.494188, "line": "[manimate] tool_use Bash sed -n 140,240p lint-subtitles.py"}
+{"timestamp": 1794639827.532185, "line": "[manimate] tool_result ok raise ValueError(f\"Invalid timing duration: {value!r}\")"}
+{"timestamp": 1794639827.5322518, "line": "    return duration"}
+{"timestamp": 1794639827.532279, "line": ""}
+{"timestamp": 1794639827.532296, "line": ""}
+{"timestamp": 1794639827.53231, "line": "class Timeline:"}
+{"timestamp": 1794639827.532324, "line": "    \"\"\"Per-scene clock; records subtitles and flags overlaps/ov..."}
+{"timestamp": 1794639829.577754, "line": "[manimate] assistant Narration audio is done; now writing the scene code."}
+{"timestamp": 1794639830.7965791, "line": "[manimate] tool_use Bash tail -3 tts.log; python -c \""}
+{"timestamp": 1794639830.797547, "line": "import json;d=json.load(open('timestamps.json'));print(type(d), list(d)[:3] if isinstance(d,dict) else d[:2])"}
+{"timestamp": 1794639830.797707, "line": "\"; ffprobe -v erro..."}
+{"timestamp": 1794639831.376231, "line": "[manimate] tool_result ok {\"provider\": \"kokoro-cloud\", \"cached\": false, \"elapsed_seconds\": 56.044, \"audio_seconds\": 163.69066666666666, \"metrics\": {\"cold_model\": true, \"model_load_sec..."}
+{"timestamp": 1794639833.9900448, "line": "[manimate] tool_use Bash python -c \""}
+{"timestamp": 1794639833.990807, "line": "import json;d=json.load(open('timestamps.json'));print(d['total_duration_s']);"}
+{"timestamp": 1794639833.9908469, "line": "[print(i, s) for i,s in enumerate(d['subtitles'])]\" | cut -c1-160"}
+{"timestamp": 1794639834.102911, "line": "[manimate] tool_result ok 163.69066666666666"}
+{"timestamp": 1794639834.102987, "line": "0 {'index': 0, 'text': 'What if you could run GPT-2 using nothing but CSS?', 'start_s': 0.0, 'end_s': 3.7333333333333334, 'duration_s': 3...."}
+{"timestamp": 1794639962.3395789, "line": "[manimate] tool_use Write file=/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/script.py"}
+{"timestamp": 1794639962.482722, "line": "[manimate] tool_result ok File created successfully at: /Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/script.py (file state is current in your context \u2014 no need to ..."}
+{"timestamp": 1794639962.502597, "line": "[manimate] artifact_update Artifacts updated"}
+{"timestamp": 1794639966.3674948, "line": "[manimate] tool_use Bash python lint-subtitles.py script.py"}
+{"timestamp": 1794639966.700314, "line": "[manimate] tool_result ok Checking subtitles in: script.py"}
+{"timestamp": 1794639966.7003798, "line": ""}
+{"timestamp": 1794639966.7004, "line": "No issues found (22 subtitles in 9 scenes)"}
+{"timestamp": 1794639970.3738618, "line": "[manimate] progress rendering Rendering video..."}
+{"timestamp": 1794639970.374214, "line": "[manimate] tool_use Bash mkdir -p clips; for s in Intro CssMath FontMatmul ReadBack TokensEmbeds Attention Passes Sampling Results; do (manim-cloud script.py $s --remote-include time..."}
+{"timestamp": 1794640054.7810729, "line": "[manimate] tool_result ok TokensEmbeds done"}
+{"timestamp": 1794640054.781534, "line": "Intro done"}
+{"timestamp": 1794640054.781583, "line": "ReadBack done"}
+{"timestamp": 1794640054.781603, "line": "FontMatmul done"}
+{"timestamp": 1794640054.78162, "line": "CssMath done"}
+{"timestamp": 1794640054.781634, "line": "Sampling done"}
+{"timestamp": 1794640054.7816472, "line": "Results done"}
+{"timestamp": 1794640054.781661, "line": "Passes done"}
+{"timestamp": 1794640054.781673, "line": "Attention done"}
+{"timestamp": 1794640054.781686, "line": "json.decoder.JSONDecodeError: E..."}
+{"timestamp": 1794640057.32438, "line": "[manimate] progress coding Writing code..."}
+{"timestamp": 1794640057.3245509, "line": "[manimate] tool_use Bash head -c 1500 clips/Intro.json; echo; tail -c 600 clips/Attention.json"}
+{"timestamp": 1794640057.414654, "line": "[manimate] tool_result ok Uploading 6 files from /Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project"}
+{"timestamp": 1794640057.414735, "line": "Render job: 02219790f46eb8db0fffd6a86efa202d"}
+{"timestamp": 1794640057.414758, "line": "{"}
+{"timestamp": 1794640057.414774, "line": "  \"id\": \"02219790f46eb..."}
+{"timestamp": 1794640059.6437151, "line": "[manimate] assistant All nine scenes rendered; downloading clips and assembling."}
+{"timestamp": 1794640062.4482849, "line": "[manimate] tool_use Bash S=\"Intro CssMath FontMatmul ReadBack TokensEmbeds Attention Passes Sampling Results\""}
+{"timestamp": 1794640062.44864, "line": "for s in $S; do python - \"$s\" <<'EOF'"}
+{"timestamp": 1794640062.4486668, "line": "import json,sys,subprocess,os"}
+{"timestamp": 1794640062.448695, "line": "s=sy..."}
+{"timestamp": 1794640062.812853, "line": "[manimate] tool_result error Exit code 1"}
+{"timestamp": 1794640062.812921, "line": "Traceback (most recent call last):"}
+{"timestamp": 1794640062.812941, "line": "  File \"<stdin>\", line 2, in <module>"}
+{"timestamp": 1794640062.812969, "line": "FileNotFoundError: [Errno 2] No such file or directory: 'clips/Intro Css..."}
+{"timestamp": 1794640067.22145, "line": "[manimate] tool_use Bash S=(Intro CssMath FontMatmul ReadBack TokensEmbeds Attention Passes Sampling Results)"}
+{"timestamp": 1794640067.221517, "line": "for s in $S; do python - \"$s\" <<'EOF'"}
+{"timestamp": 1794640067.221537, "line": "import json,sys,subprocess,os"}
+{"timestamp": 1794640067.2215528, "line": "s=sy..."}
+{"timestamp": 1794640073.5798779, "line": "[manimate] tool_result ok Intro succeeded"}
+{"timestamp": 1794640073.580286, "line": "CssMath succeeded"}
+{"timestamp": 1794640073.5803142, "line": "FontMatmul succeeded"}
+{"timestamp": 1794640073.580332, "line": "ReadBack succeeded"}
+{"timestamp": 1794640073.580354, "line": "TokensEmbeds succeeded"}
+{"timestamp": 1794640073.5803678, "line": "Attention succeeded"}
+{"timestamp": 1794640073.580381, "line": "Passes succeeded"}
+{"timestamp": 1794640073.580394, "line": "Sampling succeeded"}
+{"timestamp": 1794640073.5804071, "line": "Resu..."}
+{"timestamp": 1794640079.16771, "line": "[manimate] progress rendering Rendering video..."}
+{"timestamp": 1794640079.16866, "line": "[manimate] tool_use Bash ffmpeg -y -v error -f concat -safe 0 -i list.txt -c copy silent.mp4 && ffmpeg -y -v error -i silent.mp4 -i voiceover.mp3 -map 0:v -map 1:a -c:v copy -c:a aac..."}
+{"timestamp": 1794640085.617453, "line": "[manimate] tool_result ok stream|codec_type=video|width=854|height=480|r_frame_rate=15/1|duration=163.927474"}
+{"timestamp": 1794640085.6178071, "line": "stream|codec_type=audio|r_frame_rate=0/0|duration=163.691000"}
+{"timestamp": 1794640085.617837, "line": "      22"}
+{"timestamp": 1794640092.464708, "line": "[manimate] tool_use Bash for s in Intro CssMath FontMatmul; do ffprobe -v error -count_frames -select_streams v -show_entries stream=nb_read_frames -of csv=p=0 media/videos/script/48..."}
+{"timestamp": 1794640093.414819, "line": "[manimate] tool_result error Exit code 1"}
+{"timestamp": 1794640093.414923, "line": "200"}
+{"timestamp": 1794640093.414943, "line": "320"}
+{"timestamp": 1794640093.4149592, "line": "436"}
+{"timestamp": 1794640093.414973, "line": "Traceback (most recent call last):"}
+{"timestamp": 1794640093.414994, "line": "  File \"<string>\", line 2, in <module>"}
+{"timestamp": 1794640093.415008, "line": "  File \"<string>\", line 8, in <module>"}
+{"timestamp": 1794640093.415021, "line": "NameError: name 'con..."}
+{"timestamp": 1794640103.199351, "line": "[manimate] tool_use Bash python - <<'EOF'"}
+{"timestamp": 1794640103.200295, "line": "import json,subprocess"}
+{"timestamp": 1794640103.200338, "line": "ts=json.load(open('timestamps.json'))['subtitles']"}
+{"timestamp": 1794640103.200356, "line": "st=[s['start_s'] for s in ts]; end=ts[-1]['end_s']+1.0"}
+{"timestamp": 1794640103.200379, "line": "sn=lambda t..."}
+{"timestamp": 1794640113.994154, "line": "[manimate] tool_result ok Intro 202"}
+{"timestamp": 1794640113.9946408, "line": "CssMath 321"}
+{"timestamp": 1794640113.994678, "line": "FontMatmul 438"}
+{"timestamp": 1794640113.9947011, "line": "ReadBack 187"}
+{"timestamp": 1794640113.994716, "line": "TokensEmbeds 285"}
+{"timestamp": 1794640113.99473, "line": "Attention 274"}
+{"timestamp": 1794640113.994744, "line": "Passes 248"}
+{"timestamp": 1794640113.9947572, "line": "Sampling 273"}
+{"timestamp": 1794640113.9947689, "line": "Results 242"}
+{"timestamp": 1794640113.994782, "line": "stream|codec_type=video|duration=164.666..."}
+{"timestamp": 1794640115.792923, "line": "[manimate] assistant Synced now. Checking frames."}
+{"timestamp": 1794640119.250368, "line": "[manimate] tool_use Bash cd frames && ffmpeg -v error -y -i f6.png -i f9.png -i f17.png -i f25.png -filter_complex \"[0][1]hstack[a];[2][3]hstack[b];[a][b]vstack\" ../m1.png && ffmpeg ..."}
+{"timestamp": 1794640120.58594, "line": "[manimate] tool_result ok (Bash completed with no output)"}
+{"timestamp": 1794640124.238831, "line": "[manimate] progress coding Writing code..."}
+{"timestamp": 1794640124.238921, "line": "[manimate] tool_use Read file=/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m1.png"}
+{"timestamp": 1794640124.276944, "line": "[manimate] tool_result ok {\"type\":\"image\",\"file\":{\"base64\":\"iVBORw0KGgoAAAANSUhEUgAABqwAAAPACAIAAADPOM9wAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAQAElEQVR4nOy9B5gdxZXoX13V3TdO0ihHUASEJCQhECJKYGw..."}
+{"timestamp": 1794640124.278003, "line": "[manimate] tool_use Read file=/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m2.png"}
+{"timestamp": 1794640124.301051, "line": "[manimate] tool_result ok {\"type\":\"image\",\"file\":{\"base64\":\"iVBORw0KGgoAAAANSUhEUgAABqwAAAPACAIAAADPOM9wAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAQAElEQVR4nOxdB3hURde+e3c3ZEtINgmQBKQTAtJBQHr/IYB..."}
+{"timestamp": 1794640124.729561, "line": "[manimate] tool_use Read file=/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m3.png"}
+{"timestamp": 1794640124.751711, "line": "[manimate] tool_result ok {\"type\":\"image\",\"file\":{\"base64\":\"iVBORw0KGgoAAAANSUhEUgAABqwAAAPACAIAAADPOM9wAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAQAElEQVR4nOxdB3xUVfZ+86Yk05JMEkhCC70aepOiUhUBBVH..."}
+{"timestamp": 1794640137.250526, "line": "[manimate] tool_use Read file=/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m4.png"}
+{"timestamp": 1794640137.269629, "line": "[manimate] tool_result ok {\"type\":\"image\",\"file\":{\"base64\":\"iVBORw0KGgoAAAANSUhEUgAABqwAAAPACAIAAADPOM9wAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAQAElEQVR4nOy995fb2LXnCwIgi6FylbLUCq3Q3ercdt+xfX3..."}
+{"timestamp": 1794640137.802763, "line": "[manimate] tool_use Read file=/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m5.png"}
+{"timestamp": 1794640137.828356, "line": "[manimate] tool_result ok {\"type\":\"image\",\"file\":{\"base64\":\"iVBORw0KGgoAAAANSUhEUgAABqwAAAPACAIAAADPOM9wAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAQAElEQVR4nOydB5wURfr3O85O3MAuGUFQBCQph2IAAwaCnGK..."}
+{"timestamp": 1794640138.2625349, "line": "[manimate] tool_use Read file=/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/m6.png"}
+{"timestamp": 1794640138.272885, "line": "[manimate] tool_result ok {\"type\":\"image\",\"file\":{\"base64\":\"iVBORw0KGgoAAAANSUhEUgAABqwAAAHgCAIAAABfC9tvAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAQAElEQVR4nOy9B6BdRZ34P2dmTrvl1ZT3XvLSe0IKSYAAqUA..."}
+{"timestamp": 1794640160.285727, "line": "[manimate] tool_use Bash cd .. && python - <<'EOF'"}
+{"timestamp": 1794640160.286608, "line": "p='script.py'; s=open(p).read()"}
+{"timestamp": 1794640160.286674, "line": "rep=["}
+{"timestamp": 1794640160.28673, "line": "('def T(s, size=28, color=FG, font=FONT, weight=NORMAL):\\n    return Text(s, font=font, font_..."}
+{"timestamp": 1794640160.6811361, "line": "[manimate] tool_result ok No issues found (22 subtitles in 9 scenes)"}
+{"timestamp": 1794640160.683879, "line": "[manimate] artifact_update Artifacts updated"}
+{"timestamp": 1794640168.447042, "line": "[manimate] progress rendering Rendering video..."}
+{"timestamp": 1794640168.447974, "line": "[manimate] tool_use Bash S=(Intro FontMatmul ReadBack TokensEmbeds Attention Passes Sampling Results)"}
+{"timestamp": 1794640168.448012, "line": "for s in $S; do (manim-cloud script.py $s --remote-include timestamps.json > cli..."}
+{"timestamp": 1794640216.637731, "line": "[manimate] tool_result ok Intro succeeded"}
+{"timestamp": 1794640216.6383412, "line": "FontMatmul succeeded"}
+{"timestamp": 1794640216.638391, "line": "ReadBack succeeded"}
+{"timestamp": 1794640216.638411, "line": "TokensEmbeds succeeded"}
+{"timestamp": 1794640216.6384268, "line": "Attention succeeded"}
+{"timestamp": 1794640216.6384408, "line": "Passes succeeded"}
+{"timestamp": 1794640216.6384552, "line": "Sampling succeeded"}
+{"timestamp": 1794640216.638468, "line": "Results succeeded"}
+{"timestamp": 1794640225.117545, "line": "[manimate] tool_use Bash python - <<'EOF'"}
+{"timestamp": 1794640225.1180422, "line": "import json,subprocess"}
+{"timestamp": 1794640225.1180851, "line": "ts=json.load(open('timestamps.json'))['subtitles']"}
+{"timestamp": 1794640225.11812, "line": "st=[s['start_s'] for s in ts]; end=ts[-1]['end_s']+1.0"}
+{"timestamp": 1794640225.118155, "line": "sn=lambda t..."}
+{"timestamp": 1794640237.617951, "line": "[manimate] tool_result ok stream|codec_type=video|width=854|height=480|duration=164.666341"}
+{"timestamp": 1794640237.618403, "line": "stream|codec_type=audio|duration=163.691000"}
+{"timestamp": 1794640242.845016, "line": "[manimate] assistant Re-rendered with layout fixes; checking the new frames."}
+{"timestamp": 1794640243.485296, "line": "[manimate] progress coding Writing code..."}
+{"timestamp": 1794640243.485614, "line": "[manimate] tool_use Read file=/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/n1.png"}
+{"timestamp": 1794640243.5140722, "line": "[manimate] tool_result ok {\"type\":\"image\",\"file\":{\"base64\":\"iVBORw0KGgoAAAANSUhEUgAABqwAAAPACAIAAADPOM9wAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAQAElEQVR4nOxdB4AT1daezCTZTVnYxhbKUqT33kG6IIIIqIA..."}
+{"timestamp": 1794640243.9405398, "line": "[manimate] tool_use Read file=/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/n2.png"}
+{"timestamp": 1794640243.988919, "line": "[manimate] tool_result ok {\"type\":\"image\",\"file\":{\"base64\":\"iVBORw0KGgoAAAANSUhEUgAABqwAAAPACAIAAADPOM9wAAAACXBIWXMAAAAAAAAAAQCEeRdzAAAQAElEQVR4nOzdB4BU1b0/8HPr9O10WJAigiJWEARpgkYNRhJ..."}
+{"timestamp": 1794640255.080586, "line": "[manimate] progress rendering Rendering video..."}
+{"timestamp": 1794640255.082665, "line": "[manimate] tool_use Bash cd .. && sed -i '' \"s/aware of this.\\\", 28, FG,/aware of this.\\\", 22, FG,/\" script.py && grep -n 'aware of this' script.py && manim-cloud script.py Results -..."}
+{"timestamp": 1794640256.1308448, "line": "[manimate] artifact_update Artifacts updated"}
+{"timestamp": 1794640281.718135, "line": "[manimate] tool_result ok 640:        line = T(\"Hello, I'm sorry, but I'm not sure if you're aware of this.\", 22, FG,"}
+{"timestamp": 1794640281.719106, "line": "succeeded"}
+{"timestamp": 1794640281.7192588, "line": "stream|codec_type=video|width=854|height=480|duration=1..."}
+{"timestamp": 1794640287.452821, "line": "[manimate] progress coding Writing code..."}
+{"timestamp": 1794640287.455476, "line": "[manimate] tool_use Read file=/Users/ymiy/.manimate/sessions/profile-gpt2-css-e7e5b728/project/frames/end.png"}
+{"timestamp": 1794640287.539778, "line": "[manimate] tool_result ok {\"type\":\"image\",\"file\":{\"base64\":\"iVBORw0KGgoAAAANSUhEUgAAA1YAAAHgCAIAAAApMmt9AAAACXBIWXMAAAAAAAAAAQCEeRdzAAAQAElEQVR4nOy9B5QdxZk2XF1dHW6YrMmSRjlrFAAFQEhCZJC..."}
+{"timestamp": 1794640301.719021, "line": "[manimate] assistant I made a narrated video explaining Shubham Patil's post on running GPT-2 entirely in CSS. It's 2:45 long, 854\u00d7480 at 15 fps, with the `af_heart` voice, and t..."}
+{"timestamp": 1794640302.638172, "line": "[manimate] artifact_update Artifacts updated"}
+{"timestamp": 1794640302.638242, "line": "[manimate] complete run=43abd49a-3f8f-44e4-b4e7-83e4ab885061 video=/api/files?session_id=profile-gpt2-css-e7e5b728&path=%2FUsers%2Fymiy%2F.manimate%2Fsessions%2Fprofile-gpt2-css-e7e5b728%2Fproject%2Fvideo.mp4&_v=1794640280956"}
+{"timestamp": 1794640302.638592, "line": "{\"ok\":true,\"status\":\"completed\",\"session_id\":\"profile-gpt2-css-e7e5b728\",\"run_id\":\"43abd49a-3f8f-44e4-b4e7-83e4ab885061\",\"video_url\":\"/api/files?session_id=profile-gpt2-css-e7e5b728&path=%2FUsers%2Fymiy%2F.manimate%2Fsessions%2Fprofile-gpt2-css-e7e5b728%2Fproject%2Fvideo.mp4&_v=1794640280956\",\"review_url\":\"http://127.0.0.1:3022/?session=profile-gpt2-css-e7e5b728\",\"message\":\"Complete\"}"}
+{"timestamp": 1794640302.638687, "line": "Review in browser: http://127.0.0.1:3022/?session=profile-gpt2-css-e7e5b728"}

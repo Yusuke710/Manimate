@@ -1,0 +1,364 @@
+{
+  "status": "timed_out",
+  "job_id": "500715682fe74723b5772f0cc7891b58",
+  "command_seconds": 569.009,
+  "rows": [
+    {
+      "configuration": "fp32-t1",
+      "case": "short",
+      "repeat": 0,
+      "elapsed_seconds": 12.048646536999968,
+      "metrics": {
+        "cold_model": true,
+        "model_load_seconds": 3.1353491949998897,
+        "synthesis_seconds": 8.542585576999954,
+        "cpu_seconds": 8.506338492,
+        "server_seconds": 12.048558635000063,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 1.2631977883970753,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t1",
+      "case": "short",
+      "repeat": 1,
+      "elapsed_seconds": 7.51191818999996,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 7.459455214000172,
+        "cpu_seconds": 7.456675552,
+        "server_seconds": 7.511840549000226,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 1.1030345840891422,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t1",
+      "case": "short",
+      "repeat": 2,
+      "elapsed_seconds": 7.18780742700028,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 7.143578702000013,
+        "cpu_seconds": 7.141484461000001,
+        "server_seconds": 7.187731176999932,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 1.0563257150039451,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t1",
+      "case": "medium",
+      "repeat": 0,
+      "elapsed_seconds": 49.97476601900007,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 49.71945043100004,
+        "cpu_seconds": 49.702461148999994,
+        "server_seconds": 49.97466419900002,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 1.0632295798143827,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t1",
+      "case": "medium",
+      "repeat": 1,
+      "elapsed_seconds": 56.07040674200016,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 55.771730619999744,
+        "cpu_seconds": 55.74690397399999,
+        "server_seconds": 56.070287861,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 1.192655051465551,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t1",
+      "case": "medium",
+      "repeat": 2,
+      "elapsed_seconds": 51.605666808000024,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 51.347810822000156,
+        "cpu_seconds": 51.30917742899999,
+        "server_seconds": 51.605576566999844,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 1.0980513833399896,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t2",
+      "case": "short",
+      "repeat": 0,
+      "elapsed_seconds": 5.304114724999636,
+      "metrics": {
+        "cold_model": true,
+        "model_load_seconds": 0.8820568730002378,
+        "synthesis_seconds": 4.375842961999751,
+        "cpu_seconds": 7.903395563999993,
+        "server_seconds": 5.304045064999627,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.6470587976143165,
+        "threads": 2,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t2",
+      "case": "short",
+      "repeat": 1,
+      "elapsed_seconds": 4.318452466000053,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 4.269910799999707,
+        "cpu_seconds": 7.733098083000016,
+        "server_seconds": 4.318385305999982,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.6313945386434897,
+        "threads": 2,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t2",
+      "case": "short",
+      "repeat": 2,
+      "elapsed_seconds": 4.280546585000138,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 4.233430802999919,
+        "cpu_seconds": 7.662803038000021,
+        "server_seconds": 4.280484835000152,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.6260002173205717,
+        "threads": 2,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t2",
+      "case": "medium",
+      "repeat": 0,
+      "elapsed_seconds": 30.69130448299984,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 30.41250416899993,
+        "cpu_seconds": 54.49952234599999,
+        "server_seconds": 30.691220343000168,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 0.6503586372818758,
+        "threads": 2,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t2",
+      "case": "medium",
+      "repeat": 1,
+      "elapsed_seconds": 32.898720815999695,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 32.62306218900039,
+        "cpu_seconds": 59.83193282499997,
+        "server_seconds": 32.89861578599994,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 0.6976304927506357,
+        "threads": 2,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t2",
+      "case": "medium",
+      "repeat": 2,
+      "elapsed_seconds": 32.284569482999814,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 31.99275244599994,
+        "cpu_seconds": 58.672864878999974,
+        "server_seconds": 32.28448224199974,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 0.684151583442631,
+        "threads": 2,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t4",
+      "case": "short",
+      "repeat": 0,
+      "elapsed_seconds": 6.289274553999803,
+      "metrics": {
+        "cold_model": true,
+        "model_load_seconds": 0.7447172949996457,
+        "synthesis_seconds": 5.498432598999898,
+        "cpu_seconds": 9.969327428000042,
+        "server_seconds": 6.289202193999699,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.8130568709088966,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t4",
+      "case": "short",
+      "repeat": 1,
+      "elapsed_seconds": 5.425068003999968,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 5.374930984999992,
+        "cpu_seconds": 9.690013964999991,
+        "server_seconds": 5.425004344000172,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.794794605431781,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t4",
+      "case": "short",
+      "repeat": 2,
+      "elapsed_seconds": 5.244782334999854,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 5.181585943999835,
+        "cpu_seconds": 9.43282500700002,
+        "server_seconds": 5.244716485000026,
+        "audio_seconds": 6.762666666666667,
+        "real_time_factor": 0.7662045461356223,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t4",
+      "case": "medium",
+      "repeat": 0,
+      "elapsed_seconds": 35.78759381400005,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 35.53983119299983,
+        "cpu_seconds": 64.51736903300002,
+        "server_seconds": 35.78751383400004,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 0.7600043737097932,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t4",
+      "case": "medium",
+      "repeat": 1,
+      "elapsed_seconds": 37.71408741799996,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 37.46754706899992,
+        "cpu_seconds": 68.02997923699996,
+        "server_seconds": 37.71398732699981,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 0.801227768640224,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "fp32-t4",
+      "case": "medium",
+      "repeat": 2,
+      "elapsed_seconds": 35.7864982709998,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 35.54027719500027,
+        "cpu_seconds": 64.560871518,
+        "server_seconds": 35.78640471100016,
+        "audio_seconds": 46.76266666666667,
+        "real_time_factor": 0.7600139112753822,
+        "threads": 4,
+        "model_file": "kokoro-v1.0.onnx"
+      }
+    },
+    {
+      "configuration": "int8-t1",
+      "case": "short",
+      "repeat": 0,
+      "elapsed_seconds": 16.74659561699991,
+      "metrics": {
+        "cold_model": true,
+        "model_load_seconds": 0.7222426620000988,
+        "synthesis_seconds": 15.974293245999888,
+        "cpu_seconds": 15.965271408000035,
+        "server_seconds": 16.746524746999967,
+        "audio_seconds": 6.8053333333333335,
+        "real_time_factor": 2.3473197363832123,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.int8.onnx"
+      }
+    },
+    {
+      "configuration": "int8-t1",
+      "case": "short",
+      "repeat": 1,
+      "elapsed_seconds": 15.19814781499963,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 15.137968951999937,
+        "cpu_seconds": 15.132612516999984,
+        "server_seconds": 15.19807188499999,
+        "audio_seconds": 6.8053333333333335,
+        "real_time_factor": 2.2244272558777336,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.int8.onnx"
+      }
+    },
+    {
+      "configuration": "int8-t1",
+      "case": "short",
+      "repeat": 2,
+      "elapsed_seconds": 15.566968534000353,
+      "metrics": {
+        "cold_model": false,
+        "model_load_seconds": 0,
+        "synthesis_seconds": 15.519332330999987,
+        "cpu_seconds": 15.512877948999972,
+        "server_seconds": 15.566890843999772,
+        "audio_seconds": 6.8053333333333335,
+        "real_time_factor": 2.280466153653995,
+        "threads": 1,
+        "model_file": "kokoro-v1.0.int8.onnx"
+      }
+    }
+  ]
+}

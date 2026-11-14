@@ -1,0 +1,159 @@
+{
+  "total_duration_s": 163.69066666666666,
+  "subtitles": [
+    {
+      "index": 0,
+      "text": "What if you could run GPT-2 using nothing but CSS?",
+      "start_s": 0.0,
+      "end_s": 3.7333333333333334,
+      "duration_s": 3.7333333333333334
+    },
+    {
+      "index": 1,
+      "text": "No JavaScript, no WebAssembly. Just stylesheets and fonts, running a 124 million parameter transformer.",
+      "start_s": 3.7333333333333334,
+      "end_s": 11.52,
+      "duration_s": 7.786666666666667
+    },
+    {
+      "index": 2,
+      "text": "Here's how Shubham Patil pulled it off.",
+      "start_s": 11.52,
+      "end_s": 13.461333333333334,
+      "duration_s": 1.9413333333333334
+    },
+    {
+      "index": 3,
+      "text": "CSS can already do arithmetic with calc, plus exp, pow, and square root.",
+      "start_s": 13.461333333333334,
+      "end_s": 18.346666666666668,
+      "duration_s": 4.8853333333333335
+    },
+    {
+      "index": 4,
+      "text": "But unregistered variables are stored as expressions, which unroll into giant chains. Registering them with at-property forces the browser to store real numbers.",
+      "start_s": 18.346666666666668,
+      "end_s": 28.650666666666666,
+      "duration_s": 10.304
+    },
+    {
+      "index": 5,
+      "text": "Arithmetic is easy. The hard part is matrix multiplication, and the trick is variable fonts.",
+      "start_s": 28.650666666666666,
+      "end_s": 34.88,
+      "duration_s": 6.229333333333333
+    },
+    {
+      "index": 6,
+      "text": "In a variable font, each axis shifts a glyph's advance width by a stored delta.",
+      "start_s": 34.88,
+      "end_s": 39.552,
+      "duration_s": 4.672
+    },
+    {
+      "index": 7,
+      "text": "So a glyph's width is its default width, plus the sum of deltas times axis values. That's a dot product.",
+      "start_s": 39.552,
+      "end_s": 45.973333333333336,
+      "duration_s": 6.421333333333333
+    },
+    {
+      "index": 8,
+      "text": "Set the axes to the input vector, give each glyph one row of weights, and a line of glyphs becomes a matrix-vector multiply.",
+      "start_s": 45.973333333333336,
+      "end_s": 53.568,
+      "duration_s": 7.594666666666667
+    },
+    {
+      "index": 9,
+      "text": "Chromium caps fonts at 256 axes, so each 768-dimension input is split across three fonts, with weights stored as nine-bit integers.",
+      "start_s": 53.568,
+      "end_s": 64.064,
+      "duration_s": 10.496
+    },
+    {
+      "index": 10,
+      "text": "To read a width back as a number, the glyph drives a scroll-linked view timeline.",
+      "start_s": 64.064,
+      "end_s": 68.48,
+      "duration_s": 4.416
+    },
+    {
+      "index": 11,
+      "text": "In a container of width V, animation progress is V over V plus w. Solve for w, and the width falls right out.",
+      "start_s": 68.48,
+      "end_s": 76.52266666666667,
+      "duration_s": 8.042666666666667
+    },
+    {
+      "index": 12,
+      "text": "Tokenizing uses ligatures. GPT-2's byte-pair merges become font substitutions, and each token's glyph is its ID plus one units wide.",
+      "start_s": 76.52266666666667,
+      "end_s": 86.272,
+      "duration_s": 9.749333333333333
+    },
+    {
+      "index": 13,
+      "text": "Embeddings use font regions. Two axes select one of fifty thousand regions, whose deltas hold that token's 768-number vector.",
+      "start_s": 86.272,
+      "end_s": 95.552,
+      "duration_s": 9.28
+    },
+    {
+      "index": 14,
+      "text": "Attention needs q times k, two dynamic values. A region spanning two axes has strength q times k, which gives the product.",
+      "start_s": 95.552,
+      "end_s": 104.17066666666666,
+      "duration_s": 8.618666666666666
+    },
+    {
+      "index": 15,
+      "text": "Softmax uses max and exp. And the KV cache lives in CSS transitions with a one-day delay, holding past keys and values in place.",
+      "start_s": 104.17066666666666,
+      "end_s": 113.81333333333333,
+      "duration_s": 9.642666666666667
+    },
+    {
+      "index": 16,
+      "text": "The twelve blocks must run in order. Running them all in one pass let errors pile up to an RMS of ten.",
+      "start_s": 113.81333333333333,
+      "end_s": 120.448,
+      "duration_s": 6.634666666666667
+    },
+    {
+      "index": 17,
+      "text": "So one set of elements is reused. A pass variable selects each block's fonts through container style queries, and an SVG set element advances the pass.",
+      "start_s": 120.448,
+      "end_s": 130.34666666666666,
+      "duration_s": 9.898666666666667
+    },
+    {
+      "index": 18,
+      "text": "The final layer gives 50,257 logits. Each word gets a box clamped to one pixel if it's the max, and zero otherwise, so only the winner shows.",
+      "start_s": 130.34666666666666,
+      "end_s": 140.992,
+      "duration_s": 10.645333333333333
+    },
+    {
+      "index": 19,
+      "text": "For sampling, Gumbel noise stored in a font is added to each logit, scaled by temperature. The widest box wins.",
+      "start_s": 140.992,
+      "end_s": 148.52266666666668,
+      "duration_s": 7.530666666666667
+    },
+    {
+      "index": 20,
+      "text": "It's slow. About fifteen to fifty seconds per token, a quarter gigabyte of fonts, and up to six gigabytes of RAM.",
+      "start_s": 148.52266666666668,
+      "end_s": 156.032,
+      "duration_s": 7.509333333333333
+    },
+    {
+      "index": 21,
+      "text": "But it matches Python GPT-2 token for token. A full transformer, running inside the browser's rendering engine.",
+      "start_s": 156.032,
+      "end_s": 163.69066666666666,
+      "duration_s": 7.658666666666667
+    }
+  ]
+}

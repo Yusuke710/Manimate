@@ -53,3 +53,7 @@ CLAUDE.md
 AGENT.md
 
 __pycache__/
+
+# Reproducible speech eval retains numeric results; audio stays local.
+benchmarks/speech/results/**/*.mp3
+benchmarks/speech/results/**/*.sock

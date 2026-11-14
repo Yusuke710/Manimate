@@ -1,0 +1,47 @@
+{
+  "total_duration_s": 63.38133333333333,
+  "subtitles": [
+    {
+      "index": 0,
+      "text": "Bayes' theorem updates a belief when new evidence arrives. We start with a prior probability, then account for how likely the evidence is under each hypothesis.",
+      "start_s": 0.0,
+      "end_s": 9.813333333333333,
+      "duration_s": 9.813333333333333
+    },
+    {
+      "index": 1,
+      "text": "Suppose one percent of a population has a condition. A test detects ninety nine percent of true cases, but also returns a positive result for five percent of people without it.",
+      "start_s": 9.813333333333333,
+      "end_s": 21.013333333333332,
+      "duration_s": 11.2
+    },
+    {
+      "index": 2,
+      "text": "Among ten thousand people, approximately one hundred have the condition. Ninety nine of them test positive. Of the remaining nine thousand nine hundred, four hundred ninety five also test positive.",
+      "start_s": 21.013333333333332,
+      "end_s": 33.28,
+      "duration_s": 12.266666666666667
+    },
+    {
+      "index": 3,
+      "text": "That gives five hundred ninety four positive results in total. Only ninety nine are true cases, so the probability after a positive test is about one in six.",
+      "start_s": 33.28,
+      "end_s": 43.349333333333334,
+      "duration_s": 10.069333333333333
+    },
+    {
+      "index": 4,
+      "text": "The diagram makes the denominator visible. The positive group contains both true positives and false positives, and the large healthy population contributes many false positives.",
+      "start_s": 43.349333333333334,
+      "end_s": 54.95466666666667,
+      "duration_s": 11.605333333333334
+    },
+    {
+      "index": 5,
+      "text": "This example shows why the base rate matters. A test can be highly sensitive while a positive result still leaves substantial uncertainty.",
+      "start_s": 54.95466666666667,
+      "end_s": 63.38133333333333,
+      "duration_s": 8.426666666666666
+    }
+  ]
+}

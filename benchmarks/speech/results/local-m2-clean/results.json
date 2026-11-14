@@ -1,0 +1,284 @@
+{
+  "environment": {
+    "platform": "macOS-26.1-arm64-arm-64bit",
+    "machine": "arm64"
+  },
+  "backend": "local-pytorch",
+  "threads": 2,
+  "quantized": false,
+  "rows": [
+    {
+      "case": "short",
+      "repeat": 0,
+      "cold": true,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "synthesis_seconds": 13.491247958969325,
+        "audio_seconds": 7.3,
+        "real_time_factor": 1.8481161587629213
+      },
+      "end_to_end_seconds": 13.741031166864559,
+      "audio_validation": {
+        "decoded_seconds": 7.3,
+        "rms": 0.050863299518823624,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 1,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "synthesis_seconds": 2.7975881670136005,
+        "audio_seconds": 7.3,
+        "real_time_factor": 0.38323125575528777
+      },
+      "end_to_end_seconds": 3.0516595838125795,
+      "audio_validation": {
+        "decoded_seconds": 7.3,
+        "rms": 0.0509895384311676,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 2,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "synthesis_seconds": 3.0276129168923944,
+        "audio_seconds": 7.3,
+        "real_time_factor": 0.41474149546471156
+      },
+      "end_to_end_seconds": 3.2792714170645922,
+      "audio_validation": {
+        "decoded_seconds": 7.3,
+        "rms": 0.050963111221790314,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "short",
+      "repeat": 3,
+      "cold": false,
+      "characters": 113,
+      "input_sha256": "3a99f33eb2a9f6eeeddbd4249457177c45f5df1749285e2360b7f7b1688b55b8",
+      "metrics": {
+        "synthesis_seconds": 3.2149344999343157,
+        "audio_seconds": 7.3,
+        "real_time_factor": 0.44040198629237204
+      },
+      "end_to_end_seconds": 3.4920940829906613,
+      "audio_validation": {
+        "decoded_seconds": 7.3,
+        "rms": 0.05096703767776489,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "medium",
+      "repeat": 0,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "metrics": {
+        "synthesis_seconds": 34.8337180421222,
+        "audio_seconds": 50.150000000000006,
+        "real_time_factor": 0.6945905890752183
+      },
+      "end_to_end_seconds": 36.665762667078525,
+      "audio_validation": {
+        "decoded_seconds": 50.15,
+        "rms": 0.05066419020295143,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "medium",
+      "repeat": 1,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "metrics": {
+        "synthesis_seconds": 32.51205133390613,
+        "audio_seconds": 50.150000000000006,
+        "real_time_factor": 0.6482961382633325
+      },
+      "end_to_end_seconds": 33.856660292018205,
+      "audio_validation": {
+        "decoded_seconds": 50.15,
+        "rms": 0.05068792775273323,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "medium",
+      "repeat": 2,
+      "cold": false,
+      "characters": 768,
+      "input_sha256": "d152024494ec94af42339d8d4d946e7cb8f8f8ed114727f82da05249fdab2858",
+      "metrics": {
+        "synthesis_seconds": 26.152172916103154,
+        "audio_seconds": 50.150000000000006,
+        "real_time_factor": 0.5214790212582882
+      },
+      "end_to_end_seconds": 27.474102957872674,
+      "audio_validation": {
+        "decoded_seconds": 50.15,
+        "rms": 0.05067463219165802,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "technical",
+      "repeat": 0,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "metrics": {
+        "synthesis_seconds": 37.83184037497267,
+        "audio_seconds": 65.825,
+        "real_time_factor": 0.5747336175461096
+      },
+      "end_to_end_seconds": 39.00809383299202,
+      "audio_validation": {
+        "decoded_seconds": 65.825,
+        "rms": 0.05086726322770119,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "technical",
+      "repeat": 1,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "metrics": {
+        "synthesis_seconds": 36.04760762513615,
+        "audio_seconds": 65.825,
+        "real_time_factor": 0.5476279168269829
+      },
+      "end_to_end_seconds": 37.215228041866794,
+      "audio_validation": {
+        "decoded_seconds": 65.825,
+        "rms": 0.05083093047142029,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "technical",
+      "repeat": 2,
+      "cold": false,
+      "characters": 1006,
+      "input_sha256": "33d64aab4e48745e537e7770622fd36ed1690f9ee79eaddffdd14e3ab8c5e73d",
+      "metrics": {
+        "synthesis_seconds": 38.46557420794852,
+        "audio_seconds": 65.825,
+        "real_time_factor": 0.5843611729274367
+      },
+      "end_to_end_seconds": 39.785968666896224,
+      "audio_validation": {
+        "decoded_seconds": 65.825,
+        "rms": 0.05085134878754616,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "long",
+      "repeat": 0,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "metrics": {
+        "synthesis_seconds": 88.92910799989477,
+        "audio_seconds": 166.125,
+        "real_time_factor": 0.5353144198639264
+      },
+      "end_to_end_seconds": 92.1744813749101,
+      "audio_validation": {
+        "decoded_seconds": 166.125,
+        "rms": 0.050759006291627884,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "long",
+      "repeat": 1,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "metrics": {
+        "synthesis_seconds": 87.9243200419005,
+        "audio_seconds": 166.125,
+        "real_time_factor": 0.5292660348647134
+      },
+      "end_to_end_seconds": 92.3106545410119,
+      "audio_validation": {
+        "decoded_seconds": 166.125,
+        "rms": 0.05073278397321701,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    },
+    {
+      "case": "long",
+      "repeat": 2,
+      "cold": false,
+      "characters": 2542,
+      "input_sha256": "f2f759fc7f7d3e2a83554580093ddb4212df224bf6c2f0067d3d49d3e8a74137",
+      "metrics": {
+        "synthesis_seconds": 78.72835200000554,
+        "audio_seconds": 166.125,
+        "real_time_factor": 0.4739103205417941
+      },
+      "end_to_end_seconds": 82.00633491715416,
+      "audio_validation": {
+        "decoded_seconds": 166.125,
+        "rms": 0.05074360594153404,
+        "timings_contiguous": true,
+        "valid": true
+      }
+    }
+  ],
+  "summary": {
+    "short": {
+      "n": 3,
+      "median_seconds": 3.2792714170645922,
+      "max_seconds": 3.4920940829906613,
+      "median_rtf": 0.41474149546471156
+    },
+    "medium": {
+      "n": 3,
+      "median_seconds": 33.856660292018205,
+      "max_seconds": 36.665762667078525,
+      "median_rtf": 0.6482961382633325
+    },
+    "technical": {
+      "n": 3,
+      "median_seconds": 39.00809383299202,
+      "max_seconds": 39.785968666896224,
+      "median_rtf": 0.5747336175461096
+    },
+    "long": {
+      "n": 3,
+      "median_seconds": 92.1744813749101,
+      "max_seconds": 92.3106545410119,
+      "median_rtf": 0.5292660348647134
+    }
+  }
+}

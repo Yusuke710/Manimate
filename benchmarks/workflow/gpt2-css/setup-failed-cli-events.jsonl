@@ -1,0 +1,18 @@
+{"timestamp": 1794639674.350249, "line": "node:internal/modules/package_json_reader:256"}
+{"timestamp": 1794639674.350592, "line": "  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);"}
+{"timestamp": 1794639674.350653, "line": "        ^"}
+{"timestamp": 1794639674.350739, "line": ""}
+{"timestamp": 1794639674.35077, "line": "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@clack/prompts' imported from /private/tmp/manimate-speech-final-package/package/scripts/render-setup.mjs"}
+{"timestamp": 1794639674.350799, "line": "    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)"}
+{"timestamp": 1794639674.350819, "line": "    at packageResolve (node:internal/modules/esm/resolve:768:81)"}
+{"timestamp": 1794639674.350838, "line": "    at moduleResolve (node:internal/modules/esm/resolve:854:18)"}
+{"timestamp": 1794639674.3508558, "line": "    at defaultResolve (node:internal/modules/esm/resolve:984:11)"}
+{"timestamp": 1794639674.350873, "line": "    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)"}
+{"timestamp": 1794639674.350891, "line": "    at #cachedDefaultResolve (node:internal/modules/esm/loader:704:25)"}
+{"timestamp": 1794639674.3509078, "line": "    at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)"}
+{"timestamp": 1794639674.350925, "line": "    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)"}
+{"timestamp": 1794639674.350942, "line": "    at ModuleJob._link (node:internal/modules/esm/module_job:175:49) {"}
+{"timestamp": 1794639674.350959, "line": "  code: 'ERR_MODULE_NOT_FOUND'"}
+{"timestamp": 1794639674.350977, "line": "}"}
+{"timestamp": 1794639674.3509939, "line": ""}
+{"timestamp": 1794639674.3510132, "line": "Node.js v22.17.1"}

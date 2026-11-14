@@ -1,0 +1,19 @@
+{
+  "command": [
+    "node",
+    "/Users/ymiy/github/2026/Manimate/scripts/cli.mjs",
+    "https://shubhampatil.dev/blog/gpt2-css",
+    "--model",
+    "claude",
+    "--aspect",
+    "16:9",
+    "--voice",
+    "af_heart",
+    "--session",
+    "profile-gpt2-css-e7e5b728",
+    "--base-url",
+    "http://127.0.0.1:3022",
+    "--show-events"
+  ],
+  "started_at_epoch": 1794639688.606144
+}

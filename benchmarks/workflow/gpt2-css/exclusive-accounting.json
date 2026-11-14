@@ -1,0 +1,9 @@
+{
+  "Claude response / decisions": 369.6340012550354,
+  "Research tools": 39.1489999294281,
+  "Other tool / app overhead": 15.133881092071533,
+  "ffprobe validation": 2.3454196453094482,
+  "Remote render CLI": 142.7597954273224,
+  "Downloads": 6.655505418777466,
+  "FFmpeg assembly / frame extraction": 37.234397172927856
+}
