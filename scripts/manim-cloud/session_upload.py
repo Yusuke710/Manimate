@@ -23,7 +23,11 @@ def archive_session(root, output):
     with tarfile.open(output, 'w:gz') as archive:
         for current, dirs, files in os.walk(root, followlinks=False):
             current = Path(current)
-            dirs[:] = sorted(d for d in dirs if not d.startswith('.') and d not in EXCLUDED and not (current / d).is_symlink())
+            # Root transcripts are diagnostic CLI logs, often containing repeated
+            # embedded media. session.json already preserves the conversation.
+            dirs[:] = sorted(d for d in dirs if not d.startswith('.') and d not in EXCLUDED
+                             and not (current == root and d == 'transcripts')
+                             and not (current / d).is_symlink())
             for name in sorted(files):
                 source = current / name
                 if name.startswith('.') or source.is_symlink() or not source.is_file():
