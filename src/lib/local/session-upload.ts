@@ -3,7 +3,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { getLocalSessionPaths, selectedRenderMode } from "./config";
-import { getLocalSession, listLocalSessions } from "./session-store";
+import { getLocalActiveRun, getLocalSession, listLocalSessions } from "./session-store";
 
 import {shareFingerprint,rememberSharedSession} from "./session-share";
 
@@ -18,7 +18,7 @@ export function uploadCloudSession(sessionId: string, runMode: "local" | "cloud"
   if (previous) return previous;
   const upload = queue.then(async () => {
     const session = getLocalSession(sessionId);
-    if (selectedRenderMode() !== "cloud" || !session || ["running", "queued"].includes(session.status)) return;
+    if (selectedRenderMode() !== "cloud" || !session || getLocalActiveRun(sessionId) || ["running", "queued"].includes(session.status)) return;
     const root = getLocalSessionPaths(sessionId).sessionRoot;
     const record = (data: object) => fs.writeFileSync(path.join(root, "cloud-backup.json"), JSON.stringify(data));
     const sourceUpdatedAt = session.updated_at;
@@ -45,7 +45,7 @@ export function backupCloudLibrary(): void {
   if (selectedRenderMode() !== "cloud" || Date.now() - lastScan < 60_000) return;
   lastScan = Date.now();
   for (const session of listLocalSessions()) {
-    if (!session.video_path || ["running", "queued"].includes(session.status)) continue;
+    if (!session.video_path || getLocalActiveRun(session.id) || ["running", "queued"].includes(session.status)) continue;
     try {
       const backup = JSON.parse(fs.readFileSync(path.join(getLocalSessionPaths(session.id).sessionRoot, "cloud-backup.json"), "utf8"));
       if (backup.status === "uploaded" && backup.source_updated_at === session.updated_at) continue;

@@ -6,7 +6,10 @@
 
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { runLocalCommand } from "@/lib/local/command";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execute = promisify(execFile);
 
 export interface LocalChapter {
   name: string;
@@ -87,20 +90,11 @@ export async function getLocalSceneVideoPaths(projectDir: string): Promise<strin
 }
 
 export async function getMediaDurationSeconds(filePath: string): Promise<number> {
-  const result = await runLocalCommand({
-    command: "ffprobe",
-    args: ["-v", "quiet", "-print_format", "json", "-show_format", filePath],
-    timeoutMs: 20_000,
-  });
-
-  if (result.exitCode !== 0 || !result.stdout.trim()) {
-    return 0;
-  }
-
   try {
-    const parsed = JSON.parse(result.stdout) as {
-      format?: { duration?: string };
-    };
+    const { stdout } = await execute("ffprobe", [
+      "-v", "quiet", "-print_format", "json", "-show_format", filePath,
+    ], { timeout: 20_000, killSignal: "SIGKILL" });
+    const parsed = JSON.parse(stdout) as { format?: { duration?: string } };
     const duration = parsed.format?.duration
       ? Number.parseFloat(parsed.format.duration)
       : 0;

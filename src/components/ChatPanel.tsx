@@ -16,12 +16,6 @@ import { useBrowserPreviewBadge, usePreferredAspectRatio } from "@/lib/hooks";
 import { DEFAULT_ASPECT_RATIO, DEFAULT_MODEL, isAspectRatio, isRegisteredModelId, type AspectRatio } from "@/lib/models";
 import { DEFAULT_VOICE_ID, isValidVoiceId } from "@/lib/voices";
 import { readUploadErrorResponse } from "@/lib/chat-attachments";
-import {
-  shouldAbortLingeringPreviewStream,
-  shouldAcceptPolledPreviewUpdate,
-  shouldShowBrowserPreviewBadge,
-} from "@/lib/preview-load";
-
 // Chat state managed by reducer
 interface ChatState {
   messages: Message[];
@@ -40,7 +34,6 @@ interface ChatState {
 type ChatAction =
   | { type: "RECONCILE_TURN"; from: string; to: string }
   | { type: "ADD_USER_MESSAGE"; message: Message }
-  | { type: "ADD_ASSISTANT_MESSAGE"; message: Message }
   | { type: "UPDATE_ASSISTANT_MESSAGE"; id: string; content: string; isError?: boolean }
   | { type: "SET_LOADING"; isLoading: boolean }
   | { type: "SET_CANCELLING"; isCancelling: boolean }
@@ -48,7 +41,6 @@ type ChatAction =
   | { type: "SET_SESSION"; agentSessionId?: string | null }
   | { type: "ADD_ACTIVITY"; event: ActivityEvent }
   | { type: "SET_VIDEO_URL"; url: string | null; bumpNonce?: boolean }
-  | { type: "RESTORE_SESSION"; agentSessionId: string }
   | { type: "LOAD_MESSAGES"; messages: Message[] }
   | { type: "LOAD_ACTIVITY_EVENTS"; events: ActivityEvent[] }
   | { type: "SET_LOADING_MESSAGES"; isLoadingMessages: boolean }
@@ -68,9 +60,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           ? { ...event, turnId: action.to } : event),
       };
     case "ADD_USER_MESSAGE":
-      return { ...state, messages: [...state.messages, action.message] };
-
-    case "ADD_ASSISTANT_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
 
     case "UPDATE_ASSISTANT_MESSAGE": {
@@ -125,12 +114,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         videoUpdateNonce: action.bumpNonce ? state.videoUpdateNonce + 1 : state.videoUpdateNonce,
       };
     }
-
-    case "RESTORE_SESSION":
-      return {
-        ...state,
-        agentSessionId: action.agentSessionId,
-      };
 
     case "LOAD_MESSAGES":
       return { ...state, messages: action.messages };
@@ -189,13 +172,6 @@ interface SessionMessagesResponse {
   activeRun?: ActiveRun | null;
 }
 
-export function shouldApplyArtifactSnapshot(
-  nextContent: string | null,
-  currentContent: string | null,
-): boolean {
-  return nextContent !== currentContent;
-}
-
 export interface PendingWelcomePayload {
   prompt: string;
   images?: File[];
@@ -215,7 +191,7 @@ interface ChatPanelProps {
   onSessionAspectRatio?: (ratio: AspectRatio) => void;
   hasPendingWelcomePayload?: (sessionId: string) => boolean;
   consumeWelcomePayload?: (sessionId: string) => PendingWelcomePayload | null;
-  /** Resolves true when the session row exists in DB (for optimistic navigation) */
+  /** Resolves true when the session.json exists (for optimistic navigation) */
   sessionReady?: Promise<boolean> | null;
   isMobile?: boolean;
 }
@@ -248,13 +224,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
   useEffect(() => { scriptContentRef.current = state.scriptContent; }, [state.scriptContent]);
   useEffect(() => { videoUrlRef.current = state.videoUrl; }, [state.videoUrl]);
   useEffect(() => { videoUpdateNonceRef.current = state.videoUpdateNonce; }, [state.videoUpdateNonce]);
-  useBrowserPreviewBadge(
-    shouldShowBrowserPreviewBadge({
-      videoUrl: state.videoUrl,
-      isLoading: state.isLoading,
-      badgeAlreadyVisible: showPreviewReadyBadge,
-    }),
-  );
+  useBrowserPreviewBadge(Boolean(state.videoUrl) && (!state.isLoading || showPreviewReadyBadge));
 
   const showPendingPreviewReadyBadge = useCallback(() => {
     if (expectedPreviewNonceRef.current === null) return;
@@ -319,7 +289,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
       }
       if (shouldSyncComposerSettings) composerSyncedFromSessionRef.current = true;
 
-      if (shouldApplyArtifactSnapshot(data.session.script_content, scriptContentRef.current)) {
+      if (data.session.script_content !== scriptContentRef.current) {
         dispatch({
           type: "SET_SCRIPT_CONTENT",
           content: data.session.script_content,
@@ -356,7 +326,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
         if (!data || cancelled) return;
         applyFetchedSessionData(data);
 
-        dispatch({ type: "RESTORE_SESSION", agentSessionId: data.session.agent_session_id || "" });
+        dispatch({ type: "SET_SESSION", agentSessionId: data.session.agent_session_id || "" });
 
         if (data.session.last_video_url) {
           videoUrlRef.current = data.session.last_video_url;
@@ -417,12 +387,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
           videoUrlBaseRef.current = newBase;
           // Polling remains the fallback path, but completed runs should still reconcile
           // even if a backgrounded tab has not drained the streaming response yet.
-          if (
-            shouldAcceptPolledPreviewUpdate({
-              hasPendingStream,
-              runStillActive,
-            })
-          ) {
+          if (!hasPendingStream || !runStillActive) {
             dispatch({
               type: "SET_VIDEO_URL",
               url: data.session.last_video_url,
@@ -432,13 +397,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
               showPendingPreviewReadyBadge();
             }
           }
-          if (
-            shouldAbortLingeringPreviewStream({
-              hasPendingStream,
-              runStillActive,
-              previewChanged,
-            })
-          ) {
+          if (hasPendingStream && !runStillActive && previewChanged) {
             abortControllerRef.current?.abort();
           }
         }
@@ -671,7 +630,7 @@ export function ChatPanel({ sessionId, onSessionAspectRatio, hasPendingWelcomePa
             } else if (event.type === "artifact_update") {
               if (
                 event.script_content !== undefined &&
-                shouldApplyArtifactSnapshot(event.script_content, scriptContentRef.current)
+                event.script_content !== scriptContentRef.current
               ) {
                 dispatch({ type: "SET_SCRIPT_CONTENT", content: event.script_content });
               }

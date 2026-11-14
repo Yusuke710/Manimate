@@ -46,24 +46,15 @@ export function selectedRenderMode(): RenderMode | null {
   return mode;
 }
 
-const TTS_GENERATE_PATH = path.join(
-  PACKAGE_ROOT,
-  "scripts",
-  "tts-generate.py"
-);
-
-const SUBTITLE_LINTER_PATH = path.join(
-  PACKAGE_ROOT,
-  "scripts",
-  "lint-subtitles.py"
-);
-
-function syncRuntimePrompt(projectDir: string, mode: RenderMode): void {
-  const content = fs.readFileSync(path.join(PROMPTS_PATH, mode, "AGENTS.md"), "utf8");
-  const destination = path.join(projectDir, "AGENTS.md");
+function syncTextFile(source: string, destination: string): void {
+  const content = fs.readFileSync(source, "utf8");
   if (!fs.existsSync(destination) || fs.readFileSync(destination, "utf8") !== content) {
     fs.writeFileSync(destination, content);
   }
+}
+
+function syncRuntimePrompt(projectDir: string, mode: RenderMode): void {
+  syncTextFile(path.join(PROMPTS_PATH, mode, "AGENTS.md"), path.join(projectDir, "AGENTS.md"));
   fs.rmSync(path.join(projectDir, "CLAUDE.md"), { force: true });
 }
 
@@ -85,38 +76,18 @@ export function ensureLocalSessionLayout(
     syncRuntimePrompt(paths.projectDir, options.renderMode ?? selectedRenderMode() ?? "cloud");
   }
 
-  // Copy TTS generator into project dir so the selected agent can run:
-  // `python tts-generate.py --plan narration.txt`
-  const destTtsGenerate = path.join(paths.projectDir, "tts-generate.py");
-  try {
-    const content = fs.readFileSync(TTS_GENERATE_PATH, "utf8");
-    if (!fs.existsSync(destTtsGenerate) || fs.readFileSync(destTtsGenerate, "utf8") !== content) {
-      fs.writeFileSync(destTtsGenerate, content);
+  // Standalone helpers stay available to the agent in its project directory.
+  for (const [source, destination, optional] of [
+    ["tts-generate.py", "tts-generate.py", true],
+    ["lint-subtitles.py", "lint-subtitles.py", true],
+    ["speech_client.py", "speech_client.py", false],
+    ["manim-cloud/cloud_auth.py", "manimate_cloud_auth.py", false],
+  ] as const) {
+    try {
+      syncTextFile(path.join(PACKAGE_ROOT, "scripts", source), path.join(paths.projectDir, destination));
+    } catch (error) {
+      if (!optional) throw error;
     }
-  } catch {
-    // Non-fatal: TTS step will fail gracefully if script is missing.
-  }
-
-  // Provider-neutral cloud client and the same OAuth helper used by manim-cloud.
-  for (const [source, destination] of [
-    ["speech_client.py", "speech_client.py"],
-    ["manim-cloud/cloud_auth.py", "manimate_cloud_auth.py"],
-  ]) {
-    const content = fs.readFileSync(path.join(PACKAGE_ROOT, "scripts", source), "utf8");
-    const target = path.join(paths.projectDir, destination);
-    if (!fs.existsSync(target) || fs.readFileSync(target, "utf8") !== content) fs.writeFileSync(target, content);
-  }
-
-  // Copy subtitle linter into project dir so the selected agent can run:
-  // `python lint-subtitles.py script.py`
-  const destSubtitleLinter = path.join(paths.projectDir, "lint-subtitles.py");
-  try {
-    const content = fs.readFileSync(SUBTITLE_LINTER_PATH, "utf8");
-    if (!fs.existsSync(destSubtitleLinter) || fs.readFileSync(destSubtitleLinter, "utf8") !== content) {
-      fs.writeFileSync(destSubtitleLinter, content);
-    }
-  } catch {
-    // Non-fatal: rendering can proceed without this pre-check.
   }
 
   return paths;
@@ -126,7 +97,7 @@ export function ensureLocalSessionLayout(
  * Resolve a requested file path against a session workspace.
  *
  * Allowed forms:
- * - absolute path under session project directory
+ * - absolute path under session directory (including thumbnails/artifacts)
  * - relative path (resolved under project directory)
  */
 export function resolveSessionFilePath(
@@ -136,7 +107,7 @@ export function resolveSessionFilePath(
   const raw = requestedPath.trim();
   if (!raw || raw.includes("\0")) return null;
 
-  const { sessionRoot, projectDir } = ensureLocalSessionLayout(sessionId);
+  const { sessionRoot, projectDir } = getLocalSessionPaths(sessionId);
   const sessionRootResolved = path.resolve(sessionRoot);
   const projectRoot = path.resolve(projectDir);
 
@@ -150,7 +121,18 @@ export function resolveSessionFilePath(
     resolved === sessionRootResolved ||
     resolved.startsWith(`${sessionRootResolved}${path.sep}`)
   ) {
-    return resolved;
+    // Check real paths too: a workspace symlink must not expose outside files.
+    // Read requests must not recreate sessions or rewrite runtime helpers.
+    try {
+      const realRoot = fs.realpathSync(/* turbopackIgnore: true */ sessionRootResolved);
+      const realFile = fs.realpathSync(/* turbopackIgnore: true */ resolved);
+      if (realFile === realRoot || realFile.startsWith(`${realRoot}${path.sep}`)) {
+        return realFile;
+      }
+    } catch {
+      // Keep missing paths so callers can return their usual 404 response.
+      return resolved;
+    }
   }
   return null;
 }

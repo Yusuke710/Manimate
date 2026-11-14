@@ -2,14 +2,13 @@
 """
 TTS generator for Manim voiceover pipeline.
 
-Reads SubtitleSpec from narration.txt, generates per-subtitle MP3s via Kokoro or ElevenLabs,
+Reads SubtitleSpec from narration.txt, generates per-subtitle MP3s via Kokoro,
 measures exact durations with ffprobe, concatenates to voiceover.mp3,
 and writes timestamps.json.
 
 Usage:
     python tts-generate.py --plan narration.txt
     python tts-generate.py --plan narration.txt --provider kokoro --voice af_heart
-    python tts-generate.py --plan narration.txt --provider elevenlabs --voice-id <id>
 """
 
 import argparse
@@ -24,14 +23,11 @@ import subprocess
 import sys
 import tempfile
 import time
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 DEFAULT_KOKORO_VOICE_ID = "af_heart"  # matches src/lib/voices.ts DEFAULT_VOICE_ID
-DEFAULT_ELEVENLABS_VOICE_ID = "Lci8YeL6PAFHJjNKvwXq"
-ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")
 KOKORO_MODEL_ID = "hexgrad/Kokoro-82M"
-ELEVENLABS_MAX_WORKERS = 5
 KOKORO_DEFAULT_WORKERS = 1
 KOKORO_WORKER_IDLE_TTL_S = 600
 KOKORO_WORKER_CONNECT_TIMEOUT_S = 1
@@ -42,11 +38,9 @@ KOKORO_LANG_CODES = {"a", "b", "e", "f", "h", "i", "j", "p", "z"}
 _KOKORO_PIPELINES = {}
 
 
-def cache_path(text: str, provider: str, voice_id: str, cache_dir: Path = CACHE_DIR) -> Path:
-    model_id = KOKORO_MODEL_ID if provider == "kokoro" else ELEVENLABS_MODEL_ID
-    obj: dict = {"provider": provider, "model_id": model_id, "text": text, "voice_id": voice_id}
-    if provider == "kokoro":
-        obj["speed"] = os.environ.get("KOKORO_SPEED", "1")
+def cache_path(text: str, voice_id: str, cache_dir: Path = CACHE_DIR) -> Path:
+    obj = {"provider": "kokoro", "model_id": KOKORO_MODEL_ID, "text": text,
+           "voice_id": voice_id, "speed": os.environ.get("KOKORO_SPEED", "1")}
     canonical = json.dumps(obj, sort_keys=True, separators=(",", ":"))
     key = hashlib.sha256(canonical.encode()).hexdigest()
     return cache_dir / f"{key}.mp3"
@@ -76,31 +70,6 @@ def parse_subtitles(plan_path: str) -> list[str]:
     if not items:
         sys.exit("Error: Empty subtitles list in narration input")
     return items
-
-
-def normalize_provider_and_voice(provider: str, voice_id: str | None) -> tuple[str, str]:
-    voice = (voice_id or "").strip()
-    requested_provider = provider.strip().lower()
-
-    if ":" in voice:
-        prefix, value = voice.split(":", 1)
-        if prefix in {"kokoro", "elevenlabs"}:
-            voice = value
-            if requested_provider == "auto":
-                requested_provider = prefix
-
-    if not voice:
-        voice = DEFAULT_KOKORO_VOICE_ID if requested_provider != "elevenlabs" else DEFAULT_ELEVENLABS_VOICE_ID
-
-    if requested_provider == "auto":
-        # Existing Manimate sessions stored ElevenLabs IDs as 8-64 char alphanumeric strings.
-        # Kokoro voices use names like af_heart, am_adam, bf_emma, etc.
-        requested_provider = "elevenlabs" if re.fullmatch(r"[A-Za-z0-9]{8,64}", voice) else "kokoro"
-
-    if requested_provider not in {"kokoro", "elevenlabs"}:
-        sys.exit(f"Error: unsupported TTS provider {requested_provider!r}")
-
-    return requested_provider, voice
 
 
 def kokoro_lang_code_for_voice(voice_id: str) -> str:
@@ -429,58 +398,21 @@ def run_kokoro_worker(socket_path: Path, idle_ttl_s: int) -> None:
         pass
 
 
-def synthesize_elevenlabs_mp3(text: str, voice_id: str, api_key: str, out_path: Path) -> None:
-    try:
-        import requests
-    except ImportError as e:
-        raise RuntimeError("ElevenLabs provider requires requests. Install it with: pip install requests") from e
-
-    body: dict = {"text": text, "model_id": ELEVENLABS_MODEL_ID}
-    resp = None
-    for attempt in range(3):
-        try:
-            resp = requests.post(
-                f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-                headers={"xi-api-key": api_key, "Content-Type": "application/json"},
-                json=body,
-                timeout=60,
-            )
-            resp.raise_for_status()
-            break
-        except requests.HTTPError as e:
-            if attempt == 2 or e.response.status_code < 500 and e.response.status_code != 429:
-                raise
-            time.sleep(2 ** attempt)
-        except (requests.ConnectionError, requests.Timeout):
-            if attempt == 2:
-                raise
-            time.sleep(2 ** attempt)
-    if resp is None:
-        raise RuntimeError("ElevenLabs request failed")
-    out_path.parent.mkdir(exist_ok=True)
-    out_path.write_bytes(resp.content)
-
-
 def tts_one(
     index: int,
     text: str,
-    provider: str,
     voice_id: str,
-    api_key: str,
     cache_dir_str: str,
     force: bool = False,
 ) -> tuple[int, str, bool]:
     cache_dir = Path(cache_dir_str)
-    cached = cache_path(text, provider, voice_id, cache_dir)
+    cached = cache_path(text, voice_id, cache_dir)
     if force and cached.exists():
         cached.unlink()
     if cached.exists():
         return index, str(cached), True  # cache hit
 
-    if provider == "kokoro":
-        synthesize_kokoro_mp3(text, voice_id, cached)
-    else:
-        synthesize_elevenlabs_mp3(text, voice_id, api_key, cached)
+    synthesize_kokoro_mp3(text, voice_id, cached)
     return index, str(cached), False  # cache miss
 
 
@@ -523,9 +455,7 @@ def env_int(name: str, default: int) -> int:
 
 def generate_parts(
     subtitles: list[str],
-    provider: str,
     voice_id: str,
-    api_key: str,
     workers: int,
     cache_dir: Path = CACHE_DIR,
     force: bool = False,
@@ -534,10 +464,10 @@ def generate_parts(
     hits = misses = 0
     started = time.perf_counter()
 
-    if provider == "kokoro" and workers == 1:
+    if workers == 1:
         missing: list[tuple[int, str, Path]] = []
         for i, text in enumerate(subtitles):
-            cached = cache_path(text, provider, voice_id, cache_dir)
+            cached = cache_path(text, voice_id, cache_dir)
             if force and cached.exists():
                 cached.unlink()
             if cached.exists():
@@ -557,10 +487,9 @@ def generate_parts(
 
         return parts, hits, misses, time.perf_counter() - started
 
-    executor_cls = ThreadPoolExecutor if provider == "elevenlabs" else ProcessPoolExecutor
-    with executor_cls(max_workers=workers) as pool:
+    with ProcessPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(tts_one, i, t, provider, voice_id, api_key, str(cache_dir), force): i
+            pool.submit(tts_one, i, t, voice_id, str(cache_dir), force): i
             for i, t in enumerate(subtitles)
         }
         for future in as_completed(futures):
@@ -589,9 +518,7 @@ def run_kokoro_benchmark(subtitles: list[str], voice_id: str, parallel_workers: 
             print(f"\nKokoro benchmark: workers={workers}")
             parts, _, _, elapsed = generate_parts(
                 subtitles,
-                provider="kokoro",
                 voice_id=voice_id,
-                api_key="",
                 workers=workers,
                 cache_dir=tmp_path / f"workers-{workers}",
                 force=True,
@@ -613,11 +540,11 @@ def run_kokoro_benchmark(subtitles: list[str], voice_id: str, parallel_workers: 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate TTS voiceover from narration.txt SubtitleSpec")
     parser.add_argument("--plan", default="narration.txt")
-    parser.add_argument("--provider", choices=["auto", "kokoro", "elevenlabs"], default=os.environ.get("TTS_PROVIDER", "auto"))
+    parser.add_argument("--provider", choices=["auto", "kokoro"], default=os.environ.get("TTS_PROVIDER", "auto"))
     parser.add_argument("--transport", choices=["local", "cloud"], default=os.environ.get("TTS_TRANSPORT", "local"), help="Kokoro execution location; cloud needs no local model")
     parser.add_argument("--voice", default=None, help="TTS voice name/id (overrides provider env)")
     parser.add_argument("--voice-id", default=None, help="Legacy alias for --voice")
-    parser.add_argument("--workers", type=int, default=None, help="Generation workers. Kokoro defaults to 1; ElevenLabs defaults to 5.")
+    parser.add_argument("--workers", type=int, default=None, help="Generation workers (default: 1).")
     parser.add_argument("--out-audio", default="voiceover.mp3")
     parser.add_argument("--out-timestamps", default="timestamps.json")
     parser.add_argument("--prewarm-kokoro", action="store_true", help="Start and warm the local Kokoro worker, then exit")
@@ -639,36 +566,33 @@ def main() -> None:
         run_kokoro_worker(Path(args.socket or kokoro_worker_socket_path()), args.idle_ttl)
         return
 
-    voice_arg = args.voice or args.voice_id or os.environ.get("TTS_VOICE_ID") or os.environ.get("ELEVENLABS_VOICE_ID")
-    provider, voice_id = normalize_provider_and_voice(args.provider, voice_arg)
+    voice_arg = args.voice or args.voice_id or os.environ.get("TTS_VOICE_ID")
+    voice_id = (voice_arg or DEFAULT_KOKORO_VOICE_ID).removeprefix("kokoro:")
+    if not re.fullmatch(r"[a-z]{1,2}_[a-z0-9_]{2,64}", voice_id):
+        sys.exit("Error: choose a Kokoro voice such as af_heart")
 
     if args.prewarm_kokoro:
-        if provider != "kokoro" or args.transport == "cloud":
-            print(f"Skipping local Kokoro prewarm for provider: {provider}, transport: {args.transport}")
+        if args.transport == "cloud":
+            print("Skipping local Kokoro prewarm for cloud transport")
             return
         if prewarm_kokoro_worker(voice_id):
             print(f"Kokoro worker warmed. Voice: {voice_id}")
             return
         sys.exit("Error: failed to warm Kokoro worker")
 
-    if provider == "kokoro" and args.transport == "cloud":
+    if args.transport == "cloud":
         if args.benchmark_kokoro_parallel:
             sys.exit("Use benchmarks/speech/bench.py for cloud evaluation")
         from speech_client import generate_narration
         generate_narration(parse_subtitles(args.plan), voice_id, args.out_audio, args.out_timestamps, args.bust)
         return
 
-    api_key = os.environ.get("ELEVENLABS_API_KEY", "") if provider == "elevenlabs" else ""
-    if provider == "elevenlabs" and not api_key:
-        sys.exit("Error: ELEVENLABS_API_KEY must be set")
-    default_workers = ELEVENLABS_MAX_WORKERS if provider == "elevenlabs" else env_int("KOKORO_MAX_WORKERS", KOKORO_DEFAULT_WORKERS)
+    default_workers = env_int("KOKORO_MAX_WORKERS", KOKORO_DEFAULT_WORKERS)
     workers = max(1, args.workers or default_workers)
 
     subtitles = parse_subtitles(args.plan)
 
     if args.benchmark_kokoro_parallel:
-        if provider != "kokoro":
-            sys.exit("Error: --benchmark-kokoro-parallel requires --provider kokoro or a Kokoro voice")
         run_kokoro_benchmark(subtitles, voice_id, max(2, workers))
         return
 
@@ -682,16 +606,16 @@ def main() -> None:
             if not matches:
                 sys.exit(f"Error: no subtitle matching {args.bust!r}")
             target = matches[0]
-        cp = cache_path(target, provider, voice_id)
+        cp = cache_path(target, voice_id)
         if cp.exists():
             cp.unlink()
             print(f"Busted cache for: {target!r}")
         else:
             print(f"No cache entry for: {target!r}")
         return
-    print(f"Found {len(subtitles)} subtitle(s). Provider: {provider}. Voice: {voice_id}. Workers: {workers}. Generating TTS...")
+    print(f"Found {len(subtitles)} subtitle(s). Voice: {voice_id}. Workers: {workers}. Generating TTS...")
 
-    parts, hits, misses, generation_elapsed = generate_parts(subtitles, provider, voice_id, api_key, workers)
+    parts, hits, misses, generation_elapsed = generate_parts(subtitles, voice_id, workers)
     print(f"  {hits} cached, {misses} generated in {generation_elapsed:.1f}s")
 
     print("Measuring durations...")

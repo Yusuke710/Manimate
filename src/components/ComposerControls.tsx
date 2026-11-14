@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSavedPreference } from "@/lib/hooks";
 import {
   ASPECT_RATIO_OPTIONS,
   AVAILABLE_MODELS,
@@ -13,39 +14,14 @@ import {
   AVAILABLE_VOICES,
   DEFAULT_VOICE_ID,
   NONE_VOICE_ID,
-  getVoicePageUrl,
   isValidVoiceId,
 } from "@/lib/voices";
 
 const MODEL_PREF_KEY = "manimate-preferred-model";
 const VOICE_PREF_KEY = "manimate-preferred-voice";
-const VOICE_NAMES_KEY = "manimate-voice-names";
-const ELEVENLABS_SETTINGS_ENDPOINT = "/api/settings/elevenlabs";
 
 export function usePreferredModel() {
-  const [model, setModel] = useState(DEFAULT_MODEL);
-
-  useEffect(() => {
-    let timer: number | null = null;
-    try {
-      const saved = localStorage.getItem(MODEL_PREF_KEY);
-      if (saved && isRegisteredModelId(saved)) {
-        timer = window.setTimeout(() => setModel(saved), 0);
-      } else if (saved) {
-        localStorage.setItem(MODEL_PREF_KEY, DEFAULT_MODEL);
-      }
-    } catch {}
-    return () => {
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, []);
-
-  const set = useCallback((m: string) => {
-    const nextModel = isRegisteredModelId(m) ? m : DEFAULT_MODEL;
-    setModel(nextModel);
-    try { localStorage.setItem(MODEL_PREF_KEY, nextModel); } catch {}
-  }, []);
-  return [model, set] as const;
+  return useSavedPreference<string>(MODEL_PREF_KEY, DEFAULT_MODEL, isRegisteredModelId);
 }
 
 /**
@@ -251,100 +227,12 @@ export function AspectRatioSelector({ ratio, onChange, disabled }: { ratio: Aspe
 }
 
 export function usePreferredVoice() {
-  const [voice, setVoice] = useState(DEFAULT_VOICE_ID);
-
-  useEffect(() => {
-    let timer: number | null = null;
-    try {
-      const saved = localStorage.getItem(VOICE_PREF_KEY);
-      if (saved && isValidVoiceId(saved)) {
-        timer = window.setTimeout(() => setVoice(saved), 0);
-      } else if (saved) {
-        localStorage.setItem(VOICE_PREF_KEY, DEFAULT_VOICE_ID);
-      }
-    } catch {}
-    return () => {
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, []);
-
-  const set = useCallback((v: string) => {
-    const nextVoice = isValidVoiceId(v) ? v : DEFAULT_VOICE_ID;
-    setVoice(nextVoice);
-    try { localStorage.setItem(VOICE_PREF_KEY, nextVoice); } catch {}
-  }, []);
-  return [voice, set] as const;
-}
-
-// Voice name cache helpers (localStorage)
-type VoiceNameCache = Record<string, { name: string; ts: number }>;
-const VOICE_NAME_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-function getCachedVoiceName(voiceId: string): string | null {
-  try {
-    const raw = localStorage.getItem(VOICE_NAMES_KEY);
-    if (!raw) return null;
-    const cache: VoiceNameCache = JSON.parse(raw);
-    const entry = cache[voiceId];
-    if (!entry) return null;
-    if (Date.now() - entry.ts > VOICE_NAME_TTL) return null;
-    return entry.name;
-  } catch { return null; }
-}
-
-function setCachedVoiceName(voiceId: string, name: string) {
-  try {
-    const raw = localStorage.getItem(VOICE_NAMES_KEY);
-    const cache: VoiceNameCache = raw ? JSON.parse(raw) : {};
-    cache[voiceId] = { name, ts: Date.now() };
-    localStorage.setItem(VOICE_NAMES_KEY, JSON.stringify(cache));
-  } catch {}
-}
-
-function truncateVoiceName(name: string, max = 20): string {
-  if (name.length <= max) return name;
-  // Use first segment before " - " if it fits
-  const firstPart = name.split(" - ")[0];
-  if (firstPart.length <= max) return firstPart;
-  return name.slice(0, max - 1) + "…";
-}
-
-type ElevenLabsKeyStatus = {
-  configured: boolean;
-  source: "saved" | "env" | null;
-  masked_key: string | null;
-};
-
-function getElevenLabsKeySummary(status: ElevenLabsKeyStatus | null): string {
-  if (!status) return "Checking ElevenLabs configuration...";
-  if (!status.configured) {
-    return "Only needed for legacy ElevenLabs voices.";
-  }
-  if (status.source === "saved") {
-    return status.masked_key
-      ? `Saved locally as ${status.masked_key}.`
-      : "Saved locally for this Studio install.";
-  }
-  return status.masked_key
-    ? `Using environment key ${status.masked_key}.`
-    : "Using environment key.";
+  return useSavedPreference<string>(VOICE_PREF_KEY, DEFAULT_VOICE_ID, isValidVoiceId);
 }
 
 export function VoiceSelector({ voice, onChange, disabled }: { voice: string; onChange: (voice: string) => void; disabled?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [customId, setCustomId] = useState("");
-  const [suggestion, setSuggestion] = useState<{ id: string; name: string } | null>(null);
-  const [lookupLoading, setLookupLoading] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [apiKeyStatus, setApiKeyStatus] = useState<ElevenLabsKeyStatus | null>(null);
-  const [apiKeyStatusLoading, setApiKeyStatusLoading] = useState(false);
-  const [apiKeySaving, setApiKeySaving] = useState(false);
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-  const [showApiKeyForm, setShowApiKeyForm] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const apiKeyInputRef = useRef<HTMLInputElement>(null);
-  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lookupVersion = useRef(0);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -354,153 +242,6 @@ export function VoiceSelector({ voice, onChange, disabled }: { voice: string; on
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
-
-  const refreshApiKeyStatus = useCallback(async () => {
-    setApiKeyStatusLoading(true);
-    try {
-      const response = await fetch(ELEVENLABS_SETTINGS_ENDPOINT, { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(
-          typeof data?.error === "string" ? data.error : "Failed to load ElevenLabs API key status"
-        );
-      }
-      setApiKeyStatus(data as ElevenLabsKeyStatus);
-      setShowApiKeyForm(!data.configured);
-      setApiKeyError(null);
-    } catch (error) {
-      setApiKeyError(
-        error instanceof Error ? error.message : "Failed to load ElevenLabs API key status"
-      );
-      setShowApiKeyForm(true);
-    } finally {
-      setApiKeyStatusLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    void refreshApiKeyStatus();
-  }, [isOpen, refreshApiKeyStatus]);
-
-  useEffect(() => {
-    if (!showApiKeyForm) return;
-    const timer = window.setTimeout(() => apiKeyInputRef.current?.focus(), 0);
-    return () => window.clearTimeout(timer);
-  }, [showApiKeyForm]);
-
-  useEffect(() => {
-    if (isOpen) return;
-    setApiKeyInput("");
-    setApiKeyError(null);
-  }, [isOpen]);
-
-  // Auto-lookup: debounce 500ms after input reaches 15+ alphanumeric chars
-  const handleCustomIdChange = (value: string) => {
-    setCustomId(value);
-    setSuggestion(null);
-    if (lookupTimer.current) clearTimeout(lookupTimer.current);
-
-    const trimmed = value.trim();
-    if (trimmed.length < 15 || trimmed.length > 64 || !/^[a-zA-Z0-9]+$/.test(trimmed)) return;
-
-    // Check cache first
-    const cached = getCachedVoiceName(trimmed);
-    if (cached) { setSuggestion({ id: trimmed, name: cached }); return; }
-
-    const version = ++lookupVersion.current;
-    lookupTimer.current = setTimeout(() => {
-      setLookupLoading(true);
-      fetch(`/api/voices/${trimmed}`)
-        .then(async r => {
-          if (r.ok) return r.json();
-          // 403 = API key lacks voices_read, but voice may still be valid for TTS
-          if (r.status === 403) return { voiceId: trimmed, name: null };
-          return null;
-        })
-        .then(data => {
-          if (version !== lookupVersion.current) return; // stale
-          if (data?.name) {
-            setCachedVoiceName(trimmed, data.name);
-            setSuggestion({ id: trimmed, name: data.name });
-          } else if (data?.voiceId) {
-            // Name unknown but ID looks valid — let user apply anyway
-            setSuggestion({ id: trimmed, name: "" });
-          }
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (version === lookupVersion.current) setLookupLoading(false);
-        });
-    }, 500);
-  };
-
-  // Clean up timer on unmount
-  useEffect(() => () => { if (lookupTimer.current) clearTimeout(lookupTimer.current); }, []);
-
-  const selectSuggestion = () => {
-    if (!suggestion) return;
-    onChange(suggestion.id);
-    setCustomId("");
-    setSuggestion(null);
-    setIsOpen(false);
-  };
-
-  const handleSaveApiKey = useCallback(async () => {
-    const trimmed = apiKeyInput.trim();
-    if (!trimmed) {
-      setApiKeyError("Paste your ElevenLabs API key.");
-      return;
-    }
-
-    setApiKeySaving(true);
-    setApiKeyError(null);
-    try {
-      const response = await fetch(ELEVENLABS_SETTINGS_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: trimmed }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(
-          typeof data?.error === "string" ? data.error : "Failed to save ElevenLabs API key"
-        );
-      }
-      setApiKeyStatus(data as ElevenLabsKeyStatus);
-      setApiKeyInput("");
-      setShowApiKeyForm(false);
-    } catch (error) {
-      setApiKeyError(
-        error instanceof Error ? error.message : "Failed to save ElevenLabs API key"
-      );
-    } finally {
-      setApiKeySaving(false);
-    }
-  }, [apiKeyInput]);
-
-  const handleClearSavedApiKey = useCallback(async () => {
-    setApiKeySaving(true);
-    setApiKeyError(null);
-    try {
-      const response = await fetch(ELEVENLABS_SETTINGS_ENDPOINT, { method: "DELETE" });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(
-          typeof data?.error === "string" ? data.error : "Failed to clear ElevenLabs API key"
-        );
-      }
-      setApiKeyStatus(data as ElevenLabsKeyStatus);
-      setApiKeyInput("");
-      setShowApiKeyForm(!data.configured);
-    } catch (error) {
-      setApiKeyError(
-        error instanceof Error ? error.message : "Failed to clear ElevenLabs API key"
-      );
-    } finally {
-      setApiKeySaving(false);
-    }
-  }, []);
 
   return (
     <div style={{ position: "relative" }} ref={ref}>
@@ -548,186 +289,6 @@ export function VoiceSelector({ voice, onChange, disabled }: { voice: string; on
           maxHeight: "min(60vh, 520px)",
           minWidth: 180,
         }}>
-          <div
-            style={{
-              padding: "10px 14px 12px",
-              background: "rgba(43,181,160,0.04)",
-              borderBottom: "1px solid var(--border-main)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <div style={{ display: "grid", gap: 3, flex: 1, minWidth: 0 }}>
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--text-primary)",
-                    fontFamily: "var(--font)",
-                  }}
-                >
-                  Legacy ElevenLabs key
-                </span>
-                <span
-                  style={{
-                    fontSize: 11,
-                    lineHeight: 1.45,
-                    color: "var(--text-tertiary)",
-                    fontFamily: "var(--font)",
-                  }}
-                >
-                  {apiKeyStatusLoading ? "Checking..." : getElevenLabsKeySummary(apiKeyStatus)}
-                </span>
-                {showApiKeyForm && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      lineHeight: 1.45,
-                      color: "var(--text-tertiary)",
-                      fontFamily: "var(--font)",
-                    }}
-                  >
-                    Saved locally in ~/.manimate/config.json.
-                  </span>
-                )}
-              </div>
-
-              {!showApiKeyForm && (
-                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                  <button
-                    onClick={() => {
-                      setShowApiKeyForm(true);
-                      setApiKeyError(null);
-                    }}
-                    style={{
-                      border: "1px solid var(--border-main)",
-                      background: "var(--bg-white)",
-                      borderRadius: 8,
-                      padding: "5px 8px",
-                      cursor: "pointer",
-                      fontSize: 11,
-                      color: "var(--text-secondary)",
-                      fontFamily: "var(--font)",
-                    }}
-                  >
-                    {apiKeyStatus?.source === "saved" ? "Replace" : "Save local key"}
-                  </button>
-                  {apiKeyStatus?.source === "saved" && (
-                    <button
-                      onClick={() => { void handleClearSavedApiKey(); }}
-                      disabled={apiKeySaving}
-                      style={{
-                        border: "1px solid rgba(180,35,24,0.18)",
-                        background: "#fff7f6",
-                        borderRadius: 8,
-                        padding: "5px 8px",
-                        cursor: apiKeySaving ? "default" : "pointer",
-                        fontSize: 11,
-                        color: "#b42318",
-                        fontFamily: "var(--font)",
-                        opacity: apiKeySaving ? 0.6 : 1,
-                      }}
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {showApiKeyForm && (
-              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-                <input
-                  ref={apiKeyInputRef}
-                  type="password"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") void handleSaveApiKey(); }}
-                  placeholder="Paste ElevenLabs API key..."
-                  autoComplete="off"
-                  spellCheck={false}
-                  style={{
-                    fontSize: 12,
-                    fontFamily: "monospace",
-                    border: "1px solid var(--border-main)",
-                    borderRadius: 6,
-                    background: "var(--bg-white)",
-                    padding: "6px 8px",
-                    width: "100%",
-                    outline: "none",
-                    color: "var(--text-primary)",
-                    boxSizing: "border-box",
-                  }}
-                />
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button
-                    onClick={() => { void handleSaveApiKey(); }}
-                    disabled={apiKeySaving}
-                    style={{
-                      border: "none",
-                      borderRadius: 8,
-                      padding: "6px 10px",
-                      background: "var(--accent)",
-                      color: "#ffffff",
-                      cursor: apiKeySaving ? "default" : "pointer",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      fontFamily: "var(--font)",
-                      opacity: apiKeySaving ? 0.72 : 1,
-                    }}
-                  >
-                    {apiKeySaving ? "Saving..." : "Save key"}
-                  </button>
-
-                  {apiKeyStatus?.configured && (
-                    <button
-                      onClick={() => {
-                        setShowApiKeyForm(false);
-                        setApiKeyInput("");
-                        setApiKeyError(null);
-                      }}
-                      disabled={apiKeySaving}
-                      style={{
-                        border: "1px solid var(--border-main)",
-                        borderRadius: 8,
-                        padding: "6px 10px",
-                        background: "var(--bg-white)",
-                        color: "var(--text-secondary)",
-                        cursor: apiKeySaving ? "default" : "pointer",
-                        fontSize: 11,
-                        fontFamily: "var(--font)",
-                        opacity: apiKeySaving ? 0.72 : 1,
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {apiKeyError && (
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 11,
-                  lineHeight: 1.45,
-                  color: "#b42318",
-                  fontFamily: "var(--font)",
-                }}
-              >
-                {apiKeyError}
-              </div>
-            )}
-          </div>
-
           {/* None option */}
           <div
             style={{
@@ -760,7 +321,7 @@ export function VoiceSelector({ voice, onChange, disabled }: { voice: string; on
           <div style={{ height: 1, background: "var(--border-main)", margin: "4px 0" }} />
 
           {AVAILABLE_VOICES.map((v) => {
-            const previewLabel = v.provider === "kokoro" ? "Open Kokoro model page" : `Preview ${v.label} on ElevenLabs`;
+            const previewLabel = "Open Kokoro model page";
             return (
               <div
                 key={v.id}
@@ -790,7 +351,7 @@ export function VoiceSelector({ voice, onChange, disabled }: { voice: string; on
                   </span>
                 </button>
                 <a
-                  href={getVoicePageUrl(v.id)}
+                  href="https://huggingface.co/hexgrad/Kokoro-82M"
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
@@ -818,75 +379,6 @@ export function VoiceSelector({ voice, onChange, disabled }: { voice: string; on
 
           <div style={{ height: 1, background: "var(--border-main)", margin: "4px 0" }} />
 
-          {/* Custom voice ID: paste and auto-lookup */}
-          <div style={{ padding: "6px 14px" }}>
-            <input
-              type="text"
-              value={customId}
-              onChange={(e) => handleCustomIdChange(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && suggestion) selectSuggestion(); }}
-              placeholder="Paste voice ID..."
-              style={{
-                fontSize: 12,
-                fontFamily: "monospace",
-                border: "1px solid var(--border-main)",
-                borderRadius: 6,
-                background: "var(--bg-main)",
-                padding: "4px 8px",
-                width: "100%",
-                outline: "none",
-                color: "var(--text-primary)",
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-
-          {/* Auto-suggestion row */}
-          {lookupLoading && (
-            <div style={{ padding: "4px 14px", fontSize: 12, color: "var(--text-tertiary)", fontFamily: "var(--font)" }}>
-              Looking up...
-            </div>
-          )}
-          {suggestion && (
-            <button
-              onClick={selectSuggestion}
-              style={{
-                display: "flex", alignItems: "center", gap: 8,
-                width: "100%", padding: "8px 14px",
-                border: "none", background: "transparent",
-                fontSize: 13, fontWeight: 400,
-                color: "var(--text-secondary)",
-                cursor: "pointer",
-                fontFamily: "var(--font)",
-                transition: "background 0.12s",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-            >
-              {suggestion.name
-                ? <>Use &ldquo;{truncateVoiceName(suggestion.name, 30)}&rdquo;</>
-                : <>Use {suggestion.id.slice(0, 6)}...{suggestion.id.slice(-4)}</>
-              }
-            </button>
-          )}
-
-          <a
-            href="https://elevenlabs.io/community"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: "block",
-              fontSize: 12,
-              color: "var(--text-tertiary)",
-              padding: "6px 14px",
-              textDecoration: "none",
-              fontFamily: "var(--font)",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = "underline"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = "none"; }}
-          >
-            Browse legacy voices ↗
-          </a>
         </div>
       )}
     </div>

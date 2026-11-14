@@ -3,6 +3,8 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'manim-cloud'))
 import session_upload
 
 class SessionArchiveTests(unittest.TestCase):

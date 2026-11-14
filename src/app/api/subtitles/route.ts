@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  ensureLocalSessionLayout,
+  getLocalSessionPaths,
 } from "@/lib/local/config";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
-  const { projectDir } = ensureLocalSessionLayout(sessionId);
+  const { projectDir } = getLocalSessionPaths(sessionId);
   const content = await readLocalProjectSubtitles(projectDir);
   if (content?.trim()) {
     // Cache the derived subtitles as a plain project file (replaces the old
@@ -46,5 +46,9 @@ export async function GET(request: NextRequest): Promise<Response> {
     return subtitleResponse(content);
   }
 
+  // Handoffs and restored sessions may contain only the final SRT, without
+  // narration timestamps or individual scene outputs to derive it again.
+  const saved = await fsp.readFile(path.join(projectDir, "subtitles.srt"), "utf8").catch(() => null);
+  if (saved?.trim()) return subtitleResponse(saved);
   return NextResponse.json({ error: "No subtitles found" }, { status: 404 });
 }

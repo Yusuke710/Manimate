@@ -1,6 +1,5 @@
 """Restore an authenticated cloud session without overwriting local work."""
 import json
-import os
 from pathlib import Path
 import re
 import shutil
@@ -90,6 +89,7 @@ def restore_session(session_id, destination):
                     video=root/'project'/'video.mp4'; video.parent.mkdir(exist_ok=True)
                     with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'manim-cloud/1.0'}),timeout=180) as response, video.open('wb') as out: shutil.copyfileobj(response,out)
                     session['video']={'path':'project/video.mp4','version':None,'chapters':chapters if isinstance(chapters,list) else None}
-                    (root/'session.json').write_text(json.dumps(session))
+        # Persist cleared video metadata even when no replacement is available.
+        (root/'session.json').write_text(json.dumps(session))
         root.rename(target)
     print(json.dumps({'session_id':session_id,'status':'restored'}))

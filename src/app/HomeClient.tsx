@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback, useRef, useState, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import ChatInput from "@/components/ChatInput";
 import { ChatPanel, type PendingWelcomePayload } from "@/components/ChatPanel";
 import {
@@ -40,15 +41,16 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
   const activeSessionId = searchParams.get("session");
   const activeView = searchParams.get("view");
   const sharedToken = searchParams.get("share");
-  const [shareError,setShareError] = useState<string | null>(null);
+  const [shareFailure, setShareFailure] = useState<{ token: string; attempt: number; message: string } | null>(null);
   const [shareRetry,setShareRetry] = useState(0);
+  const shareError = shareFailure?.token === sharedToken && shareFailure.attempt === shareRetry
+    ? shareFailure.message : null;
   useEffect(() => {
     if(!sharedToken || cloudAuthStatus.status !== "ready") return;
     let cancelled=false;
-    setShareError(null);
     fetch("/api/share-handoff",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({share:sharedToken})})
       .then(async response => {const data=await response.json();if(!response.ok)throw Error(data.error);if(!cancelled)router.replace("/?session="+encodeURIComponent(data.session_id));})
-      .catch(error => {if(!cancelled)setShareError(error instanceof Error?error.message:"Could not open this shared project.");});
+      .catch(error => {if(!cancelled)setShareFailure({token: sharedToken, attempt: shareRetry, message: error instanceof Error?error.message:"Could not open this shared project."});});
     return () => {cancelled=true;};
   },[sharedToken,cloudAuthStatus.status,router,shareRetry]);
   const feedbackSessionId = searchParams.get("feedback_session");
@@ -207,7 +209,7 @@ function HomeContent({ initialCloudAuthStatus }: { initialCloudAuthStatus: Cloud
     );
   }
 
-  if(sharedToken) return <main style={{minHeight:"100dvh",display:"grid",placeItems:"center",background:"var(--bg-main)",padding:24}}><section style={{textAlign:"center",maxWidth:420}}><div style={{font:"28px Georgia",marginBottom:20}}><span style={{color:"var(--accent)"}}>∑</span> Manimate</div><p role="status">{shareError || "Creating your handoff…"}</p>{shareError&&<><button onClick={()=>setShareRetry(value=>value+1)} style={{margin:12,padding:"10px 16px",background:"var(--accent)",color:"white",borderRadius:8}}>Try again</button><a href="/?view=library">Library</a></>}</section></main>;
+  if(sharedToken) return <main style={{minHeight:"100dvh",display:"grid",placeItems:"center",background:"var(--bg-main)",padding:24}}><section style={{textAlign:"center",maxWidth:420}}><div style={{font:"28px Georgia",marginBottom:20}}><span style={{color:"var(--accent)"}}>∑</span> Manimate</div><p role="status">{shareError || "Creating your handoff…"}</p>{shareError&&<><button onClick={()=>setShareRetry(value=>value+1)} style={{margin:12,padding:"10px 16px",background:"var(--accent)",color:"white",borderRadius:8}}>Try again</button><Link href="/?view=library">Library</Link></>}</section></main>;
 
   return (
     <div style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>

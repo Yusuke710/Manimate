@@ -45,9 +45,6 @@ export function transformCliError(
   }
 
   const lower = rawDetails.toLowerCase();
-  if (lower.includes("elevenlabs_api_key")) {
-    return "ElevenLabs voiceover is not configured. Open the voice menu in Studio and save your ElevenLabs API key, or switch to No Voice.";
-  }
   if (lower.includes("anthropic_api_key") || lower.includes("api key") || lower.includes("api_key")) {
     return "AI service configuration error. Please try again or contact support.";
   }
@@ -60,69 +57,18 @@ export function transformCliError(
   return `Execution failed (exit code ${exitCode}): ${(clean || rawDetails).slice(0, 200)}`;
 }
 
-export function normalizeClaudeCliSetupError(text: string): string | null {
-  if (!text) return null;
-
+export function normalizeLocalAgentCliSetupError(runtimeModel: string, text: string): string | null {
+  const cli = runtimeModel === "codex" ? "codex" : "claude";
+  const name = cli === "codex" ? "Codex" : "Claude Code";
   const lower = text.toLowerCase();
-
-  if (
-    lower.includes("spawn claude enoent") ||
-    lower.includes("command not found: claude") ||
-    lower.includes("no such file or directory") && lower.includes("claude")
-  ) {
-    return "Claude Code CLI (`claude`) is not installed. Install it, then run `claude` locally and sign in.";
+  if (lower.includes(`spawn ${cli} enoent`) || lower.includes(`command not found: ${cli}`) ||
+      (lower.includes("no such file or directory") && lower.includes(cli))) {
+    return `${name} CLI (\`${cli}\`) is not installed. Install it, then run \`${cli}\` locally and sign in.`;
   }
-
-  if (
-    lower.includes("not authenticated") ||
-    lower.includes("not logged in") ||
-    lower.includes("login required") ||
-    lower.includes("log in") ||
-    lower.includes("login") ||
-    lower.includes("sign in") ||
-    lower.includes("signed in")
-  ) {
-    return "Claude Code CLI is not signed in. Run `claude` locally and sign in, then try again.";
+  if (["not authenticated", "not logged in", "log in", "login", "sign in", "signed in"].some(hint => lower.includes(hint))) {
+    return `${name} CLI is not signed in. Run \`${cli}\` locally and sign in, then try again.`;
   }
-
   return null;
-}
-
-export function normalizeCodexCliSetupError(text: string): string | null {
-  if (!text) return null;
-
-  const lower = text.toLowerCase();
-
-  if (
-    lower.includes("spawn codex enoent") ||
-    lower.includes("command not found: codex") ||
-    lower.includes("no such file or directory") && lower.includes("codex")
-  ) {
-    return "Codex CLI (`codex`) is not installed. Install it, then run `codex` locally and sign in.";
-  }
-
-  if (
-    lower.includes("not authenticated") ||
-    lower.includes("not logged in") ||
-    lower.includes("login required") ||
-    lower.includes("log in") ||
-    lower.includes("login") ||
-    lower.includes("sign in") ||
-    lower.includes("signed in")
-  ) {
-    return "Codex CLI is not signed in. Run `codex` locally and sign in, then try again.";
-  }
-
-  return null;
-}
-
-export function normalizeLocalAgentCliSetupError(
-  runtimeModel: string,
-  text: string
-): string | null {
-  return runtimeModel === "codex"
-    ? normalizeCodexCliSetupError(text)
-    : normalizeClaudeCliSetupError(text);
 }
 
 /**
@@ -131,10 +77,6 @@ export function normalizeLocalAgentCliSetupError(
  */
 function extractErrorHint(text: string): string | null {
   if (!text) return null;
-  const lower = text.toLowerCase();
-  if (lower.includes("elevenlabs_api_key")) {
-    return "ElevenLabs voiceover is not configured. Open the voice menu in Studio and save your ElevenLabs API key, or switch to No Voice.";
-  }
   // Python traceback: last "Error:" or "Exception:" line
   const errorLineMatch = text.match(/(?:^|\n)\s*(\w+(?:Error|Exception):\s*.+)/m);
   if (errorLineMatch) {

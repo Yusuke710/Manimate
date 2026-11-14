@@ -2,15 +2,10 @@ import fs from 'node:fs';import os from 'node:os';import path from 'node:path';i
 const roots:string[]=[];
 afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();for(const root of roots.splice(0))fs.rmSync(root,{recursive:true,force:true});});
 async function fixture(){const root=fs.mkdtempSync(path.join(os.tmpdir(),'shared-handoff-'));roots.push(root);vi.stubEnv('MANIMATE_LOCAL_ROOT',root);vi.stubEnv('MANIMATE_RENDER_MODE','local');vi.resetModules();return {root,...await import('@/lib/local/session-store'),...await import('@/lib/local/shared-handoff')};}
-it('creates a new handoff even when the original session exists locally',async()=>{
- const f=await fixture();const original=f.createLocalSession({model:'claude'});f.updateLocalSession(original.id,{title:'My edits'});
- const fetch=vi.fn().mockResolvedValue(Response.json({source_session_id:original.id,title:'Old title',script_content:'old code'}));vi.stubGlobal('fetch',fetch);
- const id=await f.openSharedSession('share-token');expect(id).not.toBe(original.id);expect(f.getLocalSession(id)?.title).toBe('Handoff: Old title');expect(f.getLocalSession(original.id)?.title).toBe('My edits');expect(fetch).toHaveBeenCalledTimes(1);
-});
 it('copies artifacts into a fresh session on each visit, deduplicating only concurrent requests',async()=>{
- const f=await fixture();const manifest={source_session_id:'original',title:'Scene',script_content:'print("scene")',subtitles_content:'captions',video_url:'https://manimate.ai/media/video',chapters:[{name:'Intro',start:0,duration:2}]};
+ const f=await fixture();const original=f.createLocalSession({model:'claude'});f.updateLocalSession(original.id,{title:'My edits'});const manifest={source_session_id:original.id,title:'Scene',script_content:'print("scene")',subtitles_content:'captions',video_url:'https://manimate.ai/media/video',chapters:[{name:'Intro',start:0,duration:2}]};
  const fetch=vi.fn(async(url:string|URL)=>String(url).endsWith('/handoff')?Response.json(manifest):new Response('video bytes'));vi.stubGlobal('fetch',fetch);
- const [id,other]=await Promise.all([f.openSharedSession('share-token'),f.openSharedSession('share-token')]);expect(id).toBe(other);expect(id).not.toBe('original');
+ const [id,other]=await Promise.all([f.openSharedSession('share-token'),f.openSharedSession('share-token')]);expect(id).toBe(other);expect(id).not.toBe(original.id);expect(f.getLocalSession(original.id)?.title).toBe('My edits');
  expect(f.getLocalSession(id)?.title).toBe('Handoff: Scene');expect(f.getLocalSession(id)?.chapters).toContain('Intro');
  expect(fs.readFileSync(path.join(f.root,'sessions',id,'project','script.py'),'utf8')).toBe(manifest.script_content);
  expect(fs.readFileSync(path.join(f.root,'sessions',id,'project','subtitles.srt'),'utf8')).toBe('captions');

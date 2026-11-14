@@ -36,36 +36,33 @@ export function useIsMobile(): boolean {
 
 export const ASPECT_RATIO_PREF_KEY = "manimate-preferred-aspect-ratio";
 
-export function usePreferredAspectRatio() {
-  const [ratio, setRatio] = useState<AspectRatio>(DEFAULT_ASPECT_RATIO);
-  const explicitSelectionCountRef = useRef(0);
-
+export function useSavedPreference<T extends string>(key: string, fallback: T, isValid: (value: string) => boolean) {
+  const [value, setValue] = useState(fallback);
+  const selectionCount = useRef(0);
   useEffect(() => {
-    const selectionCountAtMount = explicitSelectionCountRef.current;
-    let timer: number | null = null;
+    const atMount = selectionCount.current;
+    const timer = window.setTimeout(() => {
+      if (selectionCount.current !== atMount) return;
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved && isValid(saved)) setValue(saved as T);
+        else if (saved) localStorage.setItem(key, fallback);
+      } catch { /* Storage may be unavailable in private browsing. */ }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [key, fallback, isValid]);
 
-    try {
-      const saved = localStorage.getItem(ASPECT_RATIO_PREF_KEY);
-      if (isAspectRatio(saved)) {
-        timer = window.setTimeout(() => {
-          if (explicitSelectionCountRef.current !== selectionCountAtMount) return;
-          setRatio(saved);
-        }, 0);
-      }
-    } catch {}
+  const set = useCallback((next: T) => {
+    selectionCount.current += 1;
+    const valid = isValid(next) ? next : fallback;
+    setValue(valid);
+    try { localStorage.setItem(key, valid); } catch {}
+  }, [key, fallback, isValid]);
+  return [value, set] as const;
+}
 
-    return () => {
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, []);
-
-  const set = useCallback((nextRatio: AspectRatio) => {
-    explicitSelectionCountRef.current += 1;
-    try { localStorage.setItem(ASPECT_RATIO_PREF_KEY, nextRatio); } catch {}
-    setRatio(nextRatio);
-  }, []);
-
-  return [ratio, set] as const;
+export function usePreferredAspectRatio() {
+  return useSavedPreference<AspectRatio>(ASPECT_RATIO_PREF_KEY, DEFAULT_ASPECT_RATIO, isAspectRatio);
 }
 
 // ---------------------------------------------------------------------------

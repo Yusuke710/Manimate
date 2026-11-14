@@ -17,9 +17,9 @@ describe("speech transport", () => {
     prewarmLocalKokoroVoice({cwd:"/tmp/speech-test",voiceId:"af_heart"});
     expect(spawn).toHaveBeenCalledOnce();
   });
-  it("does not prewarm Kokoro for an ElevenLabs voice", () => {
+  it("does not prewarm Kokoro for silent videos", () => {
     vi.stubEnv("TTS_TRANSPORT", "local");
-    prewarmLocalKokoroVoice({cwd:"/tmp/speech-test",voiceId:"TX3LPaxmHKxFdv7VOQHJ"});
+    prewarmLocalKokoroVoice({cwd:"/tmp/speech-test",voiceId:"none"});
     expect(spawn).not.toHaveBeenCalled();
   });
 });

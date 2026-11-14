@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { getLocalSceneVideoPaths, getMediaDurationSeconds, readLocalProjectChapters } from './chapters';
+import { getLocalSceneVideoPaths, readLocalProjectChapters } from './chapters';
 import { normalizeChaptersToVideoDuration } from '@/lib/timeline';
 
 let root: string;
@@ -22,7 +22,6 @@ beforeEach(async () => {
   await write('script.py', 'from manim import *\nclass Apple(Scene):\n    pass\nclass ZebraOrbit(Scene):\n    pass\n');
   video('clips/ZebraOrbit.mp4', 2, 'red');
   video('clips/Apple.mp4', 3);
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', path.join(root, 'clips/ZebraOrbit.mp4'), '-i', path.join(root, 'clips/Apple.mp4'), '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0', '-c:v', 'libx264', path.join(root, 'video.mp4')]);
 });
 afterEach(async () => { await fs.rm(root, { recursive: true, force: true }); });
 
@@ -75,14 +74,3 @@ it('invalidates cached chapters when only the assembly order changes', async () 
   await write('list.txt', "file 'clips/Apple.mp4'\nfile 'clips/ZebraOrbit.mp4'\n");
   expect((await readLocalProjectChapters(root))[0].name).toBe('Apple');
 });
-
-// Opt-in regression verification against existing videos; never modifies sessions.
-it.runIf(Boolean(process.env.MANIMATE_CHAPTER_REGRESSION_ROOT))('detects both reported real sessions', async () => {
-  for (const id of ['374c1cc1-44d8-4652-bfe4-b082cf91bfb1', 'd3a7ccd9-5831-4170-8758-43d4d5e4334a']) {
-    const chapters = await readLocalProjectChapters(path.join(process.env.MANIMATE_CHAPTER_REGRESSION_ROOT!, id, 'project'));
-    expect(chapters).toHaveLength(id.startsWith('374c') ? 4 : 5);
-    const duration = await getMediaDurationSeconds(path.join(process.env.MANIMATE_CHAPTER_REGRESSION_ROOT!, id, 'project/video.mp4'));
-    expect(normalizeChaptersToVideoDuration(chapters, duration)?.chapters).toHaveLength(chapters.length);
-    console.log(id, chapters);
-  }
-}, 60_000);

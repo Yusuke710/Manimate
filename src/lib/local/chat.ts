@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import { extractScriptTitle } from "./script-title";
 import { selectedRenderMode } from "./config";
-import { refreshSharedSession } from "./session-share";
 import { uploadCloudSession } from "./session-upload";
 import { readConfiguredCliModels } from "@/lib/local/cli-models";
 import fsp from "node:fs/promises";
@@ -15,7 +14,7 @@ import {
   localFileToApiUrl,
   resolveSessionFilePath,
 } from "@/lib/local/config";
-import { generateThumbnailAsync } from "@/lib/local/thumbnail";
+import { generateThumbnail } from "@/lib/local/thumbnail";
 import {
   createLocalSession,
   createLocalRun,
@@ -43,7 +42,7 @@ import {
   isAspectRatio,
 } from "@/lib/models";
 import { DEFAULT_VOICE_ID, NONE_VOICE_ID, isValidVoiceId } from "@/lib/voices";
-import type { TerminalStatus } from "@/lib/types";
+import type { SSEEvent } from "@/lib/types";
 
 type LocalChatRequest = {
   prompt: string;
@@ -53,25 +52,6 @@ type LocalChatRequest = {
   voice_id?: string;
   agent_session_id?: string;
   images?: Array<{ id: string; path: string; name: string; size: number; type: string }>;
-};
-
-type LocalSSEEvent = {
-  type: "progress" | "complete" | "error" | "tool_use" | "tool_result" | "assistant_text" | "system_init" | "artifact_update";
-  state?: "planning" | "coding" | "rendering" | "complete" | "error";
-  message: string;
-  session_id?: string;
-  agent_session_id?: string;
-  run_id?: string;
-  video_url?: string;
-  script_content?: string | null;
-  progress?: number;
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  tool_result?: string;
-  is_error?: boolean;
-  model?: string;
-  tools?: string[];
-  terminal_status?: TerminalStatus;
 };
 
 type ExecutionState = "planning" | "coding" | "rendering";
@@ -263,7 +243,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
     }
   });
 
-  const sendEvent = async (event: LocalSSEEvent) => {
+  const sendEvent = async (event: SSEEvent) => {
     if (clientAborted) return;
     try {
       const payload = activeSessionId && !event.session_id
@@ -280,11 +260,12 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
     let sessionId: string | null = null;
     let agentSessionId = "";
     let modelForRun = DEFAULT_MODEL;
-    const renderModeForRun = selectedRenderMode();
+    let ownsRunStart = false;
     let artifactSnapshotInterval: ReturnType<typeof setInterval> | null = null;
     let runHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
     try {
+      const renderModeForRun = selectedRenderMode();
       const body = (await request.json()) as Partial<LocalChatRequest>;
 
       if (!body.session_id || typeof body.session_id !== "string") {
@@ -421,6 +402,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         });
         return;
       }
+      ownsRunStart = true;
 
       if (rawPrompt) {
         if (session.title === "Untitled Animation") {
@@ -874,7 +856,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         );
         // Generate thumbnail fire-and-forget — picks most-content frame via ffmpeg thumbnail filter
         const { sessionRoot } = getLocalSessionPaths(sessionId);
-        generateThumbnailAsync(postRunVideo.path, sessionRoot);
+        void generateThumbnail(postRunVideo.path, sessionRoot);
       }
 
       const finishedAt = new Date().toISOString();
@@ -987,7 +969,6 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
         video_url: videoUrl,
       });
 
-      void refreshSharedSession(sessionId).catch(error => console.error("[share]", error));
       void uploadCloudSession(sessionId, renderModeForRun);
       await sendEvent({
         type: "complete",
@@ -1029,7 +1010,7 @@ export async function handleLocalChatRequest(request: Request): Promise<Response
       if (runHeartbeatInterval) {
         clearInterval(runHeartbeatInterval);
       }
-      if (sessionId) endLocalRunStart(sessionId);
+      if (sessionId && ownsRunStart) endLocalRunStart(sessionId);
       try {
         await writer.close();
       } catch {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, type ReactNode } from "react";
 import ImageLightbox from "@/components/ImageLightbox";
 import { getAttachmentBadgeLabel } from "@/lib/chat-attachments";
 
@@ -42,6 +42,7 @@ export function appendFrameInstructionToPrompt(prev: string, instruction: string
 export default function ChatInput({ onSend, onStop, isLoading = false, disabled = false, placeholder, extraLeft, compact = false, draftKey, initialPrompt }: ChatInputProps) {
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<AttachmentPreview[]>([]);
+  const attachmentUrlsRef = useRef<Set<string>>(new Set());
   const [dragOver, setDragOver] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -56,6 +57,8 @@ export default function ChatInput({ onSend, onStop, isLoading = false, disabled 
     if (!draftKey) return;
     try {
       const saved = localStorage.getItem(draftKey);
+      // Browser storage is unavailable during SSR; restore the draft after mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved) { setPrompt(saved); restoredRef.current = true; }
     } catch { /* private mode / quota */ }
   }, [draftKey]);
@@ -66,6 +69,8 @@ export default function ChatInput({ onSend, onStop, isLoading = false, disabled 
     if (!normalized) return;
     if (appliedInitialPromptRef.current === normalized) return;
     appliedInitialPromptRef.current = normalized;
+    // Apply each external launch prompt once while retaining subsequent edits.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrompt(normalized);
     restoredRef.current = true;
     scrollToBottomRef.current = true;
@@ -73,7 +78,7 @@ export default function ChatInput({ onSend, onStop, isLoading = false, disabled 
 
   // Draft persistence: debounce save to localStorage, flush on pagehide
   const promptRef = useRef(prompt);
-  promptRef.current = prompt;
+  useLayoutEffect(() => { promptRef.current = prompt; }, [prompt]);
 
   useEffect(() => {
     if (!draftKey) return;
@@ -124,17 +129,27 @@ export default function ChatInput({ onSend, onStop, isLoading = false, disabled 
     .map((attachment, attachmentIndex) => ({ ...attachment, attachmentIndex }))
     .filter((attachment) => attachment.file.type.startsWith("image/"));
 
-  // Cleanup blob URLs on unmount
+  // Release previews after removal/send, and retain only the currently shown URLs.
+  useEffect(() => {
+    const current = new Set(attachments.map(attachment => attachment.url));
+    for (const url of attachmentUrlsRef.current) {
+      if (!current.has(url)) URL.revokeObjectURL(url);
+    }
+    attachmentUrlsRef.current = current;
+  }, [attachments]);
+
   useEffect(() => {
     return () => {
-      attachments.forEach((attachment) => URL.revokeObjectURL(attachment.url));
+      attachmentUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+      attachmentUrlsRef.current.clear();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (lightboxIndex === null) return;
     if (imageAttachments.length === 0) {
+      // Reconcile the open lightbox after an attachment is removed externally.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLightboxIndex(null);
       return;
     }

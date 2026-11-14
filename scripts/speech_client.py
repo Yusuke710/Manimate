@@ -1,7 +1,6 @@
 """Standard-library client for the Manimate narration API.
 
-The remote adapter returns the same audio/timestamps artifacts as local Kokoro
-and ElevenLabs. No inference packages are imported in cloud mode.
+The remote adapter returns the same audio/timestamps artifacts as local Kokoro. No inference packages are imported in cloud mode.
 """
 import base64
 import hashlib

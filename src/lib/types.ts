@@ -11,6 +11,7 @@ export interface SSEEvent {
   message: string;
   session_id?: string;
   turn_id?: string;
+  run_id?: string;
   agent_session_id?: string;
   video_url?: string;
   script_content?: string | null;
@@ -58,7 +59,7 @@ export interface ActivityEvent {
   terminalStatus?: TerminalStatus;
 }
 
-// Activity event from database (Manus Pattern: Persisted Activity Stream)
+// Persisted transcript activity serialized for the UI.
 export interface DBActivityEvent {
   id: number;
   run_id: string;
@@ -84,7 +85,7 @@ export interface DBActivityEvent {
   created_at: string;
 }
 
-// Active run info from database
+// Active run info from session.json
 export interface ActiveRun {
   id: string;
   status: "queued" | "running" | "completed" | "failed" | "canceled";
@@ -94,7 +95,7 @@ export interface ActiveRun {
 }
 
 /**
- * Convert database activity event to UI activity event
+ * Convert serialized transcript activity to UI activity
  */
 export function dbActivityEventToUI(dbEvent: DBActivityEvent): ActivityEvent {
   return {

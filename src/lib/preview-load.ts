@@ -1,5 +1,3 @@
-export type PreviewSlot = "A" | "B";
-
 export function buildPreviewLoadKey(
   videoUrl: string | null,
   videoRefreshNonce: number,
@@ -23,32 +21,4 @@ export function shouldAcceptPreviewAsyncResult(params: {
   if (params.aborted) return false;
   if (!params.requestedLoadKey || !params.responseLoadKey) return false;
   return params.requestedLoadKey === params.responseLoadKey;
-}
-
-export function shouldAcceptPolledPreviewUpdate(params: {
-  hasPendingStream: boolean;
-  runStillActive: boolean;
-}): boolean {
-  return !params.hasPendingStream || !params.runStillActive;
-}
-
-export function shouldAbortLingeringPreviewStream(params: {
-  hasPendingStream: boolean;
-  runStillActive: boolean;
-  previewChanged: boolean;
-}): boolean {
-  return (
-    params.hasPendingStream &&
-    !params.runStillActive &&
-    params.previewChanged
-  );
-}
-
-export function shouldShowBrowserPreviewBadge(params: {
-  videoUrl: string | null;
-  isLoading: boolean;
-  badgeAlreadyVisible: boolean;
-}): boolean {
-  if (!params.videoUrl) return false;
-  return !params.isLoading || params.badgeAlreadyVisible;
 }

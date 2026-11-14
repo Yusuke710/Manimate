@@ -85,13 +85,6 @@ export async function shareSession(id:string,requested?:unknown) {
   }
   return {share_url:url};
 }
-export async function refreshSharedSession(id:string):Promise<void> {
-  if(selectedRenderMode()!=='cloud')return;
-  const root=getLocalSessionPaths(id).sessionRoot;
-  const record=JSON.parse(await fs.readFile(path.join(root,'share.json'),'utf8').catch(()=>'{}'));
-  if(record.url)await enqueue(id);
-}
-
 export async function getShareSettings(id:string):Promise<{visibility:'public'|'unlisted';share_url:string|null;confirmed:boolean}>{
   if(!getLocalSession(id))throw new ShareError('Session not found',404);
   const settings=JSON.parse(await fs.readFile(path.join(getLocalSessionPaths(id).sessionRoot,'share-settings.json'),'utf8').catch(()=>'{}'));

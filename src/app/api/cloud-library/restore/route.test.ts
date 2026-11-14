@@ -1,4 +1,4 @@
-import {beforeEach,expect,it,vi} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {NextRequest} from 'next/server';
 vi.mock('@/lib/local/session-store',()=>({getLocalSession:vi.fn(()=>({id:'existing'}))}));
 vi.mock('@/lib/local/config',()=>({LOCAL_SESSIONS_ROOT:'/tmp/unused'}));

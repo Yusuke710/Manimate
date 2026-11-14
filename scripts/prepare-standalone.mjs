@@ -41,6 +41,9 @@ async function main() {
     })
   );
   await removeStandaloneEnvFiles();
+  // Dynamic runtime paths can make Next trace development benchmark data,
+  // including local audio recordings. None is needed by the installed app.
+  await fs.rm(path.join(NEXT_STANDALONE_ROOT, "benchmarks"), { recursive: true, force: true });
 }
 
 main().catch((error) => {

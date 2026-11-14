@@ -54,3 +54,16 @@ it("automatically backs up videos, skips unchanged sessions and retries changed 
   expect(run).toHaveBeenCalledTimes(3);
   expect(backup().source_updated_at).toBe(session.updated_at);
 });
+it("does not back up an active session while an inline run is queued or running", async () => {
+  const api = await setup("cloud");
+  api.updateLocalSession(api.session.id, {video_path: "project/video.mp4"});
+  const messageId = api.insertLocalMessage({session_id: api.session.id, role: "user", content: "refine"});
+  const active = api.createLocalRun({session_id: api.session.id, user_message_id: messageId});
+  expect(api.getLocalSession(api.session.id)?.status).toBe("active");
+  await api.uploadCloudSession(api.session.id, "cloud");
+  api.updateLocalRun(api.session.id, active.id, {status: "running"});
+  await api.uploadCloudSession(api.session.id, "cloud");
+  api.backupCloudLibrary();
+  await new Promise(resolve => setImmediate(resolve));
+  expect(run).not.toHaveBeenCalled();
+});

@@ -38,3 +38,21 @@ describe("runtime instructions", () => {
   });
 
 });
+
+it("resolves files without rewriting helpers and rejects symlinks outside the session", async () => {
+  const {root, ensureLocalSessionLayout, resolveSessionFilePath} = await fixture();
+  const {projectDir, sessionRoot} = ensureLocalSessionLayout("session");
+  const helper = path.join(projectDir, "tts-generate.py");
+  fs.writeFileSync(helper, "# session copy");
+  fs.writeFileSync(path.join(projectDir, "video.mp4"), "video");
+  fs.writeFileSync(path.join(root, "outside.txt"), "private");
+  fs.symlinkSync(path.join(root, "outside.txt"), path.join(projectDir, "escape.txt"));
+  fs.symlinkSync(path.join(projectDir, "video.mp4"), path.join(projectDir, "inside.mp4"));
+  expect(resolveSessionFilePath("session", "escape.txt")).toBeNull();
+  expect(resolveSessionFilePath("session", "inside.mp4")).toBe(fs.realpathSync(path.join(projectDir, "video.mp4")));
+  expect(resolveSessionFilePath("session", "../../outside.txt")).toBeNull();
+  expect(resolveSessionFilePath("session", path.join(sessionRoot, "thumbnail.jpg"))).toBe(path.join(sessionRoot, "thumbnail.jpg"));
+  expect(fs.readFileSync(helper, "utf8")).toBe("# session copy");
+  resolveSessionFilePath("missing", "video.mp4");
+  expect(fs.existsSync(path.join(root, "sessions", "missing"))).toBe(false);
+});

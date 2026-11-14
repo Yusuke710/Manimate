@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ShareButton from "@/components/ShareButton";
 import HandoffButton from "@/components/HandoffButton";
@@ -25,32 +25,13 @@ interface PreviewPanelProps {
 export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId, scriptContent = null, sessionModel = null, isRendering = false, onPreviewReady }: PreviewPanelProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("code");
-  const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(videoUrl);
   const [previewReadyKey, setPreviewReadyKey] = useState<string | null>(null);
   // Track whether user has manually selected a tab (suppresses auto-switch)
   const userSelectedTabRef = useRef(false);
+  useEffect(() => { userSelectedTabRef.current = false; }, [videoUrl]);
 
-  // Track previous videoUrl to detect changes
-  const prevVideoUrlRef = useRef(videoUrl);
-  const activePreviewKey = effectiveVideoUrl
-    ? buildPreviewLoadKey(effectiveVideoUrl, videoUpdateNonce)
-    : null;
+  const activePreviewKey = videoUrl ? buildPreviewLoadKey(videoUrl, videoUpdateNonce) : null;
   const isVideoPlayable = activePreviewKey !== null && previewReadyKey === activePreviewKey;
-
-  // Sync effectiveVideoUrl when videoUrl prop changes.
-  useEffect(() => {
-    if (videoUrl !== prevVideoUrlRef.current) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing controlled preview state from parent props
-      setEffectiveVideoUrl(videoUrl);
-      userSelectedTabRef.current = false;
-      prevVideoUrlRef.current = videoUrl;
-    }
-  }, [videoUrl]);
-
-  const handleTabClick = useCallback((tab: Tab) => {
-    userSelectedTabRef.current = true;
-    setActiveTab(tab);
-  }, []);
 
   const tabs: { id: Tab; label: string; ready: boolean }[] = [
     { id: "code", label: "Code", ready: !!scriptContent },
@@ -69,7 +50,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId
               <button
                 key={tab.id}
                 data-testid={`tab-${tab.id}`}
-                onClick={() => handleTabClick(tab.id)}
+                onClick={() => { userSelectedTabRef.current = true; setActiveTab(tab.id); }}
                 style={{
                   position: "relative",
                   padding: "5px 14px",
@@ -107,10 +88,10 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId
           <HandoffButton
             sessionId={sessionId}
             hasCode={Boolean(scriptContent)}
-            hasVideo={Boolean(effectiveVideoUrl)}
+            hasVideo={Boolean(videoUrl)}
             onCreated={(nextSessionId) => router.push(`/?session=${nextSessionId}`)}
           />
-          {sessionId && <ShareButton key={sessionId} sessionId={sessionId} disabled={!effectiveVideoUrl || isRendering} />}
+          {sessionId && <ShareButton key={sessionId} sessionId={sessionId} disabled={!videoUrl || isRendering} />}
         </div>
 
         {/* Tab content - all tabs rendered but hidden for preloading */}
@@ -119,7 +100,7 @@ export default function PreviewPanel({ videoUrl, videoUpdateNonce = 0, sessionId
             <CodeTab content={scriptContent} />
           </div>
           <div data-testid="panel-preview" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", visibility: activeTab === "preview" ? "visible" : "hidden" }}>
-            <PreviewTab videoUrl={effectiveVideoUrl} videoRefreshNonce={videoUpdateNonce} sessionId={sessionId} sessionModel={sessionModel} isVisible={activeTab === "preview"} onCanPlay={() => {
+            <PreviewTab videoUrl={videoUrl} videoRefreshNonce={videoUpdateNonce} sessionId={sessionId} sessionModel={sessionModel} isVisible={activeTab === "preview"} onCanPlay={() => {
               if (activePreviewKey && previewReadyKey !== activePreviewKey) {
                 setPreviewReadyKey(activePreviewKey);
                 onPreviewReady?.(videoUpdateNonce);

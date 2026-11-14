@@ -25,22 +25,18 @@ const MIME_BY_EXT: Record<string, { mime: string; binary: boolean }> = {
 };
 
 function parseRangeHeader(rangeHeader: string | null, fileSize: number): { start: number; end: number } | null {
-  if (!rangeHeader?.startsWith("bytes=")) return null;
-  const [startStr, endStr] = rangeHeader.slice(6).split("-");
-
-  let start = Number.parseInt(startStr, 10);
-  let end = endStr ? Number.parseInt(endStr, 10) : fileSize - 1;
-
-  if (Number.isNaN(start)) {
-    start = fileSize - end;
-    end = fileSize - 1;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader ?? "");
+  if (!match || fileSize === 0 || (!match[1] && !match[2])) return null;
+  if (!match[1]) {
+    const suffix = Number(match[2]);
+    if (!Number.isSafeInteger(suffix) || suffix <= 0) return null;
+    return { start: Math.max(0, fileSize - suffix), end: fileSize - 1 };
   }
-
-  if (start < 0 || start >= fileSize || end < start || end >= fileSize) {
-    return null;
-  }
-
-  return { start, end };
+  const start = Number(match[1]);
+  const requestedEnd = match[2] ? Number(match[2]) : fileSize - 1;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) ||
+      start >= fileSize || requestedEnd < start) return null;
+  return { start, end: Math.min(requestedEnd, fileSize - 1) };
 }
 
 function resolveSessionFromQuery(request: NextRequest): { sessionId: string } | { error: Response } {

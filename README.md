@@ -62,18 +62,13 @@ cloud. Local rendering keeps local Kokoro; set `TTS_TRANSPORT=local` to explicit
 keep synthesis local. Cloud failures are reported instead of silently running
 the model on your machine.
 
-The narration helper keeps the same outputs for each provider:
+Generate narration with Kokoro:
 
 ```bash
 python tts-generate.py --plan narration.txt --voice af_heart --transport cloud
-python tts-generate.py --plan narration.txt --provider elevenlabs --voice <voice-id>
 ```
 
-ElevenLabs requires `ELEVENLABS_API_KEY`; its model is configurable through
-`ELEVENLABS_MODEL_ID` (default `eleven_flash_v2_5`). Set `TTS_BASE_URL` and
-`TTS_API_KEY` to use your own deployment of the narration API. Native provider
-APIs have different payloads, so their adapters translate requests while keeping
-`voiceover.mp3` and `timestamps.json` consistent for the animation pipeline.
+Set `TTS_BASE_URL` and `TTS_API_KEY` to use your own deployment of the narration API. The helper produces `voiceover.mp3` and `timestamps.json`.
 
 Cloud narration is cached locally as a complete audio/timing pair. `--bust 0`
 clears that narration's cloud cache. The free hosted service has request and
