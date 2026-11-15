@@ -8,7 +8,7 @@ Honor the supplied aspect ratio and voice selection. Unless the user requests an
 
 Use project-relative asset paths. Generated assets belong in `assets/`; attachments are in `inputs/`.
 
-`Noto Sans` is available on the cloud renderer. Small-font Pango text can have spacing errors. Keep labels readable and preserve natural word spacing.
+`Noto Sans` is available on the cloud renderer. For prose and labels, avoid small-font Pango spacing errors: create `Text(..., font_size=96)` in a shared helper, then `.scale(target_size / 96)`. Preserve natural word spacing and inspect small labels in rendered frames.
 
 ## Narration
 

@@ -71,7 +71,7 @@ def generate_narration(lines, voice, audio_path, timestamps_path, bust=None):
     base = os.environ.get('TTS_BASE_URL', DEFAULT_URL).rstrip('/')
     payload = {'model': 'kokoro', 'input': lines, 'voice': voice,
                'speed': float(os.environ.get('KOKORO_SPEED', '1')), 'response_format': 'mp3'}
-    canonical = json.dumps({'api': base, 'version': 1, **payload}, sort_keys=True)
+    canonical = json.dumps({'api': base, 'version': 2, **payload}, sort_keys=True)
     cache = Path('.tts-cache') / ('cloud-' + hashlib.sha256(canonical.encode()).hexdigest())
     cached_audio = cache.with_suffix('.mp3'); cached_json = cache.with_suffix('.json')
     if bust is not None:
